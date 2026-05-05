@@ -11,15 +11,31 @@
 		548BBDC42FA97FFD00334BA6 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 548BBDC32FA97FFD00334BA6 /* FirebaseFirestore */; };
 		548BBE5D2FA9958B00334BA6 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 548BBE5C2FA9958B00334BA6 /* GoogleSignIn */; };
 		548BBE5F2FA9958B00334BA6 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 548BBE5E2FA9958B00334BA6 /* GoogleSignInSwift */; };
+		548BBEE12FA9B48500334BA6 /* KakaoSDKAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 548BBEE02FA9B48500334BA6 /* KakaoSDKAuth */; };
+		548BBEE32FA9B48500334BA6 /* KakaoSDKCommon in Frameworks */ = {isa = PBXBuildFile; productRef = 548BBEE22FA9B48500334BA6 /* KakaoSDKCommon */; };
+		548BBEE52FA9B48500334BA6 /* KakaoSDKUser in Frameworks */ = {isa = PBXBuildFile; productRef = 548BBEE42FA9B48500334BA6 /* KakaoSDKUser */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		548BBD542FA9720A00334BA6 /* tteona.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = tteona.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		548BBEDD2FA9B17E00334BA6 /* Exceptions for "tteona" folder in "tteona" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 548BBD532FA9720A00334BA6 /* tteona */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		548BBD562FA9720A00334BA6 /* tteona */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				548BBEDD2FA9B17E00334BA6 /* Exceptions for "tteona" folder in "tteona" target */,
+			);
 			path = tteona;
 			sourceTree = "<group>";
 		};
@@ -33,7 +49,10 @@
 				548BBDC22FA97FFD00334BA6 /* FirebaseAuth in Frameworks */,
 				548BBDC42FA97FFD00334BA6 /* FirebaseFirestore in Frameworks */,
 				548BBE5D2FA9958B00334BA6 /* GoogleSignIn in Frameworks */,
+				548BBEE52FA9B48500334BA6 /* KakaoSDKUser in Frameworks */,
 				548BBE5F2FA9958B00334BA6 /* GoogleSignInSwift in Frameworks */,
+				548BBEE32FA9B48500334BA6 /* KakaoSDKCommon in Frameworks */,
+				548BBEE12FA9B48500334BA6 /* KakaoSDKAuth in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -44,6 +63,7 @@
 			isa = PBXGroup;
 			children = (
 				548BBD562FA9720A00334BA6 /* tteona */,
+				548BBEDE2FA9B1E900334BA6 /* Frameworks */,
 				548BBD552FA9720A00334BA6 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -54,6 +74,13 @@
 				548BBD542FA9720A00334BA6 /* tteona.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		548BBEDE2FA9B1E900334BA6 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -80,6 +107,9 @@
 				548BBDC32FA97FFD00334BA6 /* FirebaseFirestore */,
 				548BBE5C2FA9958B00334BA6 /* GoogleSignIn */,
 				548BBE5E2FA9958B00334BA6 /* GoogleSignInSwift */,
+				548BBEE02FA9B48500334BA6 /* KakaoSDKAuth */,
+				548BBEE22FA9B48500334BA6 /* KakaoSDKCommon */,
+				548BBEE42FA9B48500334BA6 /* KakaoSDKUser */,
 			);
 			productName = tteona;
 			productReference = 548BBD542FA9720A00334BA6 /* tteona.app */;
@@ -112,6 +142,7 @@
 			packageReferences = (
 				548BBDC02FA97FFD00334BA6 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 				548BBE5B2FA9958B00334BA6 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
+				548BBEDF2FA9B48500334BA6 /* XCRemoteSwiftPackageReference "kakao-ios-sdk" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 548BBD552FA9720A00334BA6 /* Products */;
@@ -268,23 +299,12 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGNING_ALLOWED = NO;
-				CODE_SIGNING_REQUIRED = NO;
 				CODE_SIGN_ENTITLEMENTS = tteona/tteona.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = M576JMA5A7;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSCameraUsageDescription = "각 장소에서 영상을 촬영하여 추억 Vlog를 만들기 위해 카메라를 사용합니다.";
-				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "백그라운드에서도 위치를 추적하여 목적지 도착 시 알림을 받을 수 있습니다.";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "코스 진행 중 현재 위치를 확인하고 목적지 도착을 감지하기 위해 위치 정보를 사용합니다.";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "영상 촬영 시 소리를 함께 녹음하기 위해 마이크를 사용합니다.";
-				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "완성된 Vlog를 카메라 앨범에 저장하기 위해 접근 권한이 필요합니다.";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				INFOPLIST_FILE = tteona/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -307,23 +327,12 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGNING_ALLOWED = NO;
-				CODE_SIGNING_REQUIRED = NO;
 				CODE_SIGN_ENTITLEMENTS = tteona/tteona.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = M576JMA5A7;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSCameraUsageDescription = "각 장소에서 영상을 촬영하여 추억 Vlog를 만들기 위해 카메라를 사용합니다.";
-				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "백그라운드에서도 위치를 추적하여 목적지 도착 시 알림을 받을 수 있습니다.";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "코스 진행 중 현재 위치를 확인하고 목적지 도착을 감지하기 위해 위치 정보를 사용합니다.";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "영상 촬영 시 소리를 함께 녹음하기 위해 마이크를 사용합니다.";
-				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "완성된 Vlog를 카메라 앨범에 저장하기 위해 접근 권한이 필요합니다.";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				INFOPLIST_FILE = tteona/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -381,6 +390,14 @@
 				minimumVersion = 9.1.0;
 			};
 		};
+		548BBEDF2FA9B48500334BA6 /* XCRemoteSwiftPackageReference "kakao-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/kakao/kakao-ios-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.27.3;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -403,6 +420,21 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 548BBE5B2FA9958B00334BA6 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
 			productName = GoogleSignInSwift;
+		};
+		548BBEE02FA9B48500334BA6 /* KakaoSDKAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 548BBEDF2FA9B48500334BA6 /* XCRemoteSwiftPackageReference "kakao-ios-sdk" */;
+			productName = KakaoSDKAuth;
+		};
+		548BBEE22FA9B48500334BA6 /* KakaoSDKCommon */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 548BBEDF2FA9B48500334BA6 /* XCRemoteSwiftPackageReference "kakao-ios-sdk" */;
+			productName = KakaoSDKCommon;
+		};
+		548BBEE42FA9B48500334BA6 /* KakaoSDKUser */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 548BBEDF2FA9B48500334BA6 /* XCRemoteSwiftPackageReference "kakao-ios-sdk" */;
+			productName = KakaoSDKUser;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

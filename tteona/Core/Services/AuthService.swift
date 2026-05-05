@@ -5,6 +5,9 @@ import FirebaseCore
 import AuthenticationServices
 import CryptoKit
 import GoogleSignIn
+import KakaoSDKCommon
+import KakaoSDKAuth
+import KakaoSDKUser
 
 @MainActor
 class AuthService: NSObject, ObservableObject {
@@ -12,6 +15,7 @@ class AuthService: NSObject, ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var onboardingComplete = false
+    @Published var isInitializing = true
 
     var isLoggedIn: Bool { currentUser != nil }
 
@@ -29,6 +33,7 @@ class AuthService: NSObject, ObservableObject {
                     self?.currentUser = nil
                     self?.onboardingComplete = false
                 }
+                self?.isInitializing = false
             }
         }
     }
@@ -134,42 +139,51 @@ class AuthService: NSObject, ObservableObject {
     }
 
     // MARK: - 카카오 로그인
-    // KakaoSDK는 별도 SPM 추가 필요: https://github.com/kakao/kakao-ios-sdk
-    // 추가 후 아래 주석 해제
     func signInWithKakao() async {
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
 
-        // TODO: KakaoSDK SPM 추가 후 활성화
-        // import KakaoSDKUser
-        // import KakaoSDKAuth
-        //
-        // do {
-        //     let oauthToken: OAuthToken
-        //     if UserApi.isKakaoTalkLoginAvailable() {
-        //         oauthToken = try await withCheckedThrowingContinuation { cont in
-        //             UserApi.shared.loginWithKakaoTalk { token, error in
-        //                 if let error { cont.resume(throwing: error) }
-        //                 else if let token { cont.resume(returning: token) }
-        //             }
-        //         }
-        //     } else {
-        //         oauthToken = try await withCheckedThrowingContinuation { cont in
-        //             UserApi.shared.loginWithKakaoAccount { token, error in
-        //                 if let error { cont.resume(throwing: error) }
-        //                 else if let token { cont.resume(returning: token) }
-        //             }
-        //         }
-        //     }
-        //     // Firebase Custom Token 방식 or 자체 서버 연동 필요
-        //     // 여기서는 카카오 uid로 익명 로그인 후 연동
-        //     let _ = try await Auth.auth().signInAnonymously()
-        // } catch {
-        //     errorMessage = "카카오 로그인에 실패했습니다."
-        // }
+        do {
+            // 카카오톡 앱 설치 여부에 따라 분기
+            let oauthToken: OAuthToken = try await withCheckedThrowingContinuation { cont in
+                if UserApi.isKakaoTalkLoginAvailable() {
+                    UserApi.shared.loginWithKakaoTalk { token, error in
+                        if let error { cont.resume(throwing: error) }
+                        else if let token { cont.resume(returning: token) }
+                    }
+                } else {
+                    UserApi.shared.loginWithKakaoAccount { token, error in
+                        if let error { cont.resume(throwing: error) }
+                        else if let token { cont.resume(returning: token) }
+                    }
+                }
+            }
 
-        errorMessage = "카카오 SDK 설치 후 사용 가능합니다."
+            // 카카오 사용자 정보 가져오기
+            let kakaoUser: KakaoSDKUser.User = try await withCheckedThrowingContinuation { cont in
+                UserApi.shared.me { user, error in
+                    if let error { cont.resume(throwing: error) }
+                    else if let user { cont.resume(returning: user) }
+                }
+            }
+
+            // Firebase 익명 로그인 후 카카오 UID 기반 커스텀 처리
+            // (Firebase Custom Token 서버 없이 사용할 경우 익명 로그인 활용)
+            let kakaoId = kakaoUser.id ?? 0
+            let email = kakaoUser.kakaoAccount?.email ?? "\(kakaoId)@kakao.tteona"
+            let _ = oauthToken
+
+            // 이미 Firebase 계정이 있으면 로그인, 없으면 생성
+            do {
+                try await Auth.auth().signIn(withEmail: email, password: "kakao_\(kakaoId)_tteona")
+            } catch {
+                // 계정 없으면 자동 생성
+                try await Auth.auth().createUser(withEmail: email, password: "kakao_\(kakaoId)_tteona")
+            }
+        } catch {
+            errorMessage = "카카오 로그인에 실패했습니다."
+        }
     }
 
     // MARK: - 로그아웃

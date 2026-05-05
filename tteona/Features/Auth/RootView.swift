@@ -5,7 +5,14 @@ struct RootView: View {
 
     var body: some View {
         Group {
-            if !authService.isLoggedIn {
+            if authService.isInitializing {
+                ZStack {
+                    Color.tteBackground.ignoresSafeArea()
+                    Text("tteona")
+                        .font(.system(size: 52, weight: .bold))
+                        .foregroundColor(.tteOrange)
+                }
+            } else if !authService.isLoggedIn {
                 AuthView()
             } else if !authService.onboardingComplete {
                 OnboardingView()
@@ -16,5 +23,6 @@ struct RootView: View {
         }
         .animation(.easeInOut(duration: 0.35), value: authService.isLoggedIn)
         .animation(.easeInOut(duration: 0.35), value: authService.onboardingComplete)
+        .animation(.easeInOut(duration: 0.35), value: authService.isInitializing)
     }
 }

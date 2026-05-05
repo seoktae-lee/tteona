@@ -9,7 +9,6 @@ struct AuthView: View {
     @State private var password = ""
     @State private var confirmPassword = ""
     @FocusState private var focusedField: AuthField?
-    @State private var appleSignInTrigger = false
 
     enum AuthField { case email, password, confirm }
 
@@ -17,7 +16,7 @@ struct AuthView: View {
         ZStack {
             Color.tteBackground.ignoresSafeArea()
 
-            ScrollView {
+            ScrollView(showsIndicators: false) {
                 VStack(spacing: 0) {
                     logoSection
                         .padding(.top, 80)
@@ -89,8 +88,7 @@ struct AuthView: View {
                     background: Color.tteDarkGray,
                     border: Color.clear
                 ) {
-                    // Apple 로그인은 ASAuthorizationController 트리거
-                    appleSignInTrigger = true
+                    AppleSignInCoordinator.shared.signIn(authService: authService)
                 } label: {
                     Image(systemName: "apple.logo")
                         .font(.system(size: 22, weight: .medium))
@@ -110,29 +108,6 @@ struct AuthView: View {
                 }
             }
         }
-        .overlay(
-            // Apple Sign In 숨김 트리거
-            Group {
-                if appleSignInTrigger {
-                    SignInWithAppleButton(.signIn) { request in
-                        request.requestedScopes = [.fullName, .email]
-                        request.nonce = authService.prepareAppleSignIn()
-                    } onCompletion: { result in
-                        appleSignInTrigger = false
-                        switch result {
-                        case .success(let auth):
-                            if let credential = auth.credential as? ASAuthorizationAppleIDCredential {
-                                Task { await authService.signInWithApple(credential: credential) }
-                            }
-                        case .failure:
-                            authService.errorMessage = "Apple 로그인에 실패했습니다."
-                        }
-                    }
-                    .frame(width: 0, height: 0)
-                    .opacity(0)
-                }
-            }
-        )
     }
 
     // MARK: - Divider
