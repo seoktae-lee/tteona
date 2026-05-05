@@ -9,6 +9,7 @@ struct AuthView: View {
     @State private var password = ""
     @State private var confirmPassword = ""
     @FocusState private var focusedField: AuthField?
+    @State private var appleSignInTrigger = false
 
     enum AuthField { case email, password, confirm }
 
@@ -24,10 +25,7 @@ struct AuthView: View {
 
                     socialLoginSection
                         .padding(.horizontal, 24)
-
-                    dividerSection
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 20)
+                        .padding(.bottom, 28)
 
                     inputSection
                         .padding(.horizontal, 24)
@@ -60,52 +58,81 @@ struct AuthView: View {
 
     // MARK: - Social Login
     private var socialLoginSection: some View {
-        VStack(spacing: 12) {
-            // Apple 로그인
-            SignInWithAppleButton(.signIn) { request in
-                request.requestedScopes = [.fullName, .email]
-                request.nonce = authService.prepareAppleSignIn()
-            } onCompletion: { result in
-                switch result {
-                case .success(let auth):
-                    if let credential = auth.credential as? ASAuthorizationAppleIDCredential {
-                        Task { await authService.signInWithApple(credential: credential) }
-                    }
-                case .failure:
-                    authService.errorMessage = "Apple 로그인에 실패했습니다."
+        VStack(spacing: 16) {
+            Text("소셜 계정으로 로그인")
+                .font(.system(size: 13))
+                .foregroundColor(.tteMediumGray)
+
+            HStack(spacing: 24) {
+                // Google
+                SocialCircleButton(
+                    background: .white,
+                    border: Color(UIColor.separator)
+                ) {
+                    guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                          let vc = windowScene.windows.first?.rootViewController else { return }
+                    Task { await authService.signInWithGoogle(presenting: vc) }
+                } label: {
+                    Text("G")
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [.blue, .red, .yellow, .green],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                }
+
+                // Apple
+                SocialCircleButton(
+                    background: Color.tteDarkGray,
+                    border: Color.clear
+                ) {
+                    // Apple 로그인은 ASAuthorizationController 트리거
+                    appleSignInTrigger = true
+                } label: {
+                    Image(systemName: "apple.logo")
+                        .font(.system(size: 22, weight: .medium))
+                        .foregroundColor(.white)
+                }
+
+                // 카카오
+                SocialCircleButton(
+                    background: Color(hex: "#FEE500"),
+                    border: Color.clear
+                ) {
+                    Task { await authService.signInWithKakao() }
+                } label: {
+                    Image(systemName: "message.fill")
+                        .font(.system(size: 20))
+                        .foregroundColor(Color(hex: "#3A1D1D"))
                 }
             }
-            .signInWithAppleButtonStyle(.black)
-            .frame(height: 54)
-            .clipShape(RoundedRectangle(cornerRadius: 14))
-
-            // Google 로그인
-            SocialLoginButton(
-                icon: "google_logo",
-                systemIcon: "g.circle.fill",
-                title: "Google로 계속하기",
-                background: Color.white,
-                foreground: Color.tteDarkGray,
-                border: Color(UIColor.separator)
-            ) {
-                guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-                      let vc = windowScene.windows.first?.rootViewController else { return }
-                Task { await authService.signInWithGoogle(presenting: vc) }
-            }
-
-            // 카카오 로그인
-            SocialLoginButton(
-                icon: nil,
-                systemIcon: nil,
-                title: "카카오로 계속하기",
-                background: Color(hex: "#FEE500"),
-                foreground: Color(hex: "#191919"),
-                border: Color.clear,
-                emoji: "💬"
-            ) {
-                Task { await authService.signInWithKakao() }
-            }
         }
+        .overlay(
+            // Apple Sign In 숨김 트리거
+            Group {
+                if appleSignInTrigger {
+                    SignInWithAppleButton(.signIn) { request in
+                        request.requestedScopes = [.fullName, .email]
+                        request.nonce = authService.prepareAppleSignIn()
+                    } onCompletion: { result in
+                        appleSignInTrigger = false
+                        switch result {
+                        case .success(let auth):
+                            if let credential = auth.credential as? ASAuthorizationAppleIDCredential {
+                                Task { await authService.signInWithApple(credential: credential) }
+                            }
+                        case .failure:
+                            authService.errorMessage = "Apple 로그인에 실패했습니다."
+                        }
+                    }
+                    .frame(width: 0, height: 0)
+                    .opacity(0)
+                }
+            }
+        )
     }
 
     // MARK: - Divider
@@ -214,43 +241,24 @@ struct AuthView: View {
     }
 }
 
-// MARK: - Social Login Button
-struct SocialLoginButton: View {
-    let icon: String?
-    let systemIcon: String?
-    let title: String
+// MARK: - Social Circle Button
+struct SocialCircleButton<Label: View>: View {
     let background: Color
-    let foreground: Color
     let border: Color
-    var emoji: String? = nil
     let action: () -> Void
+    @ViewBuilder let label: () -> Label
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 10) {
-                if let emoji {
-                    Text(emoji)
-                        .font(.system(size: 20))
-                } else if let systemIcon {
-                    Image(systemName: systemIcon)
-                        .font(.system(size: 20))
-                        .foregroundColor(foreground)
-                }
-
-                Text(title)
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(foreground)
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: 54)
-            .background(
-                RoundedRectangle(cornerRadius: 14)
+            ZStack {
+                Circle()
                     .fill(background)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14)
-                            .stroke(border, lineWidth: 1)
-                    )
-            )
+                    .frame(width: 60, height: 60)
+                    .overlay(Circle().stroke(border, lineWidth: 1))
+                    .shadow(color: .black.opacity(0.08), radius: 6, y: 2)
+                label()
+            }
+            .frame(height: 54)
         }
     }
 }

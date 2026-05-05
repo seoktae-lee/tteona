@@ -11,6 +11,7 @@ class AuthService: NSObject, ObservableObject {
     @Published var currentUser: AppUser?
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var onboardingComplete = false
 
     var isLoggedIn: Bool { currentUser != nil }
 
@@ -23,8 +24,10 @@ class AuthService: NSObject, ObservableObject {
             Task { @MainActor in
                 if let user {
                     self?.currentUser = AppUser(uid: user.uid, email: user.email ?? "")
+                    self?.onboardingComplete = UserDefaults.standard.bool(forKey: "onboarding_\(user.uid)")
                 } else {
                     self?.currentUser = nil
+                    self?.onboardingComplete = false
                 }
             }
         }
@@ -219,7 +222,3 @@ class AuthService: NSObject, ObservableObject {
     }
 }
 
-struct AppUser {
-    let uid: String
-    let email: String
-}

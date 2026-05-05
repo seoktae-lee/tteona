@@ -5,13 +5,16 @@ struct RootView: View {
 
     var body: some View {
         Group {
-            if authService.isLoggedIn {
+            if !authService.isLoggedIn {
+                AuthView()
+            } else if !authService.onboardingComplete {
+                OnboardingView()
+            } else {
                 MainView()
                     .environmentObject(CourseService())
-            } else {
-                AuthView()
             }
         }
-        .animation(.easeInOut(duration: 0.3), value: authService.isLoggedIn)
+        .animation(.easeInOut(duration: 0.35), value: authService.isLoggedIn)
+        .animation(.easeInOut(duration: 0.35), value: authService.onboardingComplete)
     }
 }
