@@ -48,7 +48,7 @@ struct AuthView: View {
     // MARK: - Logo
     private var logoSection: some View {
         VStack(spacing: 12) {
-            Text("떠나")
+            Text("tteona")
                 .font(.system(size: 52, weight: .bold))
                 .foregroundColor(.tteOrange)
 
