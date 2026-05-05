@@ -27,6 +27,13 @@
                 <string>kakao49d0d57217d4659334d500aa7a763ee4</string>
             </array>
         </dict>
+        <!-- 구글 로그인 URL Scheme -->
+        <dict>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>com.googleusercontent.apps.134634013988-n94bj8pnfo5dta764forjirmr0nf0c61</string>
+            </array>
+        </dict>
     </array>
 
     <!-- 카카오톡 앱 쿼리 허용 -->
