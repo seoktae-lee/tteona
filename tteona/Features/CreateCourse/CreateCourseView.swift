@@ -8,19 +8,16 @@ struct CreateCourseView: View {
 
     @State private var courseName = ""
     @State private var selectedTag: CourseTag = .couple
-    @State private var selectedRegion = courseRegions[0]
     @State private var places: [Place] = []
-    @State private var newPlaceName = ""
     @State private var isSaving = false
     @State private var errorMessage: String?
-    @State private var showMapPicker = false
+    @State private var showPlaceSearch = false
     @State private var cameraPosition: MapCameraPosition = .region(
         MKCoordinateRegion(
             center: CLLocationCoordinate2D(latitude: 37.5665, longitude: 126.9780),
-            span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+            span: MKCoordinateSpan(latitudeDelta: 0.1, longitudeDelta: 0.1)
         )
     )
-    @State private var pendingCoordinate: CLLocationCoordinate2D?
 
     var body: some View {
         NavigationStack {
@@ -28,8 +25,7 @@ struct CreateCourseView: View {
                 VStack(spacing: 24) {
                     nameSection
                     tagSection
-                    regionSection
-                    mapPickerSection
+                    mapPreviewSection
                     placesSection
                     if let error = errorMessage {
                         Text(error)
@@ -63,13 +59,19 @@ struct CreateCourseView: View {
                 }
             }
         }
+        .sheet(isPresented: $showPlaceSearch) {
+            PlaceSearchView(places: $places)
+        }
+        .onChange(of: places) { _, newPlaces in
+            updateMapCamera(places: newPlaces)
+        }
     }
 
     // MARK: - Name
     private var nameSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             SectionLabel("코스 이름")
-            TteTextField(placeholder: "코스 이름을 입력하세요", text: $courseName)
+            TteTextField(placeholder: "예) 홍대 감성 데이트 코스", text: $courseName)
         }
     }
 
@@ -97,118 +99,71 @@ struct CreateCourseView: View {
         }
     }
 
-    // MARK: - Region
-    private var regionSection: some View {
+    // MARK: - Map Preview
+    private var mapPreviewSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionLabel("지역")
-            Menu {
-                ForEach(courseRegions, id: \.self) { region in
-                    Button(region) { selectedRegion = region }
-                }
-            } label: {
-                HStack {
-                    Text(selectedRegion)
-                        .foregroundColor(.tteDarkGray)
-                    Spacer()
-                    Image(systemName: "chevron.down")
-                        .foregroundColor(.tteMediumGray)
-                        .font(.system(size: 14))
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 16)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color(UIColor.secondarySystemBackground))
-                )
-            }
-        }
-    }
+            SectionLabel("코스 지도 미리보기")
 
-    // MARK: - Map Picker
-    private var mapPickerSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            SectionLabel("지도에서 장소 추가")
-
-            ZStack(alignment: .bottomTrailing) {
-                Map(position: $cameraPosition) {
-                    ForEach(places) { place in
-                        Annotation(place.placeName, coordinate: place.coordinate) {
-                            PlacePin(order: place.order)
-                        }
+            Map(position: $cameraPosition) {
+                ForEach(places) { place in
+                    Annotation(place.placeName, coordinate: place.coordinate) {
+                        PlacePin(order: place.order)
                     }
                 }
-                .frame(height: 220)
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-                .onTapGesture { location in
-                    // MapKit onTapGesture coordinate 변환은 MapReader 필요
+                if places.count >= 2 {
+                    MapPolyline(coordinates: places.map(\.coordinate))
+                        .stroke(Color.tteOrange, lineWidth: 2)
                 }
-                .overlay(
-                    Text("지도를 탭하여 장소 추가")
-                        .font(.system(size: 12))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Capsule().fill(Color.black.opacity(0.5)))
-                        .padding(12),
-                    alignment: .bottom
-                )
             }
-
-            // 장소 이름 입력 + 추가 버튼
-            HStack(spacing: 10) {
-                TteTextField(placeholder: "장소 이름 입력", text: $newPlaceName)
-
-                Button {
-                    addPlace()
-                } label: {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 36))
-                        .foregroundColor(.tteOrange)
-                }
-                .disabled(newPlaceName.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
+            .frame(height: 200)
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .disabled(true)
         }
     }
 
-    // MARK: - Places List
+    // MARK: - Places
     private var placesSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionLabel("장소 목록 (\(places.count)곳)")
+            HStack {
+                SectionLabel("장소 목록 (\(places.count)곳)")
+                Spacer()
+                Button {
+                    showPlaceSearch = true
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "plus.circle.fill")
+                        Text("장소 추가")
+                            .font(.system(size: 14, weight: .medium))
+                    }
+                    .foregroundColor(.tteOrange)
+                }
+            }
 
             if places.isEmpty {
-                Text("아직 추가된 장소가 없어요")
-                    .font(.system(size: 14))
-                    .foregroundColor(.tteMediumGray)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.vertical, 20)
+                Button {
+                    showPlaceSearch = true
+                } label: {
+                    VStack(spacing: 10) {
+                        Image(systemName: "mappin.and.ellipse")
+                            .font(.system(size: 32))
+                            .foregroundColor(.tteOrange.opacity(0.6))
+                        Text("장소를 추가해서 코스를 만들어보세요")
+                            .font(.system(size: 14))
+                            .foregroundColor(.tteMediumGray)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 32)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(Color.tteOrange.opacity(0.3), style: StrokeStyle(lineWidth: 1.5, dash: [6]))
+                    )
+                }
             } else {
                 ForEach(Array(places.enumerated()), id: \.element.id) { idx, place in
-                    HStack(spacing: 12) {
-                        Text("\(idx + 1)")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundColor(.white)
-                            .frame(width: 26, height: 26)
-                            .background(Circle().fill(Color.tteOrange))
-
-                        Text(place.placeName)
-                            .font(.system(size: 15))
-                            .foregroundColor(.tteDarkGray)
-
-                        Spacer()
-
-                        Button {
-                            removePlace(at: idx)
-                        } label: {
-                            Image(systemName: "minus.circle")
-                                .foregroundColor(.red.opacity(0.7))
-                        }
+                    PlaceRowEdit(place: place) {
+                        places.remove(at: idx)
+                        reorderPlaces()
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(Color(UIColor.secondarySystemBackground))
-                    )
                 }
                 .onMove { from, to in
                     places.move(fromOffsets: from, toOffset: to)
@@ -218,29 +173,7 @@ struct CreateCourseView: View {
         }
     }
 
-    // MARK: - Actions
-    private func addPlace() {
-        let name = newPlaceName.trimmingCharacters(in: .whitespaces)
-        guard !name.isEmpty else { return }
-
-        // 현재 지도 중심 좌표를 기본값으로 사용
-        let coordinate = CLLocationCoordinate2D(latitude: 37.5665, longitude: 126.9780)
-
-        let place = Place(
-            order: places.count + 1,
-            placeName: name,
-            latitude: coordinate.latitude,
-            longitude: coordinate.longitude
-        )
-        places.append(place)
-        newPlaceName = ""
-    }
-
-    private func removePlace(at index: Int) {
-        places.remove(at: index)
-        reorderPlaces()
-    }
-
+    // MARK: - Helpers
     private func reorderPlaces() {
         for i in places.indices {
             places[i] = Place(
@@ -252,16 +185,49 @@ struct CreateCourseView: View {
         }
     }
 
+    private func updateMapCamera(places: [Place]) {
+        guard !places.isEmpty else { return }
+        if places.count == 1 {
+            cameraPosition = .region(MKCoordinateRegion(
+                center: places[0].coordinate,
+                span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
+            ))
+        } else {
+            let lats = places.map(\.latitude)
+            let lons = places.map(\.longitude)
+            cameraPosition = .region(MKCoordinateRegion(
+                center: CLLocationCoordinate2D(
+                    latitude: ((lats.min() ?? 0) + (lats.max() ?? 0)) / 2,
+                    longitude: ((lons.min() ?? 0) + (lons.max() ?? 0)) / 2
+                ),
+                span: MKCoordinateSpan(
+                    latitudeDelta: max(((lats.max() ?? 0) - (lats.min() ?? 0)) * 2, 0.02),
+                    longitudeDelta: max(((lons.max() ?? 0) - (lons.min() ?? 0)) * 2, 0.02)
+                )
+            ))
+        }
+    }
+
+    private func regionFromPlaces(_ places: [Place]) -> String {
+        guard let first = places.first else { return "기타" }
+        let geocoder = CLGeocoder()
+        // 저장 시 지역을 첫 번째 장소의 시/도로 자동 추출
+        // 비동기 처리가 복잡하므로 좌표 기반으로 간단히 추정
+        let lat = first.latitude
+        let lon = first.longitude
+        if lat > 37.4 && lat < 37.7 && lon > 126.7 && lon < 127.2 { return "서울" }
+        if lat > 35.0 && lat < 35.3 && lon > 128.9 && lon < 129.3 { return "부산" }
+        if lat > 33.1 && lat < 33.6 && lon > 126.1 && lon < 126.9 { return "제주" }
+        if lat > 35.7 && lat < 36.0 && lon > 129.1 && lon < 129.4 { return "경주" }
+        if lat > 37.7 && lat < 37.9 && lon > 128.8 && lon < 129.0 { return "강릉" }
+        if lat > 35.7 && lat < 35.9 && lon > 126.9 && lon < 127.2 { return "전주" }
+        return "기타"
+    }
+
     private func saveCourse() async {
         let name = courseName.trimmingCharacters(in: .whitespaces)
-        guard !name.isEmpty else {
-            errorMessage = "코스 이름을 입력해주세요."
-            return
-        }
-        guard places.count >= 1 else {
-            errorMessage = "장소를 1곳 이상 추가해주세요."
-            return
-        }
+        guard !name.isEmpty else { errorMessage = "코스 이름을 입력해주세요."; return }
+        guard places.count >= 2 else { errorMessage = "장소를 2곳 이상 추가해주세요."; return }
 
         isSaving = true
         errorMessage = nil
@@ -271,7 +237,7 @@ struct CreateCourseView: View {
             authorId: authService.currentUser?.uid ?? "",
             courseName: name,
             tag: selectedTag,
-            region: selectedRegion,
+            region: regionFromPlaces(places),
             likeCount: 0,
             createdAt: Date(),
             places: places
@@ -284,6 +250,46 @@ struct CreateCourseView: View {
             errorMessage = "저장에 실패했습니다. 다시 시도해주세요."
         }
         isSaving = false
+    }
+}
+
+// MARK: - Place Row (Edit Mode)
+struct PlaceRowEdit: View {
+    let place: Place
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "line.3.horizontal")
+                .foregroundColor(.tteMediumGray)
+                .font(.system(size: 14))
+
+            Text("\(place.order)")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundColor(.white)
+                .frame(width: 26, height: 26)
+                .background(Circle().fill(Color.tteOrange))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(place.placeName)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundColor(.tteDarkGray)
+            }
+
+            Spacer()
+
+            Button(action: onDelete) {
+                Image(systemName: "minus.circle.fill")
+                    .foregroundColor(.red.opacity(0.7))
+                    .font(.system(size: 20))
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(UIColor.secondarySystemBackground))
+        )
     }
 }
 

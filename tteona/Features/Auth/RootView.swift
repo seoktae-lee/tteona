@@ -17,7 +17,7 @@ struct RootView: View {
             } else if !authService.onboardingComplete {
                 OnboardingView()
             } else {
-                MainView()
+                MainTabView()
                     .environmentObject(CourseService())
             }
         }

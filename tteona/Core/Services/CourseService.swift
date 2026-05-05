@@ -7,6 +7,7 @@ class CourseService: ObservableObject {
     @Published var courses: [Course] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var likedCourseIds: Set<String> = []
 
     private let db = Firestore.firestore()
 
@@ -54,10 +55,14 @@ class CourseService: ObservableObject {
     }
 
     func isLiked(courseId: String, userId: String) async -> Bool {
-        let doc = try? await db.collection("courses").document(courseId)
-            .collection("likes").document(userId)
-            .getDocument()
-        return doc?.exists ?? false
+        likedCourseIds.contains(courseId)
+    }
+
+    func fetchLikedCourseIds(userId: String) async {
+        let snapshot = try? await db.collectionGroup("likes")
+            .whereField("userId", isEqualTo: userId)
+            .getDocuments()
+        likedCourseIds = Set(snapshot?.documents.compactMap { $0.reference.parent.parent?.documentID } ?? [])
     }
 }
 
