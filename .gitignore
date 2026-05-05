@@ -1,0 +1,23 @@
+# GoogleService-Info (Firebase API 키 포함 — 절대 커밋 금지)
+GoogleService-Info.plist
+
+# Xcode
+*.xcuserstate
+*.xcuserdatad
+xcuserdata/
+DerivedData/
+*.moved-aside
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# macOS
+.DS_Store
+
+# CocoaPods
+Pods/
