@@ -5,10 +5,15 @@ struct CourseDetailView: View {
     let course: Course
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var courseService: CourseService
+    @EnvironmentObject private var userService: UserService
     @Environment(\.dismiss) private var dismiss
-    @State private var isLiked = false
     @State private var showActiveSession = false
     @State private var cameraPosition: MapCameraPosition = .automatic
+    @State private var isLikeProcessing = false
+
+    private var isLiked: Bool {
+        courseService.likedCourseIds.contains(course.courseId)
+    }
 
     var body: some View {
         NavigationStack {
@@ -36,14 +41,16 @@ struct CourseDetailView: View {
             }
         }
         .task {
-            isLiked = await courseService.isLiked(
-                courseId: course.courseId,
-                userId: authService.currentUser?.uid ?? ""
-            )
+            let uid = authService.currentUser?.uid ?? ""
+            await courseService.fetchLikedCourseIds(userId: uid)
             fitMapToCourse()
         }
         .fullScreenCover(isPresented: $showActiveSession) {
             ActiveSessionView(course: course)
+                .environmentObject(AppNotificationManager.shared)
+                .environmentObject(authService)
+                .environmentObject(userService)
+                .environmentObject(RoomService())
         }
     }
 
@@ -150,20 +157,19 @@ struct CourseDetailView: View {
 
     private var likeButton: some View {
         Button {
+            guard !isLikeProcessing else { return }
+            isLikeProcessing = true
             Task {
                 let uid = authService.currentUser?.uid ?? ""
-                try? await courseService.toggleLike(
-                    courseId: course.courseId,
-                    userId: uid,
-                    isLiked: !isLiked
-                )
-                isLiked.toggle()
+                try? await courseService.toggleLike(courseId: course.courseId, userId: uid)
+                isLikeProcessing = false
             }
         } label: {
             Image(systemName: isLiked ? "heart.fill" : "heart")
                 .font(.system(size: 20))
                 .foregroundColor(isLiked ? .red : .tteDarkGray)
         }
+        .disabled(isLikeProcessing)
     }
 
     private func fitMapToCourse() {
@@ -251,4 +257,5 @@ struct PlaceRow: View {
     CourseDetailView(course: Course.mockCourses[0])
         .environmentObject(AuthService())
         .environmentObject(CourseService())
+        .environmentObject(UserService())
 }

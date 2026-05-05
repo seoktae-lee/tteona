@@ -2,6 +2,7 @@ import Foundation
 import Combine
 import FirebaseAuth
 import FirebaseCore
+import FirebaseFirestore
 import AuthenticationServices
 import CryptoKit
 import GoogleSignIn
@@ -189,6 +190,43 @@ class AuthService: NSObject, ObservableObject {
     // MARK: - 로그아웃
     func signOut() {
         try? Auth.auth().signOut()
+        GIDSignIn.sharedInstance.signOut()
+    }
+
+    // MARK: - 회원탈퇴
+    func deleteAccount(userId: String) async throws {
+        let db = Firestore.firestore()
+
+        // users 문서 삭제
+        try await db.collection("users").document(userId).delete()
+
+        // 내가 만든 코스 삭제
+        let coursesSnapshot = try await db.collection("courses")
+            .whereField("authorId", isEqualTo: userId)
+            .getDocuments()
+        for doc in coursesSnapshot.documents {
+            try await doc.reference.delete()
+        }
+
+        // 내가 속한 방에서 제거
+        let roomsSnapshot = try await db.collection("rooms")
+            .whereField("memberIds", arrayContains: userId)
+            .getDocuments()
+        for doc in roomsSnapshot.documents {
+            let roomId = doc.documentID
+            try await db.collection("rooms").document(roomId)
+                .updateData(["memberIds": FieldValue.arrayRemove([userId])])
+            try await db.collection("rooms").document(roomId)
+                .collection("members").document(userId).delete()
+            try await db.collection("rooms").document(roomId)
+                .collection("locations").document(userId).delete()
+        }
+
+        // UserDefaults 정리
+        UserDefaults.standard.removeObject(forKey: "onboarding_\(userId)")
+
+        // Firebase Auth 계정 삭제
+        try await Auth.auth().currentUser?.delete()
         GIDSignIn.sharedInstance.signOut()
     }
 

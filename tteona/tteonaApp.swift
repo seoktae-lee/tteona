@@ -13,6 +13,7 @@ import KakaoSDKAuth
 @main
 struct TteonaApp: App {
     @StateObject private var authService = AuthService()
+    @StateObject private var notificationManager = AppNotificationManager.shared
 
     init() {
         FirebaseApp.configure()
@@ -23,10 +24,12 @@ struct TteonaApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(authService)
+                .environmentObject(notificationManager)
                 .onOpenURL { url in
                     if AuthApi.isKakaoTalkLoginUrl(url) {
                         AuthController.handleOpenUrl(url: url)
                     }
+                    // tteona://capture 딥링크는 ImpromptuSessionView에서 처리
                 }
         }
     }

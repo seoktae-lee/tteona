@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 import FirebaseFirestore
 import CoreLocation
 
@@ -8,17 +9,37 @@ class RoomService: ObservableObject {
     @Published var currentRoomMembers: [RoomMember] = []
     @Published var sharedCourses: [SharedCourse] = []
     @Published var memberLocations: [MemberLocation] = []
+    @Published var feedItems: [FeedItem] = []
     @Published var isLoading = false
 
     private let db = Firestore.firestore()
     private var roomsListener: ListenerRegistration?
     private var sharedCoursesListener: ListenerRegistration?
     private var locationsListener: ListenerRegistration?
+    private var feedListener: ListenerRegistration?
 
     // MARK: - 방 생성
     func createRoom(name: String, userId: String, nickname: String) async throws -> Room {
         let roomId = UUID().uuidString
         let inviteCode = generateInviteCode()
+        let data: [String: Any] = [
+            "roomId": roomId,
+            "name": name,
+            "inviteCode": inviteCode,
+            "creatorId": userId,
+            "memberIds": [userId],
+            "createdAt": FieldValue.serverTimestamp()
+        ]
+        try await db.collection("rooms").document(roomId).setData(data)
+
+        let memberData: [String: Any] = [
+            "userId": userId,
+            "nickname": nickname,
+            "joinedAt": FieldValue.serverTimestamp()
+        ]
+        try await db.collection("rooms").document(roomId)
+            .collection("members").document(userId).setData(memberData)
+
         let room = Room(
             roomId: roomId,
             name: name,
@@ -27,12 +48,6 @@ class RoomService: ObservableObject {
             memberIds: [userId],
             createdAt: Date()
         )
-        try db.collection("rooms").document(roomId).setData(from: room)
-
-        let member = RoomMember(userId: userId, nickname: nickname, joinedAt: Date())
-        try db.collection("rooms").document(roomId)
-            .collection("members").document(userId).setData(from: member)
-
         return room
     }
 
@@ -54,9 +69,13 @@ class RoomService: ObservableObject {
         try await db.collection("rooms").document(room.roomId)
             .updateData(["memberIds": FieldValue.arrayUnion([userId])])
 
-        let member = RoomMember(userId: userId, nickname: nickname, joinedAt: Date())
-        try db.collection("rooms").document(room.roomId)
-            .collection("members").document(userId).setData(from: member)
+        let memberData: [String: Any] = [
+            "userId": userId,
+            "nickname": nickname,
+            "joinedAt": FieldValue.serverTimestamp()
+        ]
+        try await db.collection("rooms").document(room.roomId)
+            .collection("members").document(userId).setData(memberData)
 
         return room
     }
@@ -87,20 +106,24 @@ class RoomService: ObservableObject {
 
     // MARK: - 코스 공유
     func shareCourse(_ course: Course, roomId: String, userId: String, nickname: String) async throws {
-        let shared = SharedCourse(
-            courseId: course.courseId,
-            courseName: course.courseName,
-            region: course.region,
-            tag: course.tag,
-            places: course.places,
-            sharedBy: userId,
-            sharedByNickname: nickname,
-            sharedAt: Date(),
-            voteCount: 0,
-            votedUserIds: []
-        )
-        try db.collection("rooms").document(roomId)
-            .collection("sharedCourses").document(course.courseId).setData(from: shared)
+        let placesData = course.places.map { place -> [String: Any] in
+            ["order": place.order, "placeName": place.placeName,
+             "latitude": place.latitude, "longitude": place.longitude]
+        }
+        let data: [String: Any] = [
+            "courseId": course.courseId,
+            "courseName": course.courseName,
+            "region": course.region,
+            "tag": course.tag.rawValue,
+            "places": placesData,
+            "sharedBy": userId,
+            "sharedByNickname": nickname,
+            "sharedAt": FieldValue.serverTimestamp(),
+            "voteCount": 0,
+            "votedUserIds": []
+        ]
+        try await db.collection("rooms").document(roomId)
+            .collection("sharedCourses").document(course.courseId).setData(data)
     }
 
     // MARK: - 공유 코스 실시간 구독
@@ -184,6 +207,73 @@ class RoomService: ObservableObject {
             .collection("members").document(userId).delete()
         try await db.collection("rooms").document(roomId)
             .collection("locations").document(userId).delete()
+    }
+
+    // MARK: - 피드 자동 기록
+    func postFeed(roomId: String, type: FeedType, userId: String, nickname: String,
+                  courseId: String, courseName: String, placeName: String? = nil) {
+        let feedId = UUID().uuidString
+        var data: [String: Any] = [
+            "feedId": feedId,
+            "type": type.rawValue,
+            "userId": userId,
+            "nickname": nickname,
+            "courseId": courseId,
+            "courseName": courseName,
+            "commentCount": 0,
+            "createdAt": FieldValue.serverTimestamp()
+        ]
+        if let placeName { data["placeName"] = placeName }
+        db.collection("rooms").document(roomId)
+            .collection("feed").document(feedId).setData(data)
+    }
+
+    // MARK: - 피드 실시간 구독
+    func startListeningFeed(roomId: String) {
+        feedListener?.remove()
+        feedItems = []
+        feedListener = db.collection("rooms").document(roomId)
+            .collection("feed")
+            .order(by: "createdAt", descending: true)
+            .limit(to: 50)
+            .addSnapshotListener { [weak self] snapshot, _ in
+                guard let self, let docs = snapshot?.documents else { return }
+                self.feedItems = docs.compactMap { try? $0.data(as: FeedItem.self) }
+            }
+    }
+
+    func stopListeningFeed() {
+        feedListener?.remove()
+        feedListener = nil
+        feedItems = []
+    }
+
+    // MARK: - 댓글 추가
+    func addComment(roomId: String, feedId: String, userId: String, nickname: String, text: String) async throws {
+        let commentId = UUID().uuidString
+        let data: [String: Any] = [
+            "commentId": commentId,
+            "userId": userId,
+            "nickname": nickname,
+            "text": text,
+            "createdAt": FieldValue.serverTimestamp()
+        ]
+        try await db.collection("rooms").document(roomId)
+            .collection("feed").document(feedId)
+            .collection("comments").document(commentId).setData(data)
+        try await db.collection("rooms").document(roomId)
+            .collection("feed").document(feedId)
+            .updateData(["commentCount": FieldValue.increment(Int64(1))])
+    }
+
+    // MARK: - 댓글 목록 조회
+    func fetchComments(roomId: String, feedId: String) async -> [FeedComment] {
+        let snapshot = try? await db.collection("rooms").document(roomId)
+            .collection("feed").document(feedId)
+            .collection("comments")
+            .order(by: "createdAt")
+            .getDocuments()
+        return snapshot?.documents.compactMap { try? $0.data(as: FeedComment.self) } ?? []
     }
 
     // MARK: - Helper

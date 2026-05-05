@@ -12,6 +12,7 @@ struct CreateCourseView: View {
     @State private var isSaving = false
     @State private var errorMessage: String?
     @State private var showPlaceSearch = false
+    @State private var mapCenter: CLLocationCoordinate2D = CLLocationCoordinate2D(latitude: 37.5665, longitude: 126.9780)
     @State private var cameraPosition: MapCameraPosition = .region(
         MKCoordinateRegion(
             center: CLLocationCoordinate2D(latitude: 37.5665, longitude: 126.9780),
@@ -60,7 +61,7 @@ struct CreateCourseView: View {
             }
         }
         .sheet(isPresented: $showPlaceSearch) {
-            PlaceSearchView(places: $places)
+            PlaceSearchView(places: $places, mapCenter: mapCenter)
         }
         .onChange(of: places) { _, newPlaces in
             updateMapCamera(places: newPlaces)
@@ -118,6 +119,9 @@ struct CreateCourseView: View {
             .frame(height: 200)
             .clipShape(RoundedRectangle(cornerRadius: 16))
             .disabled(true)
+            .onMapCameraChange { context in
+                mapCenter = context.region.center
+            }
         }
     }
 

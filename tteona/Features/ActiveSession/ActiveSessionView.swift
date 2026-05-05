@@ -3,7 +3,12 @@ import MapKit
 
 struct ActiveSessionView: View {
     let course: Course
+    var roomId: String? = nil
     @StateObject private var locationService = LocationService()
+    @EnvironmentObject private var notificationManager: AppNotificationManager
+    @EnvironmentObject private var authService: AuthService
+    @EnvironmentObject private var userService: UserService
+    @EnvironmentObject private var roomService: RoomService
     @Environment(\.dismiss) private var dismiss
 
     @State private var currentPlaceIndex = 0
@@ -40,9 +45,28 @@ struct ActiveSessionView: View {
             locationService.requestPermission()
             locationService.startTracking(places: course.places)
             fitMap()
+            if let rid = roomId,
+               let uid = authService.currentUser?.uid {
+                roomService.startListeningLocations(roomId: rid, myUserId: uid)
+                let nickname = userService.currentUser?.nickname ?? "멤버"
+                roomService.postFeed(roomId: rid, type: .tripStart, userId: uid,
+                                     nickname: nickname, courseId: course.courseId,
+                                     courseName: course.courseName)
+            }
         }
         .onDisappear {
             locationService.stopTracking()
+            if let rid = roomId {
+                roomService.stopListeningLocations()
+                roomService.stopSharingLocation(roomId: rid, userId: authService.currentUser?.uid ?? "")
+            }
+        }
+        .onChange(of: locationService.currentLocation) { _, location in
+            guard let rid = roomId,
+                  let coord = location?.coordinate,
+                  let uid = authService.currentUser?.uid else { return }
+            let nickname = userService.currentUser?.nickname ?? "멤버"
+            roomService.updateMyLocation(roomId: rid, userId: uid, nickname: nickname, coordinate: coord)
         }
         .onChange(of: locationService.arrivedAtPlace) { _, place in
             guard let place else { return }
@@ -51,6 +75,21 @@ struct ActiveSessionView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
                 withAnimation { showArrivalBanner = false }
             }
+            if let rid = roomId, let uid = authService.currentUser?.uid {
+                let nickname = userService.currentUser?.nickname ?? "멤버"
+                roomService.postFeed(roomId: rid, type: .arrival, userId: uid,
+                                     nickname: nickname, courseId: course.courseId,
+                                     courseName: course.courseName, placeName: place.placeName)
+            }
+        }
+        .onChange(of: notificationManager.pendingPlaceName) { _, placeName in
+            guard let placeName else { return }
+            // 알림 탭 시 해당 장소로 currentPlaceIndex 맞추고 카메라 열기
+            if let idx = course.places.firstIndex(where: { $0.placeName == placeName }) {
+                currentPlaceIndex = idx
+            }
+            showCamera = true
+            notificationManager.pendingPlaceName = nil
         }
         .fullScreenCover(isPresented: $showCamera, onDismiss: handleCameraDismiss) {
             if let place = currentPlace {
@@ -87,6 +126,13 @@ struct ActiveSessionView: View {
             if course.places.count >= 2 {
                 MapPolyline(coordinates: course.places.map(\.coordinate))
                     .stroke(Color.tteOrange.opacity(0.5), style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
+            }
+
+            // 동행 멤버 위치
+            ForEach(roomService.memberLocations) { member in
+                Annotation(member.nickname, coordinate: CLLocationCoordinate2D(latitude: member.latitude, longitude: member.longitude)) {
+                    MemberLocationPin(nickname: member.nickname)
+                }
             }
         }
     }
@@ -307,6 +353,31 @@ struct ArrivalBanner: View {
             .padding(.horizontal, 20)
             .padding(.top, 60)
             Spacer()
+        }
+    }
+}
+
+// MARK: - Member Location Pin
+struct MemberLocationPin: View {
+    let nickname: String
+
+    var body: some View {
+        VStack(spacing: 2) {
+            ZStack {
+                Circle()
+                    .fill(Color.purple)
+                    .frame(width: 36, height: 36)
+                    .shadow(color: .purple.opacity(0.4), radius: 4)
+                Text(String(nickname.prefix(1)))
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(.white)
+            }
+            Text(nickname)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundColor(.white)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Capsule().fill(Color.purple.opacity(0.85)))
         }
     }
 }

@@ -4,8 +4,10 @@ import Combine
 
 struct PlaceSearchView: View {
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var searcher = PlaceSearcher()
+    @StateObject private var searchService = PlaceSearchService()
     @Binding var places: [Place]
+    var mapCenter: CLLocationCoordinate2D = CLLocationCoordinate2D(latitude: 36.5, longitude: 127.8)
+    @State private var query = ""
 
     var body: some View {
         NavigationStack {
@@ -15,6 +17,7 @@ struct PlaceSearchView: View {
             }
             .navigationTitle("장소 검색")
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear { searchService.searchCoordinate = mapCenter }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("닫기") { dismiss() }
@@ -28,13 +31,13 @@ struct PlaceSearchView: View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
                 .foregroundColor(.tteMediumGray)
-            TextField("장소명 검색 (예: 홍대입구역)", text: $searcher.query)
+            TextField("장소명 검색 (예: 홍대입구역, 을지로 카페)", text: $query)
                 .autocorrectionDisabled()
-                .onSubmit { searcher.search() }
-            if !searcher.query.isEmpty {
+                .onSubmit { Task { await searchService.search(query) } }
+            if !query.isEmpty {
                 Button {
-                    searcher.query = ""
-                    searcher.results = []
+                    query = ""
+                    searchService.results = []
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundColor(.tteMediumGray)
@@ -46,83 +49,59 @@ struct PlaceSearchView: View {
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .onChange(of: searcher.query) { _, _ in searcher.searchDebounced() }
+        .onChange(of: query) { _, newValue in
+            searchService.searchDebounced(newValue)
+        }
     }
 
     @ViewBuilder
     private var resultList: some View {
-        if searcher.isSearching {
-            ProgressView().padding(.top, 40)
-            Spacer()
-        } else if searcher.results.isEmpty && !searcher.query.isEmpty {
-            Text("검색 결과가 없어요")
-                .foregroundColor(.tteMediumGray)
+        if searchService.isSearching {
+            ProgressView()
                 .padding(.top, 40)
             Spacer()
+        } else if searchService.results.isEmpty && !query.isEmpty {
+            VStack(spacing: 12) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 36))
+                    .foregroundColor(.tteMediumGray.opacity(0.5))
+                Text("검색 결과가 없어요")
+                    .foregroundColor(.tteMediumGray)
+            }
+            .padding(.top, 60)
+            Spacer()
         } else {
-            List(searcher.results, id: \.self) { item in
+            List(searchService.results) { item in
                 Button {
-                    let nextOrder = places.count + 1
-                    let coord = item.placemark.coordinate
                     let place = Place(
-                        order: nextOrder,
-                        placeName: item.name ?? item.placemark.name ?? "장소",
-                        latitude: coord.latitude,
-                        longitude: coord.longitude
+                        order: places.count + 1,
+                        placeName: item.name,
+                        latitude: item.latitude,
+                        longitude: item.longitude
                     )
                     places.append(place)
                     dismiss()
                 } label: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(item.name ?? "")
-                            .font(.system(size: 15, weight: .medium))
-                            .foregroundColor(.tteDarkGray)
-                        Text([item.placemark.locality, item.placemark.thoroughfare]
-                            .compactMap { $0 }.joined(separator: " "))
-                            .font(.system(size: 13))
-                            .foregroundColor(.tteMediumGray)
+                    HStack(spacing: 12) {
+                        Image(systemName: "mappin.circle.fill")
+                            .font(.system(size: 28))
+                            .foregroundColor(.tteOrange)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(item.name)
+                                .font(.system(size: 15, weight: .medium))
+                                .foregroundColor(.tteDarkGray)
+                            if !item.address.isEmpty {
+                                Text(item.address)
+                                    .font(.system(size: 13))
+                                    .foregroundColor(.tteMediumGray)
+                            }
+                        }
                     }
                     .padding(.vertical, 4)
                 }
             }
             .listStyle(.plain)
-        }
-    }
-}
-
-@MainActor
-class PlaceSearcher: ObservableObject {
-    @Published var query = ""
-    @Published var results: [MKMapItem] = []
-    @Published var isSearching = false
-
-    private var debounceTask: Task<Void, Never>?
-
-    func searchDebounced() {
-        debounceTask?.cancel()
-        debounceTask = Task {
-            try? await Task.sleep(for: .milliseconds(400))
-            if !Task.isCancelled { search() }
-        }
-    }
-
-    func search() {
-        let q = query.trimmingCharacters(in: .whitespaces)
-        guard !q.isEmpty else { results = []; return }
-
-        isSearching = true
-        let request = MKLocalSearch.Request()
-        request.naturalLanguageQuery = q
-        request.region = MKCoordinateRegion(
-            center: CLLocationCoordinate2D(latitude: 36.5, longitude: 127.8),
-            span: MKCoordinateSpan(latitudeDelta: 8, longitudeDelta: 8)
-        )
-
-        Task {
-            let search = MKLocalSearch(request: request)
-            let response = try? await search.start()
-            self.results = response?.mapItems ?? []
-            self.isSearching = false
         }
     }
 }

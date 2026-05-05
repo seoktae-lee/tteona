@@ -4,6 +4,7 @@ struct MainTabView: View {
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var courseService: CourseService
     @StateObject private var userService = UserService()
+    @StateObject private var roomService = RoomService()
 
     var body: some View {
         TabView {
@@ -24,6 +25,7 @@ struct MainTabView: View {
         }
         .tint(.tteOrange)
         .environmentObject(userService)
+        .environmentObject(roomService)
         .task {
             if let uid = authService.currentUser?.uid {
                 await userService.fetchUser(uid: uid)

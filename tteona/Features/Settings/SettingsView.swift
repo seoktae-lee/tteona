@@ -4,6 +4,8 @@ struct SettingsView: View {
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var userService: UserService
     @State private var showSignOutAlert = false
+    @State private var showDeleteAccountAlert = false
+    @State private var isDeletingAccount = false
 
     var body: some View {
         NavigationStack {
@@ -21,6 +23,34 @@ struct SettingsView: View {
         } message: {
             Text("정말 로그아웃 하시겠어요?")
         }
+        .alert("회원 탈퇴", isPresented: $showDeleteAccountAlert) {
+            Button("탈퇴", role: .destructive) {
+                guard let uid = authService.currentUser?.uid else { return }
+                isDeletingAccount = true
+                Task {
+                    try? await authService.deleteAccount(userId: uid)
+                    isDeletingAccount = false
+                }
+            }
+            Button("취소", role: .cancel) {}
+        } message: {
+            Text("탈퇴 시 코스, 그룹, 계정 정보가 모두 삭제되며 복구할 수 없어요.")
+        }
+        .overlay {
+            if isDeletingAccount {
+                ZStack {
+                    Color.black.opacity(0.3).ignoresSafeArea()
+                    VStack(spacing: 14) {
+                        ProgressView().tint(.white).scaleEffect(1.3)
+                        Text("탈퇴 처리 중...")
+                            .font(.system(size: 14))
+                            .foregroundColor(.white)
+                    }
+                    .padding(28)
+                    .background(RoundedRectangle(cornerRadius: 16).fill(Color.black.opacity(0.7)))
+                }
+            }
+        }
     }
 
     private var profileSection: some View {
@@ -34,7 +64,6 @@ struct SettingsView: View {
                         .font(.system(size: 22, weight: .semibold))
                         .foregroundColor(.tteOrange)
                 }
-
                 VStack(alignment: .leading, spacing: 4) {
                     Text(userService.currentUser?.nickname.isEmpty == false
                          ? userService.currentUser!.nickname : "닉네임 없음")
@@ -57,6 +86,24 @@ struct SettingsView: View {
                 Text("1.0.0")
                     .foregroundColor(.tteMediumGray)
             }
+            Button {
+                // 추후 연결
+            } label: {
+                Label("개인정보 처리방침", systemImage: "lock.shield")
+                    .foregroundColor(.tteDarkGray)
+            }
+            Button {
+                // 추후 연결
+            } label: {
+                Label("이용약관", systemImage: "doc.text")
+                    .foregroundColor(.tteDarkGray)
+            }
+            Button {
+                // 추후 연결
+            } label: {
+                Label("문의하기", systemImage: "envelope")
+                    .foregroundColor(.tteDarkGray)
+            }
         }
     }
 
@@ -66,6 +113,12 @@ struct SettingsView: View {
                 showSignOutAlert = true
             } label: {
                 Label("로그아웃", systemImage: "arrow.right.square")
+                    .foregroundColor(.red)
+            }
+            Button {
+                showDeleteAccountAlert = true
+            } label: {
+                Label("회원 탈퇴", systemImage: "person.crop.circle.badge.minus")
                     .foregroundColor(.red)
             }
         }

@@ -10,6 +10,7 @@ class CourseService: ObservableObject {
     @Published var likedCourseIds: Set<String> = []
 
     private let db = Firestore.firestore()
+    private var likedCourseIdsFetched = false
 
     func fetchCourses() async {
         isLoading = true
@@ -33,36 +34,46 @@ class CourseService: ObservableObject {
         courses.insert(course, at: 0)
     }
 
-    func toggleLike(courseId: String, userId: String, isLiked: Bool) async throws {
-        let likeRef = db.collection("courses").document(courseId)
-            .collection("likes").document(userId)
-        let courseRef = db.collection("courses").document(courseId)
-
-        if isLiked {
-            try await likeRef.setData([
-                "userId": userId,
-                "likedAt": FieldValue.serverTimestamp()
-            ])
-            try await courseRef.updateData(["likeCount": FieldValue.increment(Int64(1))])
-        } else {
-            try await likeRef.delete()
-            try await courseRef.updateData(["likeCount": FieldValue.increment(Int64(-1))])
-        }
-
-        if let idx = courses.firstIndex(where: { $0.courseId == courseId }) {
-            courses[idx].likeCount += isLiked ? 1 : -1
-        }
+    func deleteCourse(_ course: Course) async throws {
+        try await db.collection("courses").document(course.courseId).delete()
+        courses.removeAll { $0.courseId == course.courseId }
+        likedCourseIds.remove(course.courseId)
     }
 
-    func isLiked(courseId: String, userId: String) async -> Bool {
-        likedCourseIds.contains(courseId)
+    func toggleLike(courseId: String, userId: String) async throws {
+        let alreadyLiked = likedCourseIds.contains(courseId)
+        let userRef = db.collection("users").document(userId)
+        let courseRef = db.collection("courses").document(courseId)
+
+        if alreadyLiked {
+            likedCourseIds.remove(courseId)
+            if let idx = courses.firstIndex(where: { $0.courseId == courseId }) {
+                courses[idx].likeCount -= 1
+            }
+            try await userRef.setData(
+                ["likedCourseIds": FieldValue.arrayRemove([courseId])],
+                merge: true
+            )
+            try await courseRef.updateData(["likeCount": FieldValue.increment(Int64(-1))])
+        } else {
+            likedCourseIds.insert(courseId)
+            if let idx = courses.firstIndex(where: { $0.courseId == courseId }) {
+                courses[idx].likeCount += 1
+            }
+            try await userRef.setData(
+                ["likedCourseIds": FieldValue.arrayUnion([courseId])],
+                merge: true
+            )
+            try await courseRef.updateData(["likeCount": FieldValue.increment(Int64(1))])
+        }
     }
 
     func fetchLikedCourseIds(userId: String) async {
-        let snapshot = try? await db.collectionGroup("likes")
-            .whereField("userId", isEqualTo: userId)
-            .getDocuments()
-        likedCourseIds = Set(snapshot?.documents.compactMap { $0.reference.parent.parent?.documentID } ?? [])
+        guard !likedCourseIdsFetched else { return }
+        let doc = try? await db.collection("users").document(userId).getDocument()
+        let ids = doc?.data()?["likedCourseIds"] as? [String] ?? []
+        likedCourseIds = Set(ids)
+        likedCourseIdsFetched = true
     }
 }
 

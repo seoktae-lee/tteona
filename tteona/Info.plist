@@ -18,6 +18,8 @@
     <string>$(EXECUTABLE_NAME)</string>
     <key>UIRequiresFullScreen</key>
     <true/>
+    <key>NSSupportsLiveActivities</key>
+    <true/>
     <key>CFBundleURLTypes</key>
     <array>
         <!-- 카카오 로그인 URL Scheme -->
@@ -32,6 +34,13 @@
             <key>CFBundleURLSchemes</key>
             <array>
                 <string>com.googleusercontent.apps.134634013988-n94bj8pnfo5dta764forjirmr0nf0c61</string>
+            </array>
+        </dict>
+        <!-- 딥링크 (Live Activity 촬영 버튼) -->
+        <dict>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>tteona</string>
             </array>
         </dict>
     </array>
