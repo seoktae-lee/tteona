@@ -6,6 +6,7 @@ struct MainView: View {
     @EnvironmentObject private var courseService: CourseService
     @EnvironmentObject private var userService: UserService
     @EnvironmentObject private var roomService: RoomService
+    @StateObject private var locationService = LocationService()
     @State private var selectedCourse: Course?
     @State private var showCreateCourse = false
     @State private var showImpromptu = false
@@ -33,10 +34,15 @@ struct MainView: View {
         ZStack(alignment: .bottom) {
             mapLayer
             topBar
+            locationButton
             createCourseButton
         }
         .ignoresSafeArea()
-        .task { await courseService.fetchCourses() }
+        .task {
+            await courseService.fetchCourses()
+            locationService.requestPermission()
+            locationService.startTracking(places: [])
+        }
         .sheet(item: $selectedCourse) { course in
             CourseDetailView(course: course)
                 .environmentObject(authService)
@@ -156,26 +162,52 @@ struct MainView: View {
     }
 
     // MARK: - Bottom Buttons
+    private var locationButton: some View { EmptyView() }
+
     private var createCourseButton: some View {
         VStack {
             Spacer()
-            Button {
-                showImpromptu = true
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "figure.walk")
-                        .font(.system(size: 17, weight: .semibold))
-                    Text("나의 오늘")
-                        .font(.system(size: 17, weight: .bold))
+            ZStack {
+                // 나의 오늘 — 정중앙 고정
+                Button {
+                    showImpromptu = true
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "figure.walk")
+                            .font(.system(size: 17, weight: .semibold))
+                        Text("나의 오늘")
+                            .font(.system(size: 17, weight: .bold))
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 32)
+                    .padding(.vertical, 16)
+                    .background(
+                        Capsule()
+                            .fill(Color.tteOrange)
+                            .shadow(color: .tteOrange.opacity(0.45), radius: 12, y: 4)
+                    )
                 }
-                .foregroundColor(.white)
-                .padding(.horizontal, 32)
-                .padding(.vertical, 16)
-                .background(
-                    Capsule()
-                        .fill(Color.tteOrange)
-                        .shadow(color: .tteOrange.opacity(0.45), radius: 12, y: 4)
-                )
+
+                // 현재 위치 — 나의 오늘 우측에 독립 배치
+                HStack {
+                    Spacer()
+                    Button {
+                        guard let coord = locationService.currentLocation?.coordinate else { return }
+                        withAnimation {
+                            cameraPosition = .region(MKCoordinateRegion(
+                                center: coord,
+                                span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+                            ))
+                        }
+                    } label: {
+                        Image(systemName: "location.fill")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundColor(.tteOrange)
+                            .frame(width: 48, height: 48)
+                            .background(Circle().fill(Color.tteBackground).shadow(color: .black.opacity(0.15), radius: 8, y: 2))
+                    }
+                    .padding(.trailing, 24)
+                }
             }
             .padding(.bottom, 104)
         }

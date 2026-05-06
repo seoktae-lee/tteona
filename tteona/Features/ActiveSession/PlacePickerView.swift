@@ -6,15 +6,15 @@ struct PlacePickerView: View {
     let location: CLLocation
     let onSelect: (String) -> Void
 
-    @State private var nearbyPlaces: [MKMapItem] = []
+    @State private var nearbyPlaces: [KakaoNearbyPlace] = []
     @State private var isLoading = true
     @State private var customName = ""
     @State private var showCustomInput = false
+    @State private var isPreciseLocation: Bool = true
     @FocusState private var customFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
-            // 핸들
             RoundedRectangle(cornerRadius: 3)
                 .fill(Color.tteMediumGray.opacity(0.4))
                 .frame(width: 40, height: 4)
@@ -26,7 +26,37 @@ struct PlacePickerView: View {
                 .padding(.top, 16)
                 .padding(.bottom, 12)
 
-            Divider()
+            SwiftUI.Divider()
+
+            // 정확한 위치 꺼져있을 때 안내 배너
+            if !isPreciseLocation {
+                Button {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "location.slash.fill")
+                            .foregroundColor(.tteOrange)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("정확한 위치가 꺼져 있어요")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(.tteDarkGray)
+                            Text("설정에서 켜면 주변 장소를 더 정확하게 찾아요")
+                                .font(.system(size: 12))
+                                .foregroundColor(.tteMediumGray)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12))
+                            .foregroundColor(.tteMediumGray)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                    .background(Color.tteOrange.opacity(0.07))
+                }
+                SwiftUI.Divider()
+            }
 
             ScrollView {
                 VStack(spacing: 0) {
@@ -34,18 +64,15 @@ struct PlacePickerView: View {
                         ProgressView()
                             .padding(40)
                     } else {
-                        // 주변 장소 목록
-                        ForEach(nearbyPlaces, id: \.self) { item in
-                            PlaceRow(
-                                name: item.name ?? "알 수 없음",
-                                category: item.pointOfInterestCategory?.displayName,
-                                distance: item.placemark.location.flatMap {
-                                    location.distance(from: $0)
-                                }
+                        ForEach(nearbyPlaces, id: \.placeName) { place in
+                            PlacePickerRow(
+                                name: place.placeName,
+                                category: place.categoryName.components(separatedBy: " > ").last,
+                                distance: Double(place.distance)
                             ) {
-                                onSelect(item.name ?? "알 수 없음")
+                                onSelect(place.placeName)
                             }
-                            Divider().padding(.leading, 56)
+                            SwiftUI.Divider().padding(.leading, 56)
                         }
 
                         // 직접 입력
@@ -55,7 +82,6 @@ struct PlacePickerView: View {
                                     .font(.system(size: 16))
                                     .foregroundColor(.tteOrange)
                                     .frame(width: 28)
-
                                 TextField("장소명 직접 입력", text: $customName)
                                     .font(.system(size: 15))
                                     .focused($customFocused)
@@ -65,7 +91,6 @@ struct PlacePickerView: View {
                                         guard !name.isEmpty else { return }
                                         onSelect(name)
                                     }
-
                                 if !customName.isEmpty {
                                     Button {
                                         let name = customName.trimmingCharacters(in: .whitespaces)
@@ -107,37 +132,57 @@ struct PlacePickerView: View {
     }
 
     private func fetchNearbyPlaces() async {
-        let request = MKLocalSearch.Request()
-        request.naturalLanguageQuery = "장소"
-        request.resultTypes = [.pointOfInterest]
-        request.region = MKCoordinateRegion(
-            center: location.coordinate,
-            latitudinalMeters: 400,
-            longitudinalMeters: 400
-        )
+        // 정확한 위치 권한 직접 체크 (일시적 GPS 신호 문제와 구분)
+        let manager = CLLocationManager()
+        isPreciseLocation = manager.accuracyAuthorization == .fullAccuracy
 
-        let results = (try? await MKLocalSearch(request: request).start())?.mapItems ?? []
+        let lat = location.coordinate.latitude
+        let lng = location.coordinate.longitude
+        // 카카오 카테고리 코드: MT1(대형마트) CS2(편의점) SW8(지하철) BK9(은행) OL7(주유소)
+        // PO3(공공기관) AT4(관광명소) AD5(숙박) FD6(음식점) CE7(카페) HP8(병원) PM9(약국)
+        let categories = ["FD6", "CE7", "AT4", "AD5", "MT1", "CS2", "SW8"]
+        var seen = Set<String>()
+        var collected: [KakaoNearbyPlace] = []
 
-        // 200m 이내, 최대 8개, 거리순 정렬
-        nearbyPlaces = results
-            .filter { item in
-                guard let loc = item.placemark.location else { return false }
-                return location.distance(from: loc) <= 200
+        // 역지오코딩으로 건물/아파트명 먼저 추가 (가장 위)
+        if let placemark = try? await CLGeocoder().reverseGeocodeLocation(location).first,
+           let name = placemark.name {
+            collected.append(KakaoNearbyPlace(placeName: name, categoryName: "현재 위치", distance: "0", x: "\(lng)", y: "\(lat)"))
+            seen.insert(name)
+        }
+
+        await withTaskGroup(of: [KakaoNearbyPlace].self) { group in
+            for code in categories {
+                group.addTask {
+                    await Self.fetchKakaoCategory(code: code, lat: lat, lng: lng, radius: 200)
+                }
             }
-            .sorted { a, b in
-                let da = a.placemark.location.map { location.distance(from: $0) } ?? 9999
-                let db = b.placemark.location.map { location.distance(from: $0) } ?? 9999
-                return da < db
+            for await places in group {
+                for place in places {
+                    guard !seen.contains(place.placeName) else { continue }
+                    seen.insert(place.placeName)
+                    collected.append(place)
+                }
             }
-            .prefix(8)
-            .map { $0 }
+        }
 
+        nearbyPlaces = collected.sorted { (Double($0.distance) ?? 9999) < (Double($1.distance) ?? 9999) }
         isLoading = false
+    }
+
+    private static func fetchKakaoCategory(code: String, lat: Double, lng: Double, radius: Int) async -> [KakaoNearbyPlace] {
+        let key = "b31c03c128d37a877e6cb407f59b8911"
+        let urlStr = "https://dapi.kakao.com/v2/local/search/category.json?category_group_code=\(code)&x=\(lng)&y=\(lat)&radius=\(radius)&size=5&sort=distance"
+        guard let url = URL(string: urlStr) else { return [] }
+        var req = URLRequest(url: url)
+        req.setValue("KakaoAK \(key)", forHTTPHeaderField: "Authorization")
+        guard let (data, _) = try? await URLSession.shared.data(for: req) else { return [] }
+        return (try? JSONDecoder().decode(KakaoCategoryResponse.self, from: data))?.documents.map { $0.asNearbyPlace } ?? []
     }
 }
 
 // MARK: - 장소 행
-struct PlaceRow: View {
+struct PlacePickerRow: View {
     let name: String
     let category: String?
     let distance: CLLocationDistance?
@@ -177,27 +222,35 @@ struct PlaceRow: View {
     }
 }
 
-// MARK: - POI 카테고리 한국어
-extension MKPointOfInterestCategory {
-    var displayName: String {
-        switch self {
-        case .restaurant: return "음식점"
-        case .cafe: return "카페"
-        case .store: return "쇼핑"
-        case .hotel: return "숙박"
-        case .museum: return "박물관"
-        case .park: return "공원"
-        case .hospital: return "병원"
-        case .school: return "학교"
-        case .bank: return "은행"
-        case .pharmacy: return "약국"
-        case .gasStation: return "주유소"
-        case .publicTransport: return "대중교통"
-        case .theater: return "공연장"
-        case .nightlife: return "나이트라이프"
-        case .fitnessCenter: return "피트니스"
-        case .laundry: return "세탁소"
-        default: return "장소"
-        }
+// MARK: - Kakao 응답 모델
+struct KakaoNearbyPlace {
+    let placeName: String
+    let categoryName: String
+    let distance: String
+    let x: String
+    let y: String
+}
+
+struct KakaoCategoryResponse: Decodable {
+    let documents: [KakaoCategoryPlace]
+}
+
+struct KakaoCategoryPlace: Decodable {
+    let placeName: String
+    let categoryName: String
+    let distance: String
+    let x: String
+    let y: String
+
+    enum CodingKeys: String, CodingKey {
+        case placeName = "place_name"
+        case categoryName = "category_name"
+        case distance, x, y
+    }
+}
+
+extension KakaoCategoryPlace {
+    var asNearbyPlace: KakaoNearbyPlace {
+        KakaoNearbyPlace(placeName: placeName, categoryName: categoryName, distance: distance, x: x, y: y)
     }
 }

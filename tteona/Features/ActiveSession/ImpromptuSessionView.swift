@@ -23,6 +23,8 @@ struct ImpromptuSessionView: View {
     @State private var selectedTag: CourseTag = .friends
     @State private var isResolvingLocation = false
     @State private var pendingPlace: Place? = nil
+    @State private var showPlacePicker = false
+    @State private var resolvedLocation: CLLocation? = nil
     @State private var generatedCourse: Course? = nil
 
     private var uid: String { authService.currentUser?.uid ?? "" }
@@ -37,7 +39,6 @@ struct ImpromptuSessionView: View {
         .ignoresSafeArea()
         .task {
             locationService.requestPermission()
-            locationService.startTracking(places: [])
             activityManager.start()
             if let rid = roomId {
                 roomService.postFeed(roomId: rid, type: .freeTripStart,
@@ -51,8 +52,24 @@ struct ImpromptuSessionView: View {
             }
         }
         .onDisappear {
-            locationService.stopTracking()
             activityManager.end()
+        }
+        .sheet(isPresented: $showPlacePicker) {
+            if let loc = resolvedLocation {
+                PlacePickerView(location: loc) { name in
+                    showPlacePicker = false
+                    let place = Place(
+                        order: capturedPlaces.count + 1,
+                        placeName: name,
+                        latitude: loc.coordinate.latitude,
+                        longitude: loc.coordinate.longitude
+                    )
+                    pendingPlace = place
+                    showCamera = true
+                }
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.hidden)
+            }
         }
         .fullScreenCover(isPresented: $showCamera, onDismiss: handleCameraDismiss) {
             if let place = pendingPlace {
@@ -309,27 +326,15 @@ struct ImpromptuSessionView: View {
 
     // MARK: - Helpers
     private func captureCurrentLocation() {
-        guard let location = locationService.currentLocation else { return }
         isResolvingLocation = true
-
-        let geocoder = CLGeocoder()
-        geocoder.reverseGeocodeLocation(location) { placemarks, _ in
-            Task { @MainActor in
-                let placemark = placemarks?.first
-                let name = placemark?.name
-                    ?? placemark?.locality
-                    ?? placemark?.administrativeArea
-                    ?? "장소 \(self.capturedPlaces.count + 1)"
-
-                let place = Place(
-                    order: self.capturedPlaces.count + 1,
-                    placeName: name,
-                    latitude: location.coordinate.latitude,
-                    longitude: location.coordinate.longitude
-                )
-                self.pendingPlace = place
-                self.isResolvingLocation = false
-                self.showCamera = true
+        Task {
+            do {
+                let location = try await locationService.requestOneTimeLocation()
+                resolvedLocation = location
+                isResolvingLocation = false
+                showPlacePicker = true
+            } catch {
+                isResolvingLocation = false
             }
         }
     }

@@ -13,21 +13,24 @@ class LocationService: NSObject, ObservableObject {
     private var monitoredPlaces: [Place] = []
     private let arrivalRadius: CLLocationDistance = 50
 
+    private var oneTimeLocationContinuation: CheckedContinuation<CLLocation, Error>?
+
     override init() {
         super.init()
         manager.delegate = self
-        manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
-        manager.distanceFilter = 10
-        manager.allowsBackgroundLocationUpdates = true
-        manager.pausesLocationUpdatesAutomatically = false
+        manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
+        manager.distanceFilter = 50
+        manager.allowsBackgroundLocationUpdates = false
+        manager.pausesLocationUpdatesAutomatically = true
     }
 
     func requestPermission() {
-        manager.requestAlwaysAuthorization()
+        manager.requestWhenInUseAuthorization()
     }
 
     func startTracking(places: [Place]) {
         monitoredPlaces = places
+        manager.allowsBackgroundLocationUpdates = !places.isEmpty
         manager.startUpdatingLocation()
         setupGeofences(for: places)
         requestNotificationPermission()
@@ -35,10 +38,23 @@ class LocationService: NSObject, ObservableObject {
 
     func stopTracking() {
         manager.stopUpdatingLocation()
+        manager.allowsBackgroundLocationUpdates = false
         for region in manager.monitoredRegions {
             manager.stopMonitoring(for: region)
         }
         monitoredPlaces = []
+    }
+
+    // 촬영 버튼 눌렀을 때만 위치 한 번 요청
+    func requestOneTimeLocation() async throws -> CLLocation {
+        // 최근 10초 이내 위치가 있으면 바로 반환
+        if let loc = currentLocation, Date().timeIntervalSince(loc.timestamp) < 10 {
+            return loc
+        }
+        return try await withCheckedThrowingContinuation { continuation in
+            oneTimeLocationContinuation = continuation
+            manager.requestLocation()
+        }
     }
 
     // MARK: - Geofencing
@@ -92,6 +108,16 @@ extension LocationService: CLLocationManagerDelegate {
         guard let location = locations.last else { return }
         Task { @MainActor in
             self.currentLocation = location
+            // requestLocation 일회성 응답
+            self.oneTimeLocationContinuation?.resume(returning: location)
+            self.oneTimeLocationContinuation = nil
+        }
+    }
+
+    nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        Task { @MainActor in
+            self.oneTimeLocationContinuation?.resume(throwing: error)
+            self.oneTimeLocationContinuation = nil
         }
     }
 
