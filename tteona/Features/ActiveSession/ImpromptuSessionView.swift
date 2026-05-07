@@ -108,22 +108,8 @@ struct ImpromptuSessionView: View {
         .sheet(isPresented: $showSaveCourse) {
             saveCourseSheet
         }
-        .alert("오늘을 마칠까요?", isPresented: $showEndAlert) {
-            Button("Vlog 만들기") {
-                buildCourseAndEnd(saveToFirestore: false)
-                showVlog = true
-            }
-            Button("코스로 저장 후 Vlog 만들기") {
-                showSaveCourse = true
-            }
-            Button("그냥 종료", role: .destructive) {
-                postEndFeed()
-                activityManager.end()
-                dismiss()
-            }
-            Button("계속 기록", role: .cancel) {}
-        } message: {
-            Text("방문한 장소 \(capturedPlaces.count)곳으로 기록이 남아있어요.")
+        .sheet(isPresented: $showEndAlert) {
+            endSheet
         }
     }
 
@@ -257,7 +243,7 @@ struct ImpromptuSessionView: View {
 
                     if !capturedPlaces.isEmpty {
                         Button { showEndAlert = true } label: {
-                            Text("여행 종료")
+                            Text("오늘 종료")
                                 .font(.system(size: 16, weight: .semibold))
                                 .foregroundColor(.tteOrange)
                                 .frame(height: 54).frame(maxWidth: 110)
@@ -274,6 +260,129 @@ struct ImpromptuSessionView: View {
                     .shadow(color: .black.opacity(0.1), radius: 16, y: -4)
             )
         }
+    }
+
+    // MARK: - 오늘 종료 시트
+    private var endSheet: some View {
+        VStack(spacing: 0) {
+            // 핸들
+            RoundedRectangle(cornerRadius: 3)
+                .fill(Color.secondary.opacity(0.3))
+                .frame(width: 36, height: 5)
+                .padding(.top, 12)
+                .padding(.bottom, 20)
+
+            // 헤더
+            VStack(spacing: 6) {
+                Text("오늘을 마칠까요?")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundColor(.tteDarkGray)
+                Text("방문한 장소 \(capturedPlaces.count)곳이 기록됐어요")
+                    .font(.system(size: 14))
+                    .foregroundColor(.tteMediumGray)
+            }
+            .padding(.bottom, 28)
+
+            VStack(spacing: 12) {
+                // Vlog 만들기 — 메인 액션
+                Button {
+                    showEndAlert = false
+                    buildCourseAndEnd(saveToFirestore: false)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { showVlog = true }
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "film.fill")
+                            .font(.system(size: 16))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Vlog 만들기")
+                                .font(.system(size: 16, weight: .semibold))
+                            Text("영상을 이어 붙여 추억을 만들어요")
+                                .font(.system(size: 12))
+                                .opacity(0.8)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 13, weight: .medium))
+                            .opacity(0.7)
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 20)
+                    .frame(height: 64)
+                    .background(RoundedRectangle(cornerRadius: 16).fill(Color.tteOrange))
+                }
+
+                // 코스로 저장 후 Vlog
+                Button {
+                    showEndAlert = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { showSaveCourse = true }
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "mappin.and.ellipse")
+                            .font(.system(size: 16))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("코스로 저장하고 Vlog 만들기")
+                                .font(.system(size: 16, weight: .semibold))
+                            Text("이 경로를 나중에도 사용할 수 있어요")
+                                .font(.system(size: 12))
+                                .opacity(0.7)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 13, weight: .medium))
+                            .opacity(0.5)
+                    }
+                    .foregroundColor(.tteDarkGray)
+                    .padding(.horizontal, 20)
+                    .frame(height: 64)
+                    .background(RoundedRectangle(cornerRadius: 16)
+                        .fill(Color(UIColor.secondarySystemBackground)))
+                }
+
+                // 구분선
+                HStack {
+                    Rectangle().fill(Color.secondary.opacity(0.15)).frame(height: 1)
+                    Text("또는")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 10)
+                    Rectangle().fill(Color.secondary.opacity(0.15)).frame(height: 1)
+                }
+                .padding(.vertical, 2)
+
+                // 그냥 종료
+                Button {
+                    showEndAlert = false
+                    postEndFeed()
+                    activityManager.end()
+                    dismiss()
+                } label: {
+                    Text("기록만 하고 종료")
+                        .font(.system(size: 15))
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 48)
+                }
+
+                // 계속 기록
+                Button {
+                    showEndAlert = false
+                } label: {
+                    Text("계속 기록할게요")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundColor(.tteOrange)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 48)
+                        .background(RoundedRectangle(cornerRadius: 14)
+                            .stroke(Color.tteOrange.opacity(0.4), lineWidth: 1))
+                }
+            }
+            .padding(.horizontal, 20)
+
+            Spacer().frame(height: 36)
+        }
+        .presentationDetents([.height(420)])
+        .presentationDragIndicator(.hidden)
+        .presentationCornerRadius(28)
     }
 
     // MARK: - 코스 저장 시트

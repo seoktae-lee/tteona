@@ -224,9 +224,12 @@ class VlogService {
         bandLayer.backgroundColor = UIColor.black.withAlphaComponent(0.45).cgColor
         container.addSublayer(bandLayer)
 
-        // 장소명 텍스트
-        let placeFont: UIFont = UIFont(name: "AppleSDGothicNeo-Bold", size: 54)
-            ?? UIFont.boldSystemFont(ofSize: 54)
+        // SF Pro Rounded — 한글/숫자 모두 지원하는 둥근 시스템 폰트
+        let placeFont: UIFont = {
+            let base = UIFont.systemFont(ofSize: 54, weight: .bold)
+            let desc = base.fontDescriptor.withDesign(.rounded) ?? base.fontDescriptor
+            return UIFont(descriptor: desc, size: 54)
+        }()
 
         let placeLayer = CATextLayer()
         placeLayer.string = "📍 \(placeName)"
@@ -239,8 +242,11 @@ class VlogService {
         container.addSublayer(placeLayer)
 
         // 날짜/시간 텍스트
-        let dateFont: UIFont = UIFont(name: "AppleSDGothicNeo-Light", size: 34)
-            ?? UIFont.systemFont(ofSize: 34, weight: .light)
+        let dateFont: UIFont = {
+            let base = UIFont.systemFont(ofSize: 34, weight: .light)
+            let desc = base.fontDescriptor.withDesign(.rounded) ?? base.fontDescriptor
+            return UIFont(descriptor: desc, size: 34)
+        }()
 
         let dateLayer = CATextLayer()
         dateLayer.string = dateStr
