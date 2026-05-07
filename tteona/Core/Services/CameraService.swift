@@ -4,6 +4,7 @@ import Foundation
 class CameraService: NSObject {
     let captureSession = AVCaptureSession()
     private var videoDevice: AVCaptureDevice?
+    private(set) var currentCameraPosition: AVCaptureDevice.Position = .back
     private var videoDataOutput = AVCaptureVideoDataOutput()
     private var audioDataOutput = AVCaptureAudioDataOutput()
 
@@ -16,11 +17,8 @@ class CameraService: NSObject {
     private var isWritingSessionStarted = false
     private(set) var isRecording = false
 
-    private let maxDuration: TimeInterval = 10.0
-    private let minDuration: TimeInterval = 2.0
+    private let maxDuration: TimeInterval = 5.0
     private var recordingStartTime: CMTime = .zero
-    private var stopRequested = false
-    private var minDurationTimer: Timer?
 
     var onRecordingFinished: ((URL?) -> Void)?
 
@@ -71,6 +69,25 @@ class CameraService: NSObject {
 
     func stopSession() {
         captureSession.stopRunning()
+    }
+
+    // MARK: - 전면/후면 전환
+    func flipCamera() {
+        guard !isRecording else { return }
+        let newPosition: AVCaptureDevice.Position = currentCameraPosition == .back ? .front : .back
+        guard let newDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: newPosition),
+              let newInput = try? AVCaptureDeviceInput(device: newDevice) else { return }
+
+        captureSession.beginConfiguration()
+        captureSession.inputs.compactMap { $0 as? AVCaptureDeviceInput }
+            .filter { $0.device.hasMediaType(.video) }
+            .forEach { captureSession.removeInput($0) }
+        if captureSession.canAddInput(newInput) {
+            captureSession.addInput(newInput)
+            videoDevice = newDevice
+            currentCameraPosition = newPosition
+        }
+        captureSession.commitConfiguration()
     }
 
     // MARK: - Zoom
@@ -128,8 +145,7 @@ class CameraService: NSObject {
 
         guard let writer = try? AVAssetWriter(outputURL: url, fileType: .mp4) else { return }
 
-        // 센서는 항상 가로(1920×1080)로 데이터를 보냄
-        // transform으로 90° 회전을 파일에 기록 → 플레이어/VlogService가 세로로 인식
+        // 가로 촬영 고정 — 1920×1080 landscape, transform 없음
         let videoSettings: [String: Any] = [
             AVVideoCodecKey: AVVideoCodecType.h264,
             AVVideoWidthKey: 1920,
@@ -137,8 +153,7 @@ class CameraService: NSObject {
         ]
         let videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
         videoInput.expectsMediaDataInRealTime = true
-        // 세로 촬영: 90° 회전 (b=1, a=0, tx=0, ty=naturalSize.width=1080)
-        videoInput.transform = CGAffineTransform(a: 0, b: 1, c: -1, d: 0, tx: 0, ty: 1920)
+        // transform 없음: landscape 그대로 저장
 
         let audioSettings: [String: Any] = [
             AVFormatIDKey: kAudioFormatMPEG4AAC,
@@ -158,28 +173,13 @@ class CameraService: NSObject {
             self.audioWriterInput = audioInput
             self.outputURL = url
             self.isWritingSessionStarted = false
-            self.stopRequested = false
             self.isRecording = true
-        }
-
-        // 최소 2초 보호 타이머
-        DispatchQueue.main.async {
-            self.minDurationTimer?.invalidate()
-            self.minDurationTimer = Timer.scheduledTimer(withTimeInterval: self.minDuration, repeats: false) { [weak self] _ in
-                guard let self else { return }
-                self.minDurationTimer = nil
-                if self.stopRequested { self.finishRecording() }
-            }
         }
     }
 
     func stopRecording() {
         guard isRecording else { return }
-        if minDurationTimer != nil {
-            stopRequested = true
-        } else {
-            finishRecording()
-        }
+        finishRecording()
     }
 
     private func finishRecording() {
@@ -190,8 +190,6 @@ class CameraService: NSObject {
             self.audioWriterInput?.markAsFinished()
             writer.finishWriting {
                 DispatchQueue.main.async {
-                    self.minDurationTimer?.invalidate()
-                    self.minDurationTimer = nil
                     let url = self.outputURL
                     self.assetWriter = nil
                     self.videoWriterInput = nil

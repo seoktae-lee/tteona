@@ -28,6 +28,15 @@ class LocationService: NSObject, ObservableObject {
         manager.requestWhenInUseAuthorization()
     }
 
+    // 나의 오늘 모드: 연속 업데이트로 currentLocation 항상 최신 유지
+    func startContinuousUpdates() {
+        manager.startUpdatingLocation()
+    }
+
+    func stopContinuousUpdates() {
+        manager.stopUpdatingLocation()
+    }
+
     func startTracking(places: [Place]) {
         monitoredPlaces = places
         manager.allowsBackgroundLocationUpdates = !places.isEmpty
@@ -47,8 +56,8 @@ class LocationService: NSObject, ObservableObject {
 
     // 촬영 버튼 눌렀을 때만 위치 한 번 요청
     func requestOneTimeLocation() async throws -> CLLocation {
-        // 최근 10초 이내 위치가 있으면 바로 반환
-        if let loc = currentLocation, Date().timeIntervalSince(loc.timestamp) < 10 {
+        // 최근 60초 이내 위치가 있으면 즉시 반환 (연속 업데이트 중일 때 빠름)
+        if let loc = currentLocation, Date().timeIntervalSince(loc.timestamp) < 60 {
             return loc
         }
         return try await withCheckedThrowingContinuation { continuation in

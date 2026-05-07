@@ -1,55 +1,35 @@
 import AVFoundation
 import UIKit
 import Photos
-import MapKit
 
 class VlogService {
 
-    // 촬영 영상과 동일한 사이즈 (CameraService가 1920×1080으로 기록)
-    private let renderSize = CGSize(width: 1920, height: 1080)
+    // MARK: - Public
+    func generateVlog(course: Course, sessionId: String,
+                      onProgress: @escaping (Double) -> Void) async throws -> URL {
+        let places = course.places.sorted { $0.order < $1.order }
 
-    // MARK: - Public Entry Point
-    func generateVlog(
-        course: Course,
-        sessionId: String,
-        onProgress: @escaping (Double) -> Void
-    ) async throws -> URL {
-        let size = renderSize
-        let sortedPlaces = course.places.sorted(by: { $0.order < $1.order })
-
-        // 각 장소별로 (메모 클립?, 영상 클립) 수집
-        var allClipURLs: [URL] = []
-        var tempURLs: [URL] = []
-
-        for (i, place) in sortedPlaces.enumerated() {
-            let videoURL = localClipURL(place: place, sessionId: sessionId)
-            guard FileManager.default.fileExists(atPath: videoURL.path) else { continue }
-
-            // 메모가 있으면 텍스트 카드 클립 먼저 삽입 (1.5초)
-            if let memo = loadMemo(place: place, sessionId: sessionId) {
-                let memoImage = await renderMemoImage(placeName: place.placeName, memo: memo, size: size)
-                let memoClip = try await makeStillClip(image: memoImage, duration: 1.5, size: size)
-                allClipURLs.append(memoClip)
-                tempURLs.append(memoClip)
+        var segments: [(asset: AVURLAsset, placeName: String, date: Date)] = []
+        for place in places {
+            let url = clipURL(place: place, sessionId: sessionId)
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                print("[Vlog] skip \(place.placeName) — file not found")
+                continue
             }
-
-            allClipURLs.append(videoURL)
-            onProgress(0.1 + 0.8 * Double(i + 1) / Double(sortedPlaces.count))
+            segments.append((AVURLAsset(url: url), place.placeName, creationDate(of: url)))
+            print("[Vlog] found clip: \(url.lastPathComponent)")
         }
+        guard !segments.isEmpty else { throw VlogError.noClips }
 
-        guard !allClipURLs.isEmpty else { throw VlogError.noSegments }
+        await MainActor.run { onProgress(0.1) }
 
-        onProgress(0.92)
-        let output = try await mergeClips(allClipURLs, size: size)
-        for url in tempURLs { try? FileManager.default.removeItem(at: url) }
+        let outURL = try await buildComposition(segments: segments, onProgress: onProgress)
 
-        let finalSize = (try? FileManager.default.attributesOfItem(atPath: output.path)[.size] as? Int) ?? 0
-        print("[generateVlog] status=completed size=\(finalSize)")
-        onProgress(1.0)
-        return output
+        await MainActor.run { onProgress(1.0) }
+        print("[Vlog] done: \(outURL.lastPathComponent)")
+        return outURL
     }
 
-    // MARK: - Save / Cleanup
     func saveToPhotoLibrary(url: URL) async throws {
         try await PHPhotoLibrary.shared().performChanges {
             PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: url)
@@ -58,172 +38,271 @@ class VlogService {
 
     func deleteLocalClips(sessionId: String) {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        try? FileManager.default.removeItem(at: docs.appendingPathComponent("Tteona/Sessions/\(sessionId)"))
+        let dir = docs.appendingPathComponent("Tteona/Sessions/\(sessionId)")
+        try? FileManager.default.removeItem(at: dir)
     }
 
-    // MARK: - 메모 텍스트 카드 이미지 (UIGraphicsImageRenderer — 완전히 안전)
-    @MainActor
-    private func renderMemoImage(placeName: String, memo: String, size: CGSize) -> UIImage {
-        UIGraphicsImageRenderer(size: size).image { ctx in
-            let c = ctx.cgContext
+    // MARK: - Composition + CALayer 오버레이 + 페이드 전환
+    private func buildComposition(
+        segments: [(asset: AVURLAsset, placeName: String, date: Date)],
+        onProgress: @escaping (Double) -> Void
+    ) async throws -> URL {
 
-            // 배경: 따뜻한 크림색
-            UIColor(red: 0.12, green: 0.12, blue: 0.12, alpha: 1).setFill()
-            c.fill(CGRect(origin: .zero, size: size))
+        let fadeDuration = CMTime(seconds: 0.4, preferredTimescale: 600)
+        let comp = AVMutableComposition()
 
-            let cx = size.width / 2
-            let cy = size.height / 2
-            let para = NSMutableParagraphStyle()
-            para.alignment = .center
+        guard let compVideoTrack = comp.addMutableTrack(withMediaType: .video,
+                                                        preferredTrackID: kCMPersistentTrackID_Invalid),
+              let compAudioTrack = comp.addMutableTrack(withMediaType: .audio,
+                                                        preferredTrackID: kCMPersistentTrackID_Invalid)
+        else { throw VlogError.writeFailed }
 
-            // 장소명
-            let placeFont = UIFont(name: "Noteworthy-Bold", size: 52) ?? UIFont.systemFont(ofSize: 52, weight: .bold)
-            let placeAttrs: [NSAttributedString.Key: Any] = [
-                .font: placeFont,
-                .foregroundColor: UIColor(red: 1.0, green: 0.42, blue: 0.21, alpha: 1),
-                .paragraphStyle: para
-            ]
-            placeName.draw(in: CGRect(x: 60, y: cy - 200, width: size.width - 120, height: 80),
-                           withAttributes: placeAttrs)
-
-            // 구분선
-            UIColor.white.withAlphaComponent(0.2).setStroke()
-            let line = UIBezierPath(); line.lineWidth = 2
-            line.move(to: CGPoint(x: cx - 180, y: cy - 100))
-            line.addLine(to: CGPoint(x: cx + 180, y: cy - 100))
-            line.stroke()
-
-            // 메모 텍스트
-            let memoFont = UIFont(name: "MarkerFelt-Thin", size: 58) ?? UIFont.systemFont(ofSize: 58)
-            let memoAttrs: [NSAttributedString.Key: Any] = [
-                .font: memoFont,
-                .foregroundColor: UIColor.white,
-                .paragraphStyle: para
-            ]
-            memo.draw(in: CGRect(x: 60, y: cy - 60, width: size.width - 120, height: 240),
-                      withAttributes: memoAttrs)
+        // 각 세그먼트 정보 (타임라인 위치 기록)
+        struct SegInfo {
+            let placeName: String
+            let date: Date
+            let startTime: CMTime
+            let duration: CMTime
+            let size: CGSize
         }
-    }
-
-    // MARK: - 클립 이어붙이기 (videoComposition 없이 Passthrough — 가장 단순하고 확실)
-    private func mergeClips(_ urls: [URL], size: CGSize) async throws -> URL {
-        let composition = AVMutableComposition()
-        guard let vTrack = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid),
-              let aTrack = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) else {
-            throw VlogError.exportFailed
-        }
+        var segInfos: [SegInfo] = []
         var cursor = CMTime.zero
 
-        for url in urls {
-            let asset = AVURLAsset(url: url)
-            let duration = try await asset.load(.duration)
+        // 클립 순서대로 composition에 삽입
+        for (i, seg) in segments.enumerated() {
+            let duration = try await seg.asset.load(.duration)
             let range = CMTimeRange(start: .zero, duration: duration)
-            if let v = try? await asset.loadTracks(withMediaType: .video).first {
-                try? vTrack.insertTimeRange(range, of: v, at: cursor)
+
+            let videoTracks = try await seg.asset.loadTracks(withMediaType: .video)
+            guard let vTrack = videoTracks.first else {
+                print("[Vlog] skip \(seg.placeName) — no video track")
+                continue
             }
-            if let a = try? await asset.loadTracks(withMediaType: .audio).first {
-                try? aTrack.insertTimeRange(range, of: a, at: cursor)
+
+            let naturalSize = try await vTrack.load(.naturalSize)
+            let transform = try await vTrack.load(.preferredTransform)
+            let isPortrait = abs(transform.b) == 1 && abs(transform.c) == 1
+            let displaySize = isPortrait
+                ? CGSize(width: naturalSize.height, height: naturalSize.width)
+                : naturalSize
+
+            try compVideoTrack.insertTimeRange(range, of: vTrack, at: cursor)
+
+            let audioTracks = try await seg.asset.loadTracks(withMediaType: .audio)
+            if let aTrack = audioTracks.first {
+                try? compAudioTrack.insertTimeRange(range, of: aTrack, at: cursor)
             }
+
+            segInfos.append(SegInfo(
+                placeName: seg.placeName,
+                date: seg.date,
+                startTime: cursor,
+                duration: duration,
+                size: displaySize
+            ))
             cursor = CMTimeAdd(cursor, duration)
+
+            await MainActor.run { onProgress(0.1 + 0.4 * Double(i + 1) / Double(segments.count)) }
         }
 
-        let outputURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("tteona_vlog_\(UUID().uuidString).mp4")
-        guard let exporter = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetPassthrough) else {
-            throw VlogError.exportFailed
-        }
-        exporter.outputURL = outputURL
-        exporter.outputFileType = .mp4
-        await exporter.export()
+        guard !segInfos.isEmpty else { throw VlogError.writeFailed }
 
-        let fileSize = (try? FileManager.default.attributesOfItem(atPath: outputURL.path)[.size] as? Int) ?? 0
-        print("[mergeClips] status=\(exporter.status.rawValue) size=\(fileSize) error=\(String(describing: exporter.error))")
-        guard exporter.status == .completed else { throw exporter.error ?? VlogError.exportFailed }
-        return outputURL
+        // 출력 크기: 첫 클립 기준 (모두 1920×1080 landscape)
+        let outputSize = segInfos[0].size.width > 0 ? segInfos[0].size : CGSize(width: 1920, height: 1080)
+        let totalDuration = cursor
+
+        // MARK: VideoComposition — 페이드 인/아웃 + 텍스트 오버레이
+        let videoComp = AVMutableVideoComposition()
+        videoComp.renderSize = outputSize
+        videoComp.frameDuration = CMTime(value: 1, timescale: 30)
+
+        // 각 클립에 대한 instruction 생성
+        var instructions: [AVMutableVideoCompositionInstruction] = []
+
+        for (i, info) in segInfos.enumerated() {
+            let clipStart = info.startTime
+            let clipDuration = info.duration
+            let clipEnd = CMTimeAdd(clipStart, clipDuration)
+
+            let instruction = AVMutableVideoCompositionInstruction()
+            instruction.timeRange = CMTimeRange(start: clipStart, duration: clipDuration)
+
+            let layerInstr = AVMutableVideoCompositionLayerInstruction(assetTrack: compVideoTrack)
+
+            // 페이드 인: 클립 시작 ~ 시작+fadeDuration
+            let fadeInEnd = CMTimeAdd(clipStart, fadeDuration)
+            layerInstr.setOpacityRamp(fromStartOpacity: 0, toEndOpacity: 1,
+                                       timeRange: CMTimeRange(start: clipStart, end: fadeInEnd))
+
+            // 페이드 아웃: 클립 끝-fadeDuration ~ 클립 끝 (마지막 클립 제외)
+            if i < segInfos.count - 1 {
+                let fadeOutStart = CMTimeSubtract(clipEnd, fadeDuration)
+                layerInstr.setOpacityRamp(fromStartOpacity: 1, toEndOpacity: 0,
+                                           timeRange: CMTimeRange(start: fadeOutStart, end: clipEnd))
+            }
+
+            instruction.layerInstructions = [layerInstr]
+            instructions.append(instruction)
+        }
+        videoComp.instructions = instructions
+
+        // MARK: CALayer 오버레이 (텍스트)
+        let videoLayer = CALayer()
+        videoLayer.frame = CGRect(origin: .zero, size: outputSize)
+
+        let overlayLayer = CALayer()
+        overlayLayer.frame = CGRect(origin: .zero, size: outputSize)
+
+        for info in segInfos {
+            let startSec = CMTimeGetSeconds(info.startTime)
+            let durSec = CMTimeGetSeconds(info.duration)
+            let totalSec = CMTimeGetSeconds(totalDuration)
+
+            // 배경 밴드 레이어
+            let bandLayer = makeTextLayer(
+                placeName: info.placeName,
+                dateStr: Self.fmt(info.date),
+                size: outputSize,
+                startSec: startSec,
+                clipDuration: durSec,
+                totalDuration: totalSec
+            )
+            overlayLayer.addSublayer(bandLayer)
+        }
+
+        let parentLayer = CALayer()
+        parentLayer.frame = CGRect(origin: .zero, size: outputSize)
+        parentLayer.addSublayer(videoLayer)
+        parentLayer.addSublayer(overlayLayer)
+
+        videoComp.animationTool = AVVideoCompositionCoreAnimationTool(
+            postProcessingAsVideoLayer: videoLayer,
+            in: parentLayer
+        )
+
+        await MainActor.run { onProgress(0.6) }
+
+        // MARK: Export
+        let outURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("vlog_\(UUID().uuidString).mp4")
+        try? FileManager.default.removeItem(at: outURL)
+
+        guard let exp = AVAssetExportSession(asset: comp, presetName: AVAssetExportPresetHighestQuality) else {
+            throw VlogError.writeFailed
+        }
+        exp.outputURL = outURL
+        exp.outputFileType = .mp4
+        exp.videoComposition = videoComp
+
+        await MainActor.run { onProgress(0.65) }
+        await exp.export()
+
+        print("[Vlog] export status=\(exp.status.rawValue) error=\(exp.error?.localizedDescription ?? "none")")
+        guard exp.status == .completed else { throw exp.error ?? VlogError.writeFailed }
+        return outURL
     }
 
-    // MARK: - 정지 이미지 → 영상 클립
-    private func makeStillClip(image: UIImage, duration: Double, size: CGSize) async throws -> URL {
-        guard let cgImage = image.cgImage else { throw VlogError.imageConversionFailed }
-        let outputURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString + "_still.mp4")
-        let writer = try AVAssetWriter(url: outputURL, fileType: .mp4)
-        let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
-            AVVideoCodecKey: AVVideoCodecType.h264,
-            AVVideoWidthKey: Int(size.width),
-            AVVideoHeightKey: Int(size.height),
-        ])
-        input.expectsMediaDataInRealTime = false
-        let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input,
-            sourcePixelBufferAttributes: [
-                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
-                kCVPixelBufferWidthKey as String: Int(size.width),
-                kCVPixelBufferHeightKey as String: Int(size.height),
-            ])
-        writer.add(input)
-        writer.startWriting()
-        writer.startSession(atSourceTime: .zero)
-        let fps: Int32 = 30
-        let lastFrame = max(1, Int32(duration * Double(fps)) - 1)
-        for frameIdx in [Int32(0), lastFrame] {
-            while !input.isReadyForMoreMediaData { try await Task.sleep(nanoseconds: 5_000_000) }
-            if let pb = pixelBuffer(from: cgImage, size: size) {
-                adaptor.append(pb, withPresentationTime: CMTime(value: CMTimeValue(frameIdx), timescale: fps))
-            }
-        }
-        input.markAsFinished()
-        await writer.finishWriting()
-        return outputURL
+    // MARK: - CALayer 텍스트 오버레이 생성
+    private func makeTextLayer(
+        placeName: String,
+        dateStr: String,
+        size: CGSize,
+        startSec: Double,
+        clipDuration: Double,
+        totalDuration: Double
+    ) -> CALayer {
+        let container = CALayer()
+        container.frame = CGRect(origin: .zero, size: size)
+
+        let W = size.width
+        let H = size.height
+        let cY = H / 2
+
+        // 배경 밴드
+        let bandLayer = CALayer()
+        bandLayer.frame = CGRect(x: 0, y: cY - 80, width: W, height: 160)
+        bandLayer.backgroundColor = UIColor.black.withAlphaComponent(0.45).cgColor
+        container.addSublayer(bandLayer)
+
+        // 장소명 텍스트
+        let placeFont: UIFont = UIFont(name: "AppleSDGothicNeo-Bold", size: 54)
+            ?? UIFont.boldSystemFont(ofSize: 54)
+
+        let placeLayer = CATextLayer()
+        placeLayer.string = "📍 \(placeName)"
+        placeLayer.font = placeFont
+        placeLayer.fontSize = 54
+        placeLayer.foregroundColor = UIColor(red: 1, green: 0.42, blue: 0.21, alpha: 1).cgColor
+        placeLayer.alignmentMode = .center
+        placeLayer.contentsScale = UIScreen.main.scale
+        placeLayer.frame = CGRect(x: 60, y: cY - 72, width: W - 120, height: 70)
+        container.addSublayer(placeLayer)
+
+        // 날짜/시간 텍스트
+        let dateFont: UIFont = UIFont(name: "AppleSDGothicNeo-Light", size: 34)
+            ?? UIFont.systemFont(ofSize: 34, weight: .light)
+
+        let dateLayer = CATextLayer()
+        dateLayer.string = dateStr
+        dateLayer.font = dateFont
+        dateLayer.fontSize = 34
+        dateLayer.foregroundColor = UIColor.white.cgColor
+        dateLayer.alignmentMode = .center
+        dateLayer.contentsScale = UIScreen.main.scale
+        dateLayer.frame = CGRect(x: 60, y: cY + 10, width: W - 120, height: 50)
+        container.addSublayer(dateLayer)
+
+        // CoreAnimation 타임라인 기준 애니메이션 (beginTime = composition 시간)
+        // 텍스트는 클립 시작 후 2.5초만 표시, fade in 0.4s / fade out 0.4s
+        let showDuration = min(2.5, clipDuration)
+        let fadeIn = 0.4
+        let fadeOut = 0.4
+
+        let opacityAnim = CAKeyframeAnimation(keyPath: "opacity")
+        opacityAnim.keyTimes = [
+            0,
+            NSNumber(value: fadeIn / showDuration),
+            NSNumber(value: max(0, (showDuration - fadeOut) / showDuration)),
+            1,
+            1  // 이후 숨김
+        ]
+        opacityAnim.values = [0, 1, 1, 0, 0]
+        opacityAnim.duration = clipDuration
+        opacityAnim.beginTime = startSec + 1e-9  // composition 절대 시간
+        opacityAnim.isRemovedOnCompletion = false
+        opacityAnim.fillMode = .both
+
+        container.opacity = 0
+        container.add(opacityAnim, forKey: "textOverlay")
+
+        return container
     }
 
     // MARK: - Helpers
-    private func loadMemo(place: Place, sessionId: String) -> String? {
-        let url = memoFileURL(place: place, sessionId: sessionId)
-        return try? String(contentsOf: url, encoding: .utf8)
+    private static func fmt(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy.MM.dd  HH:mm"
+        return f.string(from: date)
     }
 
-    private func localClipURL(place: Place, sessionId: String) -> URL {
+    private func creationDate(of url: URL) -> Date {
+        (try? FileManager.default.attributesOfItem(atPath: url.path)[.creationDate] as? Date) ?? Date()
+    }
+
+    private func clipURL(place: Place, sessionId: String) -> URL {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        return docs.appendingPathComponent(
-            "Tteona/Sessions/\(sessionId)/\(place.order)_\(place.placeName.replacingOccurrences(of: " ", with: "_")).mp4")
-    }
-
-    private func memoFileURL(place: Place, sessionId: String) -> URL {
-        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        return docs.appendingPathComponent(
-            "Tteona/Sessions/\(sessionId)/\(place.order)_\(place.placeName.replacingOccurrences(of: " ", with: "_"))_memo.txt")
-    }
-
-    private func pixelBuffer(from cgImage: CGImage, size: CGSize) -> CVPixelBuffer? {
-        var buffer: CVPixelBuffer?
-        CVPixelBufferCreate(kCFAllocatorDefault, Int(size.width), Int(size.height),
-            kCVPixelFormatType_32BGRA,
-            [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
-             kCVPixelBufferWidthKey as String: Int(size.width),
-             kCVPixelBufferHeightKey as String: Int(size.height)] as CFDictionary, &buffer)
-        guard let pb = buffer else { return nil }
-        CVPixelBufferLockBaseAddress(pb, [])
-        let ctx = CGContext(data: CVPixelBufferGetBaseAddress(pb),
-            width: Int(size.width), height: Int(size.height),
-            bitsPerComponent: 8, bytesPerRow: CVPixelBufferGetBytesPerRow(pb),
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGBitmapInfo.byteOrder32Little.rawValue | CGImageAlphaInfo.premultipliedFirst.rawValue)
-        ctx?.draw(cgImage, in: CGRect(origin: .zero, size: size))
-        CVPixelBufferUnlockBaseAddress(pb, [])
-        return pb
+        let name = "\(place.order)_\(place.placeName.replacingOccurrences(of: " ", with: "_")).mp4"
+        return docs.appendingPathComponent("Tteona/Sessions/\(sessionId)/\(name)")
     }
 }
 
 enum VlogError: LocalizedError {
-    case noSegments
-    case imageConversionFailed
-    case exportFailed
-
+    case noClips, noVideoTrack, writeFailed
     var errorDescription: String? {
         switch self {
-        case .noSegments: return "생성할 영상 세그먼트가 없습니다."
-        case .imageConversionFailed: return "이미지 변환에 실패했습니다."
-        case .exportFailed: return "영상 내보내기에 실패했습니다."
+        case .noClips: return "촬영된 영상이 없습니다."
+        case .noVideoTrack: return "영상 트랙을 읽을 수 없습니다."
+        case .writeFailed: return "영상 생성에 실패했습니다."
         }
     }
 }

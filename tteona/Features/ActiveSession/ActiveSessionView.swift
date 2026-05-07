@@ -93,7 +93,9 @@ struct ActiveSessionView: View {
         }
         .fullScreenCover(isPresented: $showCamera, onDismiss: handleCameraDismiss) {
             if let place = currentPlace {
-                CameraView(place: place, sessionId: course.courseId)
+                CameraView(place: place, sessionId: course.courseId) {
+                    // 코스 기반: dismiss 시 handleCameraDismiss에서 처리
+                }
             }
         }
         .fullScreenCover(isPresented: $showVlog) {
