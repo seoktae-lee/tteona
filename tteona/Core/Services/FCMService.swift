@@ -4,7 +4,7 @@ import FirebaseMessaging
 import UIKit
 
 @MainActor
-class FCMService: NSObject, ObservableObject {
+class FCMService: NSObject {
     static let shared = FCMService()
 
     private let db = Firestore.firestore()
@@ -26,7 +26,6 @@ class FCMService: NSObject, ObservableObject {
     }
 
     // MARK: - 그룹 멤버에게 알림 요청 작성
-    // Cloud Function이 이 문서를 감지해서 FCM을 전송함
     func requestGroupNotification(
         type: GroupNotificationType,
         senderUserId: String,
@@ -47,6 +46,29 @@ class FCMService: NSObject, ObservableObject {
         db.collection("fcmRequests").document(UUID().uuidString).setData(data)
         print("[FCM] notification request written: \(type.rawValue)")
     }
+
+    // MARK: - 댓글 알림 (피드 작성자에게만)
+    func requestCommentNotification(
+        senderUserId: String,
+        senderNickname: String,
+        feedAuthorUserId: String,
+        roomId: String,
+        commentText: String
+    ) {
+        guard senderUserId != feedAuthorUserId else { return }
+        let data: [String: Any] = [
+            "type": GroupNotificationType.feedComment.rawValue,
+            "senderUserId": senderUserId,
+            "senderNickname": senderNickname,
+            "targetUserId": feedAuthorUserId,
+            "roomId": roomId,
+            "commentText": commentText,
+            "createdAt": FieldValue.serverTimestamp(),
+            "processed": false
+        ]
+        db.collection("fcmRequests").document(UUID().uuidString).setData(data)
+        print("[FCM] comment notification request written")
+    }
 }
 
 // MARK: - Messaging Delegate
@@ -66,4 +88,5 @@ enum GroupNotificationType: String {
     case freeTripStart = "free_trip_start"       // 나의 오늘 시작
     case freeTripEnd = "free_trip_end"           // 나의 오늘 종료
     case courseTripStart = "course_trip_start"   // 코스 여행 시작
+    case feedComment = "feed_comment"            // 피드 댓글
 }

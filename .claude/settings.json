@@ -4,7 +4,16 @@
       "Bash(md5 \"/Users/leeseoktae/Downloads/IMG_8529.PNG\")",
       "Bash(md5 \"/tmp/tteona-web/og-image.png\")",
       "Bash(python3 -c \"from PIL import Image; print\\('ok'\\)\")",
-      "Bash(pip3 install *)"
+      "Bash(pip3 install *)",
+      "Bash(firebase --version)",
+      "Bash(npm --version)",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(firebase deploy *)",
+      "Bash(gcloud --version)",
+      "Bash(firebase login *)",
+      "Bash(firebase projects:list)",
+      "Bash(firebase functions:artifacts:setpolicy)"
     ],
     "additionalDirectories": [
       "/Users/leeseoktae/Downloads"

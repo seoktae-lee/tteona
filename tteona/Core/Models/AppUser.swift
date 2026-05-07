@@ -1,7 +1,7 @@
 import Foundation
 import FirebaseFirestore
 
-struct AppUser: Codable {
+struct AppUser: Codable, Equatable {
     var uid: String
     var email: String
     var nickname: String

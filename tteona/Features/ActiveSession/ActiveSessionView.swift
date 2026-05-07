@@ -45,13 +45,22 @@ struct ActiveSessionView: View {
             locationService.requestPermission()
             locationService.startTracking(places: course.places)
             fitMap()
-            if let rid = roomId,
-               let uid = authService.currentUser?.uid {
-                roomService.startListeningLocations(roomId: rid, myUserId: uid)
+            if let uid = authService.currentUser?.uid {
                 let nickname = userService.currentUser?.nickname ?? "멤버"
-                roomService.postFeed(roomId: rid, type: .tripStart, userId: uid,
-                                     nickname: nickname, courseId: course.courseId,
-                                     courseName: course.courseName)
+                let roomIds = roomService.myRooms.map(\.roomId)
+                FCMService.shared.requestGroupNotification(
+                    type: .courseTripStart,
+                    senderUserId: uid,
+                    senderNickname: nickname,
+                    roomIds: roomIds,
+                    courseName: course.courseName
+                )
+                if let rid = roomId {
+                    roomService.startListeningLocations(roomId: rid, myUserId: uid)
+                    roomService.postFeed(roomId: rid, type: .tripStart, userId: uid,
+                                         nickname: nickname, courseId: course.courseId,
+                                         courseName: course.courseName)
+                }
             }
         }
         .onDisappear {

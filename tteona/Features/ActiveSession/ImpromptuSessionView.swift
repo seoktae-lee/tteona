@@ -524,15 +524,31 @@ struct ImpromptuSessionView: View {
     }
 
     private func postEndFeed(placesCount: Int? = nil, courseName: String? = nil) {
+        let count = placesCount ?? capturedPlaces.count
+        let roomIds = roomService.myRooms.map(\.roomId)
+        FCMService.shared.requestGroupNotification(
+            type: .freeTripEnd,
+            senderUserId: uid,
+            senderNickname: nickname,
+            roomIds: roomIds,
+            courseName: "\(count)곳 방문"
+        )
         guard let rid = roomId else { return }
         roomService.postFeed(roomId: rid, type: .freeTripEnd,
                              userId: uid, nickname: nickname,
                              courseId: "free",
-                             courseName: "\(placesCount ?? capturedPlaces.count)곳 방문")
+                             courseName: "\(count)곳 방문")
     }
 
     private func startNewSession() {
         capturedPlaces = []
+        let roomIds = roomService.myRooms.map(\.roomId)
+        FCMService.shared.requestGroupNotification(
+            type: .freeTripStart,
+            senderUserId: uid,
+            senderNickname: nickname,
+            roomIds: roomIds
+        )
         if let rid = roomId {
             roomService.postFeed(roomId: rid, type: .freeTripStart,
                                  userId: uid, nickname: nickname,

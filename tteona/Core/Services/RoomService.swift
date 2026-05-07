@@ -264,6 +264,19 @@ class RoomService: ObservableObject {
         try await db.collection("rooms").document(roomId)
             .collection("feed").document(feedId)
             .updateData(["commentCount": FieldValue.increment(Int64(1))])
+
+        // 피드 작성자에게 댓글 알림
+        let feedDoc = try? await db.collection("rooms").document(roomId)
+            .collection("feed").document(feedId).getDocument()
+        if let feedAuthorId = feedDoc?.data()?["userId"] as? String {
+            await FCMService.shared.requestCommentNotification(
+                senderUserId: userId,
+                senderNickname: nickname,
+                feedAuthorUserId: feedAuthorId,
+                roomId: roomId,
+                commentText: text
+            )
+        }
     }
 
     // MARK: - 댓글 목록 조회
