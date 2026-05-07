@@ -13,7 +13,9 @@
       "Bash(gcloud --version)",
       "Bash(firebase login *)",
       "Bash(firebase projects:list)",
-      "Bash(firebase functions:artifacts:setpolicy)"
+      "Bash(firebase functions:artifacts:setpolicy)",
+      "Bash(firebase functions:log --only createKakaoCustomToken)",
+      "Bash(firebase functions:log)"
     ],
     "additionalDirectories": [
       "/Users/leeseoktae/Downloads"

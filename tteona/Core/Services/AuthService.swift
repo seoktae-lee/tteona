@@ -163,7 +163,7 @@ class AuthService: NSObject, ObservableObject {
             }
 
             // Cloud Function으로 Custom Token 발급
-            let functions = Functions.functions()
+            let functions = Functions.functions(region: "us-central1")
             let result = try await functions.httpsCallable("createKakaoCustomToken")
                 .call(["kakaoAccessToken": oauthToken.accessToken])
 
