@@ -176,7 +176,8 @@ class AuthService: NSObject, ObservableObject {
             // Custom Token으로 Firebase 로그인
             try await Auth.auth().signIn(withCustomToken: customToken)
         } catch {
-            errorMessage = "카카오 로그인에 실패했습니다."
+            print("[Kakao] error: \(error)")
+            errorMessage = "카카오 로그인에 실패했습니다. (\(error.localizedDescription))"
         }
     }
 
