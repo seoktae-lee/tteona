@@ -1,10 +1,3 @@
-//
-//  tteonaApp.swift
-//  tteona
-//
-//  Created by 이석태 on 5/5/26.
-//
-
 import SwiftUI
 import FirebaseCore
 import FirebaseMessaging
