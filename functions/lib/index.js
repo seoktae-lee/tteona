@@ -33,9 +33,10 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.sendGroupNotification = void 0;
+exports.sendGroupNotification = exports.createKakaoCustomToken = void 0;
 const admin = __importStar(require("firebase-admin"));
 const firestore_1 = require("firebase-functions/v2/firestore");
+const https_1 = require("firebase-functions/v2/https");
 admin.initializeApp();
 const db = admin.firestore();
 const messaging = admin.messaging();
@@ -73,6 +74,29 @@ function buildMessage(type, nickname, courseName, commentText) {
             };
     }
 }
+// MARK: - 카카오 Custom Token 발급
+exports.createKakaoCustomToken = (0, https_1.onCall)(async (request) => {
+    const kakaoAccessToken = request.data?.kakaoAccessToken;
+    if (!kakaoAccessToken) {
+        throw new https_1.HttpsError("invalid-argument", "kakaoAccessToken is required");
+    }
+    // 카카오 사용자 정보 조회
+    const response = await fetch("https://kapi.kakao.com/v2/user/me", {
+        headers: { Authorization: `Bearer ${kakaoAccessToken}` },
+    });
+    if (!response.ok) {
+        throw new https_1.HttpsError("unauthenticated", "Invalid Kakao access token");
+    }
+    const kakaoUser = await response.json();
+    const kakaoId = kakaoUser.id;
+    const uid = `kakao_${kakaoId}`;
+    // Firebase Custom Token 발급
+    const customToken = await admin.auth().createCustomToken(uid, {
+        provider: "kakao",
+        kakaoId: String(kakaoId),
+    });
+    return { customToken };
+});
 // fcmRequests 컬렉션 트리거
 exports.sendGroupNotification = (0, firestore_1.onDocumentCreated)("fcmRequests/{requestId}", async (event) => {
     const requestId = event.params.requestId;

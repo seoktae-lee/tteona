@@ -18,6 +18,7 @@
 		548BBF232FAA178D00334BA6 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 548BBF222FAA178D00334BA6 /* SwiftUI.framework */; };
 		548BBF322FAA178E00334BA6 /* tteona_WidgetExtensionExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 548BBF1F2FAA178D00334BA6 /* tteona_WidgetExtensionExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		549C59642FACAB0800074627 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 549C59632FACAB0800074627 /* FirebaseMessaging */; };
+		549C59682FACB93600074627 /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = 549C59672FACB93600074627 /* FirebaseFunctions */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -103,6 +104,7 @@
 				549C59642FACAB0800074627 /* FirebaseMessaging in Frameworks */,
 				548BBDC22FA97FFD00334BA6 /* FirebaseAuth in Frameworks */,
 				548BBDC42FA97FFD00334BA6 /* FirebaseFirestore in Frameworks */,
+				549C59682FACB93600074627 /* FirebaseFunctions in Frameworks */,
 				548BBE5D2FA9958B00334BA6 /* GoogleSignIn in Frameworks */,
 				548BBEE52FA9B48500334BA6 /* KakaoSDKUser in Frameworks */,
 				548BBE5F2FA9958B00334BA6 /* GoogleSignInSwift in Frameworks */,
@@ -181,6 +183,7 @@
 				548BBEE22FA9B48500334BA6 /* KakaoSDKCommon */,
 				548BBEE42FA9B48500334BA6 /* KakaoSDKUser */,
 				549C59632FACAB0800074627 /* FirebaseMessaging */,
+				549C59672FACB93600074627 /* FirebaseFunctions */,
 			);
 			productName = tteona;
 			productReference = 548BBD542FA9720A00334BA6 /* tteona.app */;
@@ -628,6 +631,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 548BBDC02FA97FFD00334BA6 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseMessaging;
+		};
+		549C59672FACB93600074627 /* FirebaseFunctions */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 548BBDC02FA97FFD00334BA6 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFunctions;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

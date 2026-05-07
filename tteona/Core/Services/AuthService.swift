@@ -3,6 +3,7 @@ import Combine
 import FirebaseAuth
 import FirebaseCore
 import FirebaseFirestore
+import FirebaseFunctions
 import AuthenticationServices
 import CryptoKit
 import GoogleSignIn
@@ -161,27 +162,19 @@ class AuthService: NSObject, ObservableObject {
                 }
             }
 
-            // 카카오 사용자 정보 가져오기
-            let kakaoUser: KakaoSDKUser.User = try await withCheckedThrowingContinuation { cont in
-                UserApi.shared.me { user, error in
-                    if let error { cont.resume(throwing: error) }
-                    else if let user { cont.resume(returning: user) }
-                }
+            // Cloud Function으로 Custom Token 발급
+            let functions = Functions.functions()
+            let result = try await functions.httpsCallable("createKakaoCustomToken")
+                .call(["kakaoAccessToken": oauthToken.accessToken])
+
+            guard let data = result.data as? [String: Any],
+                  let customToken = data["customToken"] as? String else {
+                errorMessage = "카카오 로그인에 실패했습니다."
+                return
             }
 
-            // Firebase 익명 로그인 후 카카오 UID 기반 커스텀 처리
-            // (Firebase Custom Token 서버 없이 사용할 경우 익명 로그인 활용)
-            let kakaoId = kakaoUser.id ?? 0
-            let email = kakaoUser.kakaoAccount?.email ?? "\(kakaoId)@kakao.tteona"
-            let _ = oauthToken
-
-            // 이미 Firebase 계정이 있으면 로그인, 없으면 생성
-            do {
-                try await Auth.auth().signIn(withEmail: email, password: "kakao_\(kakaoId)_tteona")
-            } catch {
-                // 계정 없으면 자동 생성
-                try await Auth.auth().createUser(withEmail: email, password: "kakao_\(kakaoId)_tteona")
-            }
+            // Custom Token으로 Firebase 로그인
+            try await Auth.auth().signIn(withCustomToken: customToken)
         } catch {
             errorMessage = "카카오 로그인에 실패했습니다."
         }
