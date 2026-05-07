@@ -87,8 +87,8 @@ final class CameraViewController: UIViewController {
         super.viewDidAppear(animated)
         layoutBottomUI()
         layoutLandscapeOverlay()
-        // 1.8초 후 fade out
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) { [weak self] in
+        // 1.2초 후 fade out
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
             UIView.animate(withDuration: 0.5) {
                 self?.landscapeOverlay?.alpha = 0
             } completion: { _ in

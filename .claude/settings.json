@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "additionalDirectories": [
+      "/Users/leeseoktae/Downloads"
+    ],
+    "allow": [
+      "Bash(md5 \"/Users/leeseoktae/Downloads/IMG_8529.PNG\")",
+      "Bash(md5 \"/tmp/tteona-web/og-image.png\")"
+    ]
+  }
+}

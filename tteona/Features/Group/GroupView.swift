@@ -27,23 +27,55 @@ struct RoomCard: View {
             }
 
             HStack(spacing: 6) {
-                Image(systemName: "key.horizontal")
-                    .font(.system(size: 12))
-                    .foregroundColor(.tteOrange)
-                Text(room.inviteCode)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.tteOrange)
-                    .kerning(2)
-                Text("초대 코드")
-                    .font(.system(size: 12))
-                    .foregroundColor(.tteMediumGray)
+                HStack(spacing: 6) {
+                    Image(systemName: "key.horizontal")
+                        .font(.system(size: 12))
+                        .foregroundColor(.tteOrange)
+                    Text(room.inviteCode)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.tteOrange)
+                        .kerning(2)
+                    Text("초대 코드")
+                        .font(.system(size: 12))
+                        .foregroundColor(.tteMediumGray)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Color.tteOrange.opacity(0.08)))
+
+                Spacer()
+
+                Button {
+                    shareRoom()
+                } label: {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.tteOrange)
+                        .frame(width: 32, height: 32)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(Color.tteOrange.opacity(0.1)))
+                }
+                .buttonStyle(.plain)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(RoundedRectangle(cornerRadius: 8).fill(Color.tteOrange.opacity(0.08)))
         }
         .padding(16)
         .background(RoundedRectangle(cornerRadius: 16).fill(Color(UIColor.secondarySystemBackground)))
+    }
+
+    private func shareRoom() {
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "tteona.kr"
+        components.path = "/room"
+        components.queryItems = [
+            URLQueryItem(name: "code", value: room.inviteCode),
+            URLQueryItem(name: "name", value: room.name)
+        ]
+        guard let url = components.url else { return }
+        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let rootVC = windowScene.windows.first?.rootViewController else { return }
+        var topVC = rootVC
+        while let presented = topVC.presentedViewController { topVC = presented }
+        topVC.present(UIActivityViewController(activityItems: [url], applicationActivities: nil), animated: true)
     }
 }
 
@@ -131,6 +163,7 @@ struct CreateRoomView: View {
 
 // MARK: - Join Room View
 struct JoinRoomView: View {
+    var initialCode: String = ""
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var userService: UserService
     @EnvironmentObject private var roomService: RoomService
@@ -200,6 +233,11 @@ struct JoinRoomView: View {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("취소") { dismiss() }
                         .foregroundColor(.tteDarkGray)
+                }
+            }
+            .onAppear {
+                if !initialCode.isEmpty {
+                    inviteCode = String(initialCode.uppercased().prefix(6))
                 }
             }
         }

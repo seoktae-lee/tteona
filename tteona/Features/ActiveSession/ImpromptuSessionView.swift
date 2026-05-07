@@ -28,6 +28,10 @@ struct ImpromptuSessionView: View {
     @State private var courseName = ""
     @State private var selectedTag: CourseTag = .friends
     @State private var generatedCourse: Course? = nil
+    @State private var showResumeSheet = false
+    @State private var savedSession: SavedImpromptuSession? = nil
+
+    private let sessionStore = ImpromptuSessionStore.shared
 
     private var uid: String { authService.currentUser?.uid ?? "" }
     private var sessionId: String { "free_\(uid)" }
@@ -47,16 +51,22 @@ struct ImpromptuSessionView: View {
             locationService.requestPermission()
             locationService.startContinuousUpdates()
             activityManager.start()
-            if let rid = roomId {
-                roomService.postFeed(roomId: rid, type: .freeTripStart,
-                                     userId: uid, nickname: nickname,
-                                     courseId: "free", courseName: "나의 오늘")
+            // 이전 세션 복원 여부 확인
+            if let saved = sessionStore.loadTodaySession(), !saved.places.isEmpty {
+                savedSession = saved
+                showResumeSheet = true
+            } else {
+                sessionStore.clear()
+                startNewSession()
             }
         }
         .onDisappear {
             locationService.stopContinuousUpdates()
             activityManager.end()
             locationTask?.cancel()
+        }
+        .sheet(isPresented: $showResumeSheet) {
+            resumeSheet
         }
         // 1단계: 장소 선택
         .sheet(isPresented: $showPlacePicker, onDismiss: {
@@ -67,10 +77,8 @@ struct ImpromptuSessionView: View {
         }) {
             if let loc = resolvedLocation {
                 PlacePickerView(location: loc) { name in
-                    let existingOrder = capturedPlaces.first(where: { $0.placeName == name })?.order
-                    let order = existingOrder ?? (capturedPlaces.count + 1)
                     pendingPlace = Place(
-                        order: order,
+                        order: capturedPlaces.count + 1,
                         placeName: name,
                         latitude: loc.coordinate.latitude,
                         longitude: loc.coordinate.longitude
@@ -159,11 +167,10 @@ struct ImpromptuSessionView: View {
         VStack {
             HStack {
                 Button {
-                    if capturedPlaces.isEmpty { dismiss() }
-                    else { showEndAlert = true }
+                    dismiss()
                 } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 16, weight: .medium))
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.white)
                         .frame(width: 40, height: 40)
                         .background(Circle().fill(Color.black.opacity(0.5)))
@@ -349,20 +356,6 @@ struct ImpromptuSessionView: View {
                 }
                 .padding(.vertical, 2)
 
-                // 그냥 종료
-                Button {
-                    showEndAlert = false
-                    postEndFeed()
-                    activityManager.end()
-                    dismiss()
-                } label: {
-                    Text("기록만 하고 종료")
-                        .font(.system(size: 15))
-                        .foregroundColor(.secondary)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 48)
-                }
-
                 // 계속 기록
                 Button {
                     showEndAlert = false
@@ -380,7 +373,7 @@ struct ImpromptuSessionView: View {
 
             Spacer().frame(height: 36)
         }
-        .presentationDetents([.height(420)])
+        .presentationDetents([.height(400)])
         .presentationDragIndicator(.hidden)
         .presentationCornerRadius(28)
     }
@@ -460,12 +453,9 @@ struct ImpromptuSessionView: View {
 
     private func handleCameraSaved() {
         guard let place = pendingPlace else { return }
-        if let idx = capturedPlaces.firstIndex(where: { $0.placeName == place.placeName }) {
-            capturedPlaces[idx] = place
-        } else {
-            capturedPlaces.append(place)
-            reorderPlaces()
-        }
+        capturedPlaces.append(place)
+        reorderPlaces()
+        sessionStore.save(places: capturedPlaces)
         activityManager.update(placesCount: capturedPlaces.count, lastPlaceName: place.placeName)
         if let rid = roomId {
             roomService.postFeed(roomId: rid, type: .freeCapture,
@@ -486,6 +476,11 @@ struct ImpromptuSessionView: View {
         deleteClip(for: place)
         capturedPlaces.removeAll { $0.order == place.order }
         reorderPlaces()
+        if capturedPlaces.isEmpty {
+            sessionStore.clear()
+        } else {
+            sessionStore.save(places: capturedPlaces)
+        }
         activityManager.update(
             placesCount: capturedPlaces.count,
             lastPlaceName: capturedPlaces.last?.placeName ?? "기록 시작"
@@ -523,6 +518,7 @@ struct ImpromptuSessionView: View {
             likeCount: 0, createdAt: Date(), places: capturedPlaces
         )
         generatedCourse = course
+        sessionStore.clear()
         if saveToFirestore { Task { try? await courseService.saveCourse(course) } }
         postEndFeed(placesCount: capturedPlaces.count, courseName: name)
     }
@@ -533,6 +529,112 @@ struct ImpromptuSessionView: View {
                              userId: uid, nickname: nickname,
                              courseId: "free",
                              courseName: "\(placesCount ?? capturedPlaces.count)곳 방문")
+    }
+
+    private func startNewSession() {
+        capturedPlaces = []
+        if let rid = roomId {
+            roomService.postFeed(roomId: rid, type: .freeTripStart,
+                                 userId: uid, nickname: nickname,
+                                 courseId: "free", courseName: "나의 오늘")
+        }
+    }
+
+    private func resumeSession(_ session: SavedImpromptuSession) {
+        capturedPlaces = session.places
+    }
+
+    private func deleteAllClips() {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let dir = docs.appendingPathComponent("Tteona/Sessions/\(sessionId)")
+        try? FileManager.default.removeItem(at: dir)
+    }
+
+    // MARK: - 이어서 / 새로 시작 시트
+    private var resumeSheet: some View {
+        VStack(spacing: 0) {
+            RoundedRectangle(cornerRadius: 3)
+                .fill(Color.secondary.opacity(0.3))
+                .frame(width: 36, height: 5)
+                .padding(.top, 12)
+                .padding(.bottom, 24)
+
+            // 아이콘
+            ZStack {
+                Circle()
+                    .fill(Color.tteOrange.opacity(0.12))
+                    .frame(width: 72, height: 72)
+                Image(systemName: "clock.arrow.circlepath")
+                    .font(.system(size: 30))
+                    .foregroundColor(.tteOrange)
+            }
+            .padding(.bottom, 16)
+
+            VStack(spacing: 6) {
+                Text("오늘 기록이 남아있어요")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundColor(.tteDarkGray)
+                if let saved = savedSession {
+                    Text("장소 \(saved.places.count)곳 · \(Self.timeString(saved.date))")
+                        .font(.system(size: 14))
+                        .foregroundColor(.tteMediumGray)
+                }
+            }
+            .padding(.bottom, 32)
+
+            VStack(spacing: 12) {
+                // 이어서 기록하기
+                Button {
+                    if let saved = savedSession { resumeSession(saved) }
+                    showResumeSheet = false
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 15))
+                        Text("이어서 기록하기")
+                            .font(.system(size: 16, weight: .semibold))
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 56)
+                    .background(RoundedRectangle(cornerRadius: 16).fill(Color.tteOrange))
+                }
+
+                // 새로 시작하기
+                Button {
+                    deleteAllClips()
+                    sessionStore.clear()
+                    startNewSession()
+                    showResumeSheet = false
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "arrow.counterclockwise")
+                            .font(.system(size: 15))
+                        Text("새로 시작하기")
+                            .font(.system(size: 16, weight: .medium))
+                    }
+                    .foregroundColor(.tteDarkGray)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 56)
+                    .background(RoundedRectangle(cornerRadius: 16)
+                        .fill(Color(UIColor.secondarySystemBackground)))
+                }
+            }
+            .padding(.horizontal, 24)
+
+            Spacer().frame(height: 40)
+        }
+        .presentationDetents([.height(380)])
+        .presentationDragIndicator(.hidden)
+        .presentationCornerRadius(28)
+        .interactiveDismissDisabled(true)
+    }
+
+    private static func timeString(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "a h:mm"
+        f.locale = Locale(identifier: "ko_KR")
+        return f.string(from: date)
     }
 }
 

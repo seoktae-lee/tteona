@@ -2,6 +2,8 @@ import SwiftUI
 
 struct RootView: View {
     @EnvironmentObject private var authService: AuthService
+    @EnvironmentObject private var deepLinkHandler: DeepLinkHandler
+    @StateObject private var courseService = CourseService()
 
     var body: some View {
         Group {
@@ -18,7 +20,8 @@ struct RootView: View {
                 OnboardingView()
             } else {
                 MainTabView()
-                    .environmentObject(CourseService())
+                    .environmentObject(courseService)
+                    .environmentObject(deepLinkHandler)
             }
         }
         .animation(.easeInOut(duration: 0.35), value: authService.isLoggedIn)

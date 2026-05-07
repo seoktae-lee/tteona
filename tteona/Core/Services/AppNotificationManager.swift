@@ -14,6 +14,7 @@ import Combine
 class AppNotificationManager: NSObject, ObservableObject {
     static let shared = AppNotificationManager()
     @Published var pendingPlaceName: String? = nil
+    @Published var shouldOpenTodaySession: Bool = false
 
     override init() {
         super.init()
@@ -38,11 +39,18 @@ extension AppNotificationManager: UNUserNotificationCenterDelegate {
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let userInfo = response.notification.request.content.userInfo
-        if let placeName = userInfo["placeName"] as? String,
-           let action = userInfo["action"] as? String,
-           action == "openCamera" {
+        if let action = userInfo["action"] as? String {
             Task { @MainActor in
-                self.pendingPlaceName = placeName
+                switch action {
+                case "openCamera":
+                    if let placeName = userInfo["placeName"] as? String {
+                        self.pendingPlaceName = placeName
+                    }
+                case "openTodaySession":
+                    self.shouldOpenTodaySession = true
+                default:
+                    break
+                }
             }
         }
         completionHandler()

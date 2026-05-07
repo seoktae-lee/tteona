@@ -21,6 +21,18 @@ struct RoomDetailView: View {
 
     private var uid: String { authService.currentUser?.uid ?? "" }
 
+    private var roomInviteURL: URL {
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "tteona.kr"
+        components.path = "/room"
+        components.queryItems = [
+            URLQueryItem(name: "code", value: room.inviteCode),
+            URLQueryItem(name: "name", value: room.name)
+        ]
+        return components.url ?? URL(string: "https://tteona.kr")!
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             inviteCodeBanner
@@ -87,7 +99,7 @@ struct RoomDetailView: View {
             Text("그룹을 나가면 다시 초대 코드로 참여할 수 있어요.")
         }
         .sheet(isPresented: $showShareSheet) {
-            ShareSheet(items: ["떠나 앱에서 \(room.name) 그룹에 참여해요!\n초대 코드: \(room.inviteCode)"])
+            ShareSheet(items: [roomInviteURL])
         }
         .onAppear {
             roomService.startListeningFeed(roomId: room.roomId)
@@ -112,25 +124,14 @@ struct RoomDetailView: View {
                     .kerning(4)
             }
             Spacer()
-            HStack(spacing: 8) {
-                Button {
-                    UIPasteboard.general.string = room.inviteCode
-                } label: {
-                    Image(systemName: "doc.on.doc")
-                        .font(.system(size: 15))
-                        .foregroundColor(.tteOrange)
-                        .frame(width: 36, height: 36)
-                        .background(RoundedRectangle(cornerRadius: 8).fill(Color.tteOrange.opacity(0.1)))
-                }
-                Button {
-                    showShareSheet = true
-                } label: {
-                    Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: 15))
-                        .foregroundColor(.white)
-                        .frame(width: 36, height: 36)
-                        .background(RoundedRectangle(cornerRadius: 8).fill(Color.tteOrange))
-                }
+            Button {
+                showShareSheet = true
+            } label: {
+                Image(systemName: "square.and.arrow.up")
+                    .font(.system(size: 15))
+                    .foregroundColor(.white)
+                    .frame(width: 36, height: 36)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Color.tteOrange))
             }
             HStack(spacing: 3) {
                 Image(systemName: "person.fill")

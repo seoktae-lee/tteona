@@ -301,13 +301,24 @@ struct CourseListRow: View {
 
                 Spacer()
 
-                HStack(spacing: 4) {
-                    Image(systemName: "heart.fill")
-                        .foregroundColor(.red.opacity(0.8))
-                        .font(.system(size: 12))
-                    Text("\(course.likeCount)")
-                        .font(.system(size: 12))
-                        .foregroundColor(.tteMediumGray)
+                HStack(spacing: 12) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "heart.fill")
+                            .foregroundColor(.red.opacity(0.8))
+                            .font(.system(size: 12))
+                        Text("\(course.likeCount)")
+                            .font(.system(size: 12))
+                            .foregroundColor(.tteMediumGray)
+                    }
+
+                    Button {
+                        CourseShareHelper.share(course: course)
+                    } label: {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.tteMediumGray)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
 

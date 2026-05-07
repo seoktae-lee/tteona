@@ -3,8 +3,12 @@ import SwiftUI
 struct MainTabView: View {
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var courseService: CourseService
+    @EnvironmentObject private var deepLinkHandler: DeepLinkHandler
     @StateObject private var userService = UserService()
     @StateObject private var roomService = RoomService()
+    @State private var deepLinkedCourse: Course? = nil
+    @State private var deepLinkedRoomCode: String? = nil
+    @State private var showJoinRoomFromDeepLink = false
 
     var body: some View {
         TabView {
@@ -26,10 +30,35 @@ struct MainTabView: View {
         .tint(.tteOrange)
         .environmentObject(userService)
         .environmentObject(roomService)
+        .sheet(item: $deepLinkedCourse) { course in
+            CourseDetailView(course: course)
+                .environmentObject(authService)
+                .environmentObject(courseService)
+                .environmentObject(userService)
+        }
+        .sheet(isPresented: $showJoinRoomFromDeepLink) {
+            JoinRoomView(initialCode: deepLinkedRoomCode ?? "")
+                .environmentObject(authService)
+                .environmentObject(userService)
+                .environmentObject(roomService)
+        }
         .task {
             if let uid = authService.currentUser?.uid {
                 await userService.fetchUser(uid: uid)
             }
+        }
+        .onChange(of: deepLinkHandler.pendingCourseId) { _, courseId in
+            guard let courseId else { return }
+            Task {
+                deepLinkedCourse = try? await courseService.fetchCourse(by: courseId)
+                deepLinkHandler.clearPendingCourse()
+            }
+        }
+        .onChange(of: deepLinkHandler.pendingRoomCode) { _, code in
+            guard let code else { return }
+            deepLinkedRoomCode = code
+            showJoinRoomFromDeepLink = true
+            deepLinkHandler.clearPendingRoom()
         }
     }
 }

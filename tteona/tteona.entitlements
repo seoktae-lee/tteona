@@ -6,6 +6,10 @@
 	<array>
 		<string>Default</string>
 	</array>
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:tteona.kr</string>
+	</array>
 	<key>keychain-access-groups</key>
 	<array/>
 </dict>

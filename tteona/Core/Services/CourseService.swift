@@ -68,6 +68,14 @@ class CourseService: ObservableObject {
         }
     }
 
+    func fetchCourse(by courseId: String) async throws -> Course? {
+        if let cached = courses.first(where: { $0.courseId == courseId }) {
+            return cached
+        }
+        let doc = try await db.collection("courses").document(courseId).getDocument()
+        return try? doc.data(as: Course.self)
+    }
+
     func fetchLikedCourseIds(userId: String) async {
         guard !likedCourseIdsFetched else { return }
         let doc = try? await db.collection("users").document(userId).getDocument()

@@ -6,6 +6,7 @@ struct MainView: View {
     @EnvironmentObject private var courseService: CourseService
     @EnvironmentObject private var userService: UserService
     @EnvironmentObject private var roomService: RoomService
+    @EnvironmentObject private var notificationManager: AppNotificationManager
     @StateObject private var locationService = LocationService()
     @State private var selectedCourse: Course?
     @State private var showCreateCourse = false
@@ -71,6 +72,11 @@ struct MainView: View {
                 .environmentObject(userService)
                 .environmentObject(courseService)
                 .environmentObject(roomService)
+        }
+        .onChange(of: notificationManager.shouldOpenTodaySession) { _, should in
+            guard should else { return }
+            notificationManager.shouldOpenTodaySession = false
+            showImpromptu = true
         }
     }
 

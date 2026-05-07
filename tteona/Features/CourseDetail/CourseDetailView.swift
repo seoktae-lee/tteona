@@ -36,7 +36,10 @@ struct CourseDetailView: View {
                 }
 
                 ToolbarItem(placement: .topBarTrailing) {
-                    likeButton
+                    HStack(spacing: 16) {
+                        shareButton
+                        likeButton
+                    }
                 }
             }
         }
@@ -170,6 +173,20 @@ struct CourseDetailView: View {
                 .foregroundColor(isLiked ? .red : .tteDarkGray)
         }
         .disabled(isLikeProcessing)
+    }
+
+    private var shareButton: some View {
+        Button {
+            shareCourse()
+        } label: {
+            Image(systemName: "square.and.arrow.up")
+                .font(.system(size: 18, weight: .medium))
+                .foregroundColor(.tteDarkGray)
+        }
+    }
+
+    private func shareCourse() {
+        CourseShareHelper.share(course: course)
     }
 
     private func fitMapToCourse() {

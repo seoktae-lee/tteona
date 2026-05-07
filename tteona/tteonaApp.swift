@@ -14,6 +14,7 @@ import KakaoSDKAuth
 struct TteonaApp: App {
     @StateObject private var authService = AuthService()
     @StateObject private var notificationManager = AppNotificationManager.shared
+    @StateObject private var deepLinkHandler = DeepLinkHandler()
 
     init() {
         FirebaseApp.configure()
@@ -25,11 +26,13 @@ struct TteonaApp: App {
             RootView()
                 .environmentObject(authService)
                 .environmentObject(notificationManager)
+                .environmentObject(deepLinkHandler)
                 .onOpenURL { url in
                     if AuthApi.isKakaoTalkLoginUrl(url) {
                         AuthController.handleOpenUrl(url: url)
+                        return
                     }
-                    // tteona://capture 딥링크는 ImpromptuSessionView에서 처리
+                    deepLinkHandler.handle(url: url)
                 }
         }
     }

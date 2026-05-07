@@ -77,5 +77,11 @@
     <!-- 풀스크린 지원을 위한 런치 스크린 설정 -->
     <key>UILaunchScreen</key>
     <dict/>
+
+    <!-- 커스텀 폰트 -->
+    <key>UIAppFonts</key>
+    <array>
+        <string>Jua-Regular.ttf</string>
+    </array>
 </dict>
 </plist>

@@ -218,44 +218,29 @@ class VlogService {
         let H = size.height
         let cY = H / 2
 
-        // 배경 밴드
-        let bandLayer = CALayer()
-        bandLayer.frame = CGRect(x: 0, y: cY - 80, width: W, height: 160)
-        bandLayer.backgroundColor = UIColor.black.withAlphaComponent(0.45).cgColor
-        container.addSublayer(bandLayer)
-
-        // SF Pro Rounded — 한글/숫자 모두 지원하는 둥근 시스템 폰트
-        let placeFont: UIFont = {
-            let base = UIFont.systemFont(ofSize: 54, weight: .bold)
-            let desc = base.fontDescriptor.withDesign(.rounded) ?? base.fontDescriptor
-            return UIFont(descriptor: desc, size: 54)
-        }()
+        let prostoFont = UIFont(name: "Jua-Regular", size: 80)
+            ?? UIFont.systemFont(ofSize: 80, weight: .bold)
+        let prostoSmallFont = UIFont(name: "Jua-Regular", size: 52)
+            ?? UIFont.systemFont(ofSize: 52, weight: .regular)
 
         let placeLayer = CATextLayer()
         placeLayer.string = "📍 \(placeName)"
-        placeLayer.font = placeFont
-        placeLayer.fontSize = 54
+        placeLayer.font = prostoFont
+        placeLayer.fontSize = 80
         placeLayer.foregroundColor = UIColor(red: 1, green: 0.42, blue: 0.21, alpha: 1).cgColor
         placeLayer.alignmentMode = .center
         placeLayer.contentsScale = UIScreen.main.scale
-        placeLayer.frame = CGRect(x: 60, y: cY - 72, width: W - 120, height: 70)
+        placeLayer.frame = CGRect(x: 60, y: cY - 100, width: W - 120, height: 100)
         container.addSublayer(placeLayer)
-
-        // 날짜/시간 텍스트
-        let dateFont: UIFont = {
-            let base = UIFont.systemFont(ofSize: 34, weight: .light)
-            let desc = base.fontDescriptor.withDesign(.rounded) ?? base.fontDescriptor
-            return UIFont(descriptor: desc, size: 34)
-        }()
 
         let dateLayer = CATextLayer()
         dateLayer.string = dateStr
-        dateLayer.font = dateFont
-        dateLayer.fontSize = 34
+        dateLayer.font = prostoSmallFont
+        dateLayer.fontSize = 52
         dateLayer.foregroundColor = UIColor.white.cgColor
         dateLayer.alignmentMode = .center
         dateLayer.contentsScale = UIScreen.main.scale
-        dateLayer.frame = CGRect(x: 60, y: cY + 10, width: W - 120, height: 50)
+        dateLayer.frame = CGRect(x: 60, y: cY + 10, width: W - 120, height: 65)
         container.addSublayer(dateLayer)
 
         // CoreAnimation 타임라인 기준 애니메이션 (beginTime = composition 시간)
