@@ -1,0 +1,86 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 로그인한 사용자만 접근 가능
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    // users 컬렉션
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isOwner(userId);
+    }
+
+    // courses 컬렉션
+    match /courses/{courseId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && resource.data.authorId == request.auth.uid;
+    }
+
+    // rooms 컬렉션
+    match /rooms/{roomId} {
+      // 방 목록 조회: 로그인한 사용자
+      allow read: if isSignedIn();
+
+      // 방 생성: 로그인한 사용자
+      allow create: if isSignedIn();
+
+      // 방 수정: 방 멤버이거나 (초대코드로 참여 시 memberIds 업데이트)
+      allow update: if isSignedIn() && (
+        resource.data.memberIds.hasAny([request.auth.uid]) ||
+        // 초대 참여: memberIds에 본인 추가만 허용
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds']) &&
+         request.resource.data.memberIds.hasAll(resource.data.memberIds) &&
+         request.resource.data.memberIds.hasAny([request.auth.uid]))
+      );
+
+      // 방 삭제: 방장(첫 번째 멤버)만
+      allow delete: if isSignedIn() && resource.data.memberIds[0] == request.auth.uid;
+
+      // members 서브컬렉션
+      match /members/{memberId} {
+        allow read: if isSignedIn();
+        allow write: if isSignedIn() && (
+          // 본인 정보 쓰기
+          memberId == request.auth.uid ||
+          // 방 멤버가 다른 멤버 정보 읽기/쓰기
+          get(/databases/$(database)/documents/rooms/$(roomId)).data.memberIds.hasAny([request.auth.uid])
+        );
+      }
+
+      // locations 서브컬렉션
+      match /locations/{userId} {
+        allow read: if isSignedIn();
+        allow write: if isSignedIn() && userId == request.auth.uid;
+      }
+
+      // feed 서브컬렉션
+      match /feed/{feedId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn();
+        allow update, delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+
+        // comments 서브컬렉션
+        match /comments/{commentId} {
+          allow read: if isSignedIn();
+          allow create: if isSignedIn();
+          allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+        }
+      }
+    }
+
+    // fcmRequests 컬렉션 (Cloud Function이 처리)
+    match /fcmRequests/{requestId} {
+      allow create: if isSignedIn();
+      allow read, update, delete: if false;
+    }
+
+  }
+}

@@ -55,13 +55,11 @@ class FCMService: NSObject {
         roomId: String,
         commentText: String
     ) {
-        guard senderUserId != feedAuthorUserId else { return }
         let data: [String: Any] = [
             "type": GroupNotificationType.feedComment.rawValue,
             "senderUserId": senderUserId,
             "senderNickname": senderNickname,
-            "targetUserId": feedAuthorUserId,
-            "roomId": roomId,
+            "roomIds": [roomId],
             "commentText": commentText,
             "createdAt": FieldValue.serverTimestamp(),
             "processed": false

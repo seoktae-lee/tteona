@@ -45,6 +45,7 @@ struct MainTabView: View {
         .task {
             if let uid = authService.currentUser?.uid {
                 await userService.fetchUser(uid: uid)
+                roomService.startListeningMyRooms(userId: uid)
             }
         }
         .onChange(of: deepLinkHandler.pendingCourseId) { _, courseId in

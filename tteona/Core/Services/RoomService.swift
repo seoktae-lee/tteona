@@ -289,6 +289,43 @@ class RoomService: ObservableObject {
         return snapshot?.documents.compactMap { try? $0.data(as: FeedComment.self) } ?? []
     }
 
+    func fetchMemberFeedItems(roomId: String, userId: String) async -> [FeedItem] {
+        let snapshot = try? await db.collection("rooms").document(roomId)
+            .collection("feed")
+            .whereField("userId", isEqualTo: userId)
+            .order(by: "createdAt")
+            .getDocuments()
+        return snapshot?.documents.compactMap { try? $0.data(as: FeedItem.self) } ?? []
+    }
+
+    func fetchAllCommentsForFeeds(roomId: String, feedIds: [String]) async -> [String: [FeedComment]] {
+        var result: [String: [FeedComment]] = [:]
+        await withTaskGroup(of: (String, [FeedComment]).self) { group in
+            for feedId in feedIds {
+                group.addTask {
+                    let comments = await self.fetchComments(roomId: roomId, feedId: feedId)
+                    return (feedId, comments)
+                }
+            }
+            for await (feedId, comments) in group {
+                result[feedId] = comments
+            }
+        }
+        return result
+    }
+
+    func addCommentToLatestFeed(roomId: String, userId: String, commenterId: String, commenterNickname: String, text: String) async throws {
+        let feeds = await fetchMemberFeedItems(roomId: roomId, userId: userId)
+        print("[Comment] feeds count: \(feeds.count), userId: \(userId), roomId: \(roomId)")
+        guard let latest = feeds.last else {
+            print("[Comment] no feeds found")
+            return
+        }
+        print("[Comment] posting to feedId: \(latest.feedId)")
+        try await addComment(roomId: roomId, feedId: latest.feedId,
+                             userId: commenterId, nickname: commenterNickname, text: text)
+    }
+
     // MARK: - Helper
     private func generateInviteCode() -> String {
         let chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"

@@ -11,6 +11,8 @@ struct MainView: View {
     @State private var selectedCourse: Course?
     @State private var showCreateCourse = false
     @State private var showImpromptu = false
+    @State private var showRoomSelect = false
+    @State private var selectedRoomIds: Set<String> = []
     @State private var searchedRegionName: String? = nil
     @State private var showRegionSearch = false
     @State private var mapRegion = MKCoordinateRegion(
@@ -75,17 +77,28 @@ struct MainView: View {
                 .environmentObject(authService)
                 .environmentObject(courseService)
         }
+        .fullScreenCover(isPresented: $showRoomSelect) {
+            RoomSelectView(selectedRoomIds: $selectedRoomIds) {
+                showRoomSelect = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    showImpromptu = true
+                }
+            }
+            .environmentObject(roomService)
+        }
         .fullScreenCover(isPresented: $showImpromptu) {
-            ImpromptuSessionView()
-                .environmentObject(authService)
-                .environmentObject(userService)
-                .environmentObject(courseService)
-                .environmentObject(roomService)
+            ImpromptuSessionView(selectedRoomIds: selectedRoomIds) {
+                showRoomSelect = true
+            }
+            .environmentObject(authService)
+            .environmentObject(userService)
+            .environmentObject(courseService)
+            .environmentObject(roomService)
         }
         .onChange(of: notificationManager.shouldOpenTodaySession) { _, should in
             guard should else { return }
             notificationManager.shouldOpenTodaySession = false
-            showImpromptu = true
+            handleImpromptuTap()
         }
     }
 
@@ -209,6 +222,16 @@ struct MainView: View {
         }
     }
 
+    private func handleImpromptuTap() {
+        selectedRoomIds = []
+        let hasSavedSession = ImpromptuSessionStore.shared.loadTodaySession().map { !$0.places.isEmpty } ?? false
+        if hasSavedSession || roomService.myRooms.isEmpty {
+            showImpromptu = true
+        } else {
+            showRoomSelect = true
+        }
+    }
+
     // MARK: - Bottom Buttons
     private var locationButton: some View { EmptyView() }
 
@@ -218,7 +241,7 @@ struct MainView: View {
             ZStack {
                 // 나의 오늘 — 정중앙 고정
                 Button {
-                    showImpromptu = true
+                    handleImpromptuTap()
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "figure.walk")

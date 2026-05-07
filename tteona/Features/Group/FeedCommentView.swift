@@ -1,42 +1,69 @@
 import SwiftUI
 
-struct FeedCommentView: View {
+// 채팅 타임라인에서 피드 이벤트와 댓글을 통합하는 타입
+enum ChatEntry: Identifiable {
+    case feed(FeedItem)
+    case comment(FeedComment)
+
+    var id: String {
+        switch self {
+        case .feed(let f): return "feed_\(f.feedId)"
+        case .comment(let c): return "comment_\(c.commentId)"
+        }
+    }
+
+    var date: Date {
+        switch self {
+        case .feed(let f): return f.createdAt
+        case .comment(let c): return c.createdAt
+        }
+    }
+}
+
+struct MemberChatView: View {
     let roomId: String
-    let feedItem: FeedItem
+    let memberUserId: String
+    let memberNickname: String
+
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var userService: UserService
     @EnvironmentObject private var roomService: RoomService
     @Environment(\.dismiss) private var dismiss
 
-    @State private var comments: [FeedComment] = []
+    @State private var entries: [ChatEntry] = []
     @State private var commentText = ""
-    @State private var isPosting = false
     @State private var isLoading = true
+    @State private var isPosting = false
     @FocusState private var isInputFocused: Bool
 
     private var uid: String { authService.currentUser?.uid ?? "" }
     private var nickname: String { userService.currentUser?.nickname ?? "멤버" }
-
-    private var feedMessage: String {
-        switch feedItem.type {
-        case .tripStart:     return "\(feedItem.nickname)님이 \(feedItem.courseName) 여행을 시작했어요! 🚀"
-        case .arrival:       return "\(feedItem.nickname)님이 \(feedItem.placeName ?? "")에 도착했어요! 📍"
-        case .photo:         return "\(feedItem.nickname)님이 사진을 공유했어요 📸"
-        case .freeTripStart: return "\(feedItem.nickname)님이 나의 오늘을 시작했어요! 🗺️"
-        case .freeCapture:   return "\(feedItem.nickname)님이 \(feedItem.placeName ?? "이곳")에서 영상을 남겼어요 📸"
-        case .freeTripEnd:   return "\(feedItem.nickname)님의 오늘이 끝났어요! ✅"
-        }
-    }
+    private var isMyChat: Bool { uid == memberUserId }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                feedHeader
-                Divider()
-                commentList
+                if isLoading {
+                    Spacer()
+                    ProgressView().tint(.tteOrange)
+                    Spacer()
+                } else if entries.isEmpty {
+                    Spacer()
+                    VStack(spacing: 10) {
+                        Image(systemName: "bubble.left.and.bubble.right")
+                            .font(.system(size: 36))
+                            .foregroundColor(.tteMediumGray.opacity(0.4))
+                        Text("아직 활동이 없어요")
+                            .font(.system(size: 14))
+                            .foregroundColor(.tteMediumGray)
+                    }
+                    Spacer()
+                } else {
+                    chatList
+                }
                 inputBar
             }
-            .navigationTitle("댓글")
+            .navigationTitle("\(memberNickname)님의 오늘")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -45,70 +72,35 @@ struct FeedCommentView: View {
                 }
             }
         }
-        .task {
-            comments = await roomService.fetchComments(roomId: roomId, feedId: feedItem.feedId)
-            isLoading = false
-        }
+        .task { await loadEntries() }
     }
 
-    // MARK: - 피드 헤더
-    private var feedHeader: some View {
-        HStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(Color.tteOrange.opacity(0.12))
-                    .frame(width: 44, height: 44)
-                Text(String(feedItem.nickname.prefix(1)))
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(.tteOrange)
-            }
-            VStack(alignment: .leading, spacing: 3) {
-                Text(feedMessage)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.tteDarkGray)
-                Text(feedItem.createdAt.relativeDescription)
-                    .font(.system(size: 12))
-                    .foregroundColor(.tteMediumGray)
-            }
-            Spacer()
-        }
-        .padding(16)
-        .background(Color(UIColor.secondarySystemBackground))
-    }
-
-    // MARK: - 댓글 목록
-    @ViewBuilder
-    private var commentList: some View {
-        if isLoading {
-            Spacer()
-            ProgressView().tint(.tteOrange)
-            Spacer()
-        } else if comments.isEmpty {
-            Spacer()
-            VStack(spacing: 10) {
-                Image(systemName: "bubble.left.and.bubble.right")
-                    .font(.system(size: 36))
-                    .foregroundColor(.tteMediumGray.opacity(0.4))
-                Text("첫 댓글을 남겨보세요!")
-                    .font(.system(size: 14))
-                    .foregroundColor(.tteMediumGray)
-            }
-            Spacer()
-        } else {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        ForEach(comments) { comment in
+    // MARK: - 채팅 목록
+    private var chatList: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 4) {
+                    ForEach(entries) { entry in
+                        switch entry {
+                        case .feed(let item):
+                            FeedEventRow(item: item)
+                                .id(entry.id)
+                        case .comment(let comment):
                             CommentRow(comment: comment, isMe: comment.userId == uid)
-                                .id(comment.commentId)
+                                .id(entry.id)
                         }
                     }
-                    .padding(.vertical, 8)
                 }
-                .onChange(of: comments.count) { _, _ in
-                    if let last = comments.last {
-                        withAnimation { proxy.scrollTo(last.commentId, anchor: .bottom) }
-                    }
+                .padding(.vertical, 12)
+            }
+            .onAppear {
+                if let last = entries.last {
+                    proxy.scrollTo(last.id, anchor: .bottom)
+                }
+            }
+            .onChange(of: entries.count) { _, _ in
+                if let last = entries.last {
+                    withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
                 }
             }
         }
@@ -123,14 +115,16 @@ struct FeedCommentView: View {
                 .focused($isInputFocused)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
-                .background(RoundedRectangle(cornerRadius: 20).fill(Color(UIColor.secondarySystemBackground)))
+                .background(RoundedRectangle(cornerRadius: 20)
+                    .fill(Color(UIColor.secondarySystemBackground)))
 
             Button {
                 Task { await postComment() }
             } label: {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.system(size: 32))
-                    .foregroundColor(commentText.trimmingCharacters(in: .whitespaces).isEmpty ? .tteMediumGray.opacity(0.4) : .tteOrange)
+                    .foregroundColor(commentText.trimmingCharacters(in: .whitespaces).isEmpty
+                                     ? .tteMediumGray.opacity(0.4) : .tteOrange)
             }
             .disabled(commentText.trimmingCharacters(in: .whitespaces).isEmpty || isPosting)
         }
@@ -139,16 +133,92 @@ struct FeedCommentView: View {
         .background(Color.tteBackground.shadow(color: .black.opacity(0.06), radius: 8, y: -2))
     }
 
+    // MARK: - 데이터 로드
+    private func loadEntries() async {
+        let feeds = await roomService.fetchMemberFeedItems(roomId: roomId, userId: memberUserId)
+        let feedIds = feeds.map(\.feedId)
+        let commentsMap = await roomService.fetchAllCommentsForFeeds(roomId: roomId, feedIds: feedIds)
+
+        var all: [ChatEntry] = []
+        for feed in feeds {
+            all.append(.feed(feed))
+            let comments = commentsMap[feed.feedId] ?? []
+            all.append(contentsOf: comments.map { .comment($0) })
+        }
+        all.sort { $0.date < $1.date }
+        entries = all
+        isLoading = false
+    }
+
     private func postComment() async {
         let text = commentText.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty else { return }
         isPosting = true
         commentText = ""
         do {
-            try await roomService.addComment(roomId: roomId, feedId: feedItem.feedId, userId: uid, nickname: nickname, text: text)
-            comments = await roomService.fetchComments(roomId: roomId, feedId: feedItem.feedId)
-        } catch {}
+            try await roomService.addCommentToLatestFeed(
+                roomId: roomId,
+                userId: memberUserId,
+                commenterId: uid,
+                commenterNickname: nickname,
+                text: text
+            )
+        } catch {
+            print("[Comment] error: \(error)")
+        }
+        await loadEntries()
         isPosting = false
+    }
+}
+
+// MARK: - 피드 이벤트 행 (시스템 메시지 스타일)
+struct FeedEventRow: View {
+    let item: FeedItem
+
+    private var icon: String {
+        switch item.type {
+        case .tripStart:     return "🚀"
+        case .arrival:       return "📍"
+        case .photo:         return "📸"
+        case .freeTripStart: return "🗺️"
+        case .freeCapture:   return "📸"
+        case .freeTripEnd:   return "✅"
+        }
+    }
+
+    private var message: String {
+        switch item.type {
+        case .tripStart:     return "\(item.courseName) 여행을 시작했어요!"
+        case .arrival:       return "\(item.placeName ?? "")에 도착했어요!"
+        case .photo:         return "사진을 공유했어요"
+        case .freeTripStart: return "나의 오늘을 시작했어요!"
+        case .freeCapture:   return "\(item.placeName ?? "이곳")에서 영상을 남겼어요"
+        case .freeTripEnd:   return "오늘 \(item.courseName) 기록을 마쳤어요"
+        }
+    }
+
+    var body: some View {
+        HStack {
+            Spacer()
+            HStack(spacing: 6) {
+                Text(icon)
+                    .font(.system(size: 13))
+                Text(message)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.tteMediumGray)
+                Text("·")
+                    .foregroundColor(.tteMediumGray.opacity(0.5))
+                Text(item.createdAt.relativeDescription)
+                    .font(.system(size: 11))
+                    .foregroundColor(.tteMediumGray.opacity(0.7))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(Capsule().fill(Color(UIColor.tertiarySystemBackground)))
+            Spacer()
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 16)
     }
 }
 
@@ -195,7 +265,7 @@ struct CommentRow: View {
             if !isMe { Spacer(minLength: 50) }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 5)
+        .padding(.vertical, 4)
     }
 }
 

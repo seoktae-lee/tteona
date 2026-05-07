@@ -190,7 +190,6 @@ struct GroupRoomList: View {
                 .environmentObject(authService)
                 .environmentObject(userService)
                 .environmentObject(roomService)
-                .environmentObject(courseService)
         }
         .sheet(isPresented: $showCreateRoom) {
             CreateRoomView()

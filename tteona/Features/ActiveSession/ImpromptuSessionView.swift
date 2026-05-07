@@ -3,7 +3,8 @@ import MapKit
 import CoreLocation
 
 struct ImpromptuSessionView: View {
-    var roomId: String? = nil
+    var selectedRoomIds: Set<String> = []
+    var onRestartWithRoomSelect: (() -> Void)? = nil
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var userService: UserService
     @EnvironmentObject private var courseService: CourseService
@@ -30,6 +31,7 @@ struct ImpromptuSessionView: View {
     @State private var generatedCourse: Course? = nil
     @State private var showResumeSheet = false
     @State private var savedSession: SavedImpromptuSession? = nil
+    @State private var activeRoomIds: Set<String> = []
 
     private let sessionStore = ImpromptuSessionStore.shared
 
@@ -51,6 +53,13 @@ struct ImpromptuSessionView: View {
             locationService.requestPermission()
             locationService.startContinuousUpdates()
             activityManager.start()
+            activeRoomIds = selectedRoomIds
+            // uid가 준비될 때까지 대기 (최대 3초)
+            var waited = 0
+            while uid.isEmpty && waited < 30 {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                waited += 1
+            }
             // 이전 세션 복원 여부 확인
             if let saved = sessionStore.loadTodaySession(), !saved.places.isEmpty {
                 savedSession = saved
@@ -110,7 +119,9 @@ struct ImpromptuSessionView: View {
         }
         .fullScreenCover(isPresented: $showVlog) {
             if let course = generatedCourse {
-                VlogGenerationView(course: course, sessionId: sessionId)
+                VlogGenerationView(course: course, sessionId: sessionId) {
+                    dismiss()
+                }
             }
         }
         .sheet(isPresented: $showSaveCourse) {
@@ -457,7 +468,7 @@ struct ImpromptuSessionView: View {
         reorderPlaces()
         sessionStore.save(places: capturedPlaces)
         activityManager.update(placesCount: capturedPlaces.count, lastPlaceName: place.placeName)
-        if let rid = roomId {
+        for rid in activeRoomIds {
             roomService.postFeed(roomId: rid, type: .freeCapture,
                                  userId: uid, nickname: nickname,
                                  courseId: "free", courseName: "나의 오늘",
@@ -520,12 +531,11 @@ struct ImpromptuSessionView: View {
         generatedCourse = course
         sessionStore.clear()
         if saveToFirestore { Task { try? await courseService.saveCourse(course) } }
-        postEndFeed(placesCount: capturedPlaces.count, courseName: name)
+        postEndFeed(toRoomIds: Array(activeRoomIds), count: capturedPlaces.count)
     }
 
-    private func postEndFeed(placesCount: Int? = nil, courseName: String? = nil) {
-        let count = placesCount ?? capturedPlaces.count
-        let roomIds = roomService.myRooms.map(\.roomId)
+    private func postEndFeed(toRoomIds roomIds: [String], count: Int) {
+        guard !roomIds.isEmpty else { return }
         FCMService.shared.requestGroupNotification(
             type: .freeTripEnd,
             senderUserId: uid,
@@ -533,27 +543,17 @@ struct ImpromptuSessionView: View {
             roomIds: roomIds,
             courseName: "\(count)곳 방문"
         )
-        guard let rid = roomId else { return }
-        roomService.postFeed(roomId: rid, type: .freeTripEnd,
-                             userId: uid, nickname: nickname,
-                             courseId: "free",
-                             courseName: "\(count)곳 방문")
+        for rid in roomIds {
+            roomService.postFeed(roomId: rid, type: .freeTripEnd,
+                                 userId: uid, nickname: nickname,
+                                 courseId: "free",
+                                 courseName: "\(count)곳 방문")
+        }
     }
 
     private func startNewSession() {
         capturedPlaces = []
-        let roomIds = roomService.myRooms.map(\.roomId)
-        FCMService.shared.requestGroupNotification(
-            type: .freeTripStart,
-            senderUserId: uid,
-            senderNickname: nickname,
-            roomIds: roomIds
-        )
-        if let rid = roomId {
-            roomService.postFeed(roomId: rid, type: .freeTripStart,
-                                 userId: uid, nickname: nickname,
-                                 courseId: "free", courseName: "나의 오늘")
-        }
+        activeRoomIds = selectedRoomIds
     }
 
     private func resumeSession(_ session: SavedImpromptuSession) {
@@ -620,8 +620,13 @@ struct ImpromptuSessionView: View {
                 Button {
                     deleteAllClips()
                     sessionStore.clear()
-                    startNewSession()
                     showResumeSheet = false
+                    if let restart = onRestartWithRoomSelect {
+                        dismiss()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { restart() }
+                    } else {
+                        startNewSession()
+                    }
                 } label: {
                     HStack(spacing: 10) {
                         Image(systemName: "arrow.counterclockwise")

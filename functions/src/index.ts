@@ -26,12 +26,12 @@ function buildMessage(type: string, nickname: string, courseName?: string, comme
   switch (type) {
     case "free_trip_start":
       return {
-        title: "🗺 나의 오늘 시작",
+        title: "나의 오늘 시작",
         body: `${nickname}님이 오늘의 기록을 시작했어요!`,
       };
     case "free_trip_end":
       return {
-        title: "✅ 나의 오늘 종료",
+        title: "나의 오늘 종료",
         body: courseName
           ? `${nickname}님이 오늘 ${courseName}을 완료했어요!`
           : `${nickname}님이 오늘의 기록을 마쳤어요!`,
@@ -45,8 +45,8 @@ function buildMessage(type: string, nickname: string, courseName?: string, comme
       };
     case "feed_comment":
       return {
-        title: `💬 ${nickname}님이 댓글을 남겼어요`,
-        body: commentText ?? "",
+        title: `${nickname}님이 답장을 남겼어요`,
+        body: "답장을 확인해주세요!",
       };
     default:
       return {
@@ -99,20 +99,16 @@ export const sendGroupNotification = onDocumentCreated(
     // 각 룸의 멤버 ID 수집 (발신자 제외)
     const recipientUserIds = new Set<string>();
 
-    // feed_comment: 피드 작성자에게만
-    if (type === "feed_comment" && targetUserId) {
-      recipientUserIds.add(targetUserId);
-    } else {
-      await Promise.all(
-        (roomIds ?? []).map(async (roomId) => {
-          const roomDoc = await db.collection("rooms").doc(roomId).get();
-          const memberIds: string[] = roomDoc.data()?.memberIds ?? [];
-          memberIds
-            .filter((id) => id !== senderUserId)
-            .forEach((id) => recipientUserIds.add(id));
-        })
-      );
-    }
+    // 방 전체 멤버에게 (발신자 제외)
+    await Promise.all(
+      (roomIds ?? []).map(async (roomId) => {
+        const roomDoc = await db.collection("rooms").doc(roomId).get();
+        const memberIds: string[] = roomDoc.data()?.memberIds ?? [];
+        memberIds
+          .filter((id) => id !== senderUserId)
+          .forEach((id) => recipientUserIds.add(id));
+      })
+    );
 
     if (recipientUserIds.size === 0) {
       await event.data?.ref.update({ processed: true });

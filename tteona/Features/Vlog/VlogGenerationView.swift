@@ -4,6 +4,7 @@ import AVKit
 struct VlogGenerationView: View {
     let course: Course
     let sessionId: String
+    var onDismissToHome: (() -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
 
     @State private var phase: Phase = .generating
@@ -20,7 +21,12 @@ struct VlogGenerationView: View {
         case .generating: generatingView
         case .preview:
             if let url = vlogURL {
-                VlogPreviewView(vlogURL: url) { dismiss() }
+                VlogPreviewView(vlogURL: url) {
+                    dismiss()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        onDismissToHome?()
+                    }
+                }
             }
         case .error: errorView
         }

@@ -6,18 +6,9 @@ struct RoomDetailView: View {
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var userService: UserService
     @EnvironmentObject private var roomService: RoomService
-    @EnvironmentObject private var courseService: CourseService
-    @State private var selectedTab: RoomTab = .feed
-    @State private var showShareCourse = false
     @State private var showLeaveAlert = false
-    @State private var showActiveSession: Course?
-    @State private var selectedFeedItem: FeedItem?
+    @State private var selectedFeedMember: FeedMember?
     @State private var showShareSheet = false
-
-    enum RoomTab: String, CaseIterable {
-        case feed = "피드"
-        case vote = "코스 투표"
-    }
 
     private var uid: String { authService.currentUser?.uid ?? "" }
 
@@ -40,25 +31,25 @@ struct RoomDetailView: View {
                 .padding(.top, 12)
                 .padding(.bottom, 8)
 
-            tabPicker
-
-            switch selectedTab {
-            case .feed:
-                feedTab
-            case .vote:
-                voteTab
+            VStack(spacing: 8) {
+                Text("피드")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.tteDarkGray)
+                    .frame(maxWidth: .infinity)
+                Rectangle()
+                    .fill(Color.tteOrange)
+                    .frame(height: 2)
             }
+            .background(Color.tteBackground)
+            .overlay(Rectangle().fill(Color(UIColor.separator)).frame(height: 1), alignment: .bottom)
+
+            feedTab
         }
         .navigationTitle(room.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    Button {
-                        showShareCourse = true
-                    } label: {
-                        Label("코스 공유하기", systemImage: "square.and.arrow.up")
-                    }
                     Button(role: .destructive) {
                         showLeaveAlert = true
                     } label: {
@@ -70,22 +61,8 @@ struct RoomDetailView: View {
                 }
             }
         }
-        .sheet(isPresented: $showShareCourse) {
-            ShareCourseView(room: room)
-                .environmentObject(authService)
-                .environmentObject(userService)
-                .environmentObject(courseService)
-                .environmentObject(roomService)
-        }
-        .sheet(item: $selectedFeedItem) { item in
-            FeedCommentView(roomId: room.roomId, feedItem: item)
-                .environmentObject(authService)
-                .environmentObject(userService)
-                .environmentObject(roomService)
-        }
-        .fullScreenCover(item: $showActiveSession) { course in
-            ActiveSessionView(course: course, roomId: room.roomId)
-                .environmentObject(AppNotificationManager.shared)
+        .sheet(item: $selectedFeedMember) { member in
+            MemberChatView(roomId: room.roomId, memberUserId: member.userId, memberNickname: member.nickname)
                 .environmentObject(authService)
                 .environmentObject(userService)
                 .environmentObject(roomService)
@@ -103,11 +80,9 @@ struct RoomDetailView: View {
         }
         .onAppear {
             roomService.startListeningFeed(roomId: room.roomId)
-            roomService.startListeningSharedCourses(roomId: room.roomId)
         }
         .onDisappear {
             roomService.stopListeningFeed()
-            roomService.stopListeningSharedCourses()
         }
     }
 
@@ -147,29 +122,6 @@ struct RoomDetailView: View {
         .background(RoundedRectangle(cornerRadius: 12).fill(Color(UIColor.secondarySystemBackground)))
     }
 
-    // MARK: - 탭 피커
-    private var tabPicker: some View {
-        HStack(spacing: 0) {
-            ForEach(RoomTab.allCases, id: \.self) { tab in
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) { selectedTab = tab }
-                } label: {
-                    VStack(spacing: 8) {
-                        Text(tab.rawValue)
-                            .font(.system(size: 14, weight: selectedTab == tab ? .semibold : .regular))
-                            .foregroundColor(selectedTab == tab ? .tteDarkGray : .tteMediumGray)
-                        Rectangle()
-                            .fill(selectedTab == tab ? Color.tteOrange : Color.clear)
-                            .frame(height: 2)
-                    }
-                }
-                .frame(maxWidth: .infinity)
-            }
-        }
-        .background(Color.tteBackground)
-        .overlay(Rectangle().fill(Color(UIColor.separator)).frame(height: 1), alignment: .bottom)
-    }
-
     // MARK: - 피드 탭
     private var feedTab: some View {
         Group {
@@ -189,8 +141,9 @@ struct RoomDetailView: View {
                 ScrollView {
                     LazyVStack(spacing: 12) {
                         ForEach(roomService.feedItems) { item in
-                            FeedCard(item: item)
-                                .onTapGesture { selectedFeedItem = item }
+                            FeedCard(item: item) {
+                                selectedFeedMember = FeedMember(userId: item.userId, nickname: item.nickname)
+                            }
                         }
                     }
                     .padding(16)
@@ -199,129 +152,70 @@ struct RoomDetailView: View {
         }
     }
 
-    // MARK: - 코스 투표 탭
-    private var voteTab: some View {
-        ZStack(alignment: .bottom) {
-            Group {
-                if roomService.sharedCourses.isEmpty {
-                    VStack(spacing: 12) {
-                        Spacer()
-                        Image(systemName: "map.badge.plus")
-                            .font(.system(size: 40))
-                            .foregroundColor(.tteOrange.opacity(0.35))
-                        Text("아직 공유된 코스가 없어요\n코스를 공유하고 투표해보세요!")
-                            .font(.system(size: 14))
-                            .foregroundColor(.tteMediumGray)
-                            .multilineTextAlignment(.center)
-                        Spacer()
-                    }
-                } else {
-                    ScrollView {
-                        LazyVStack(spacing: 12) {
-                            ForEach(roomService.sharedCourses) { shared in
-                                SharedCourseCard(
-                                    shared: shared,
-                                    isVoted: shared.votedUserIds.contains(uid),
-                                    onVote: {
-                                        Task { try? await roomService.voteCourse(roomId: room.roomId, courseId: shared.courseId, userId: uid) }
-                                    },
-                                    onStart: { showActiveSession = makeCourse(from: shared) }
-                                )
-                            }
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.top, 12)
-                        .padding(.bottom, 90)
-                    }
-                }
-            }
-
-            Button {
-                showShareCourse = true
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "square.and.arrow.up")
-                    Text("코스 공유하기").fontWeight(.semibold)
-                }
-                .font(.system(size: 16))
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .frame(height: 54)
-                .background(RoundedRectangle(cornerRadius: 14).fill(Color.tteOrange))
-            }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 36)
-        }
-    }
-
-    private func makeCourse(from shared: SharedCourse) -> Course {
-        Course(courseId: shared.courseId, authorId: shared.sharedBy,
-               courseName: shared.courseName, tag: shared.tag,
-               region: shared.region, likeCount: 0,
-               createdAt: shared.sharedAt, places: shared.places)
-    }
 }
 
 // MARK: - 피드 카드
 struct FeedCard: View {
     let item: FeedItem
+    var onComment: (() -> Void)? = nil
 
     private var icon: String {
         switch item.type {
-        case .tripStart:    return "🚀"
-        case .arrival:      return "📍"
-        case .photo:        return "📸"
+        case .tripStart:     return "🚀"
+        case .arrival:       return "📍"
+        case .photo:         return "📸"
         case .freeTripStart: return "🗺️"
-        case .freeCapture:  return "📸"
-        case .freeTripEnd:  return "✅"
+        case .freeCapture:   return "📸"
+        case .freeTripEnd:   return "✅"
         }
     }
 
     private var message: String {
         switch item.type {
-        case .tripStart:    return "\(item.nickname)님이 \(item.courseName) 여행을 시작했어요!"
-        case .arrival:      return "\(item.nickname)님이 \(item.placeName ?? "")에 도착했어요!"
-        case .photo:        return "\(item.nickname)님이 사진을 공유했어요"
+        case .tripStart:     return "\(item.nickname)님이 \(item.courseName) 여행을 시작했어요!"
+        case .arrival:       return "\(item.nickname)님이 \(item.placeName ?? "")에 도착했어요!"
+        case .photo:         return "\(item.nickname)님이 사진을 공유했어요"
         case .freeTripStart: return "\(item.nickname)님이 나의 오늘을 시작했어요!"
-        case .freeCapture:  return "\(item.nickname)님이 \(item.placeName ?? "이곳")에서 영상을 남겼어요"
-        case .freeTripEnd:  return "\(item.nickname)님의 오늘이 끝났어요! (\(item.courseName))"
+        case .freeCapture:   return "\(item.nickname)님이 \(item.placeName ?? "이곳")에서 영상을 남겼어요"
+        case .freeTripEnd:   return "\(item.nickname)님의 오늘이 끝났어요!\n\(item.courseName)"
         }
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
-                Text(icon)
-                    .font(.system(size: 28))
-                    .frame(width: 44, height: 44)
-                    .background(Circle().fill(Color.tteOrange.opacity(0.1)))
+        HStack(spacing: 12) {
+            Text(icon)
+                .font(.system(size: 26))
+                .frame(width: 44, height: 44)
+                .background(Circle().fill(Color.tteOrange.opacity(0.1)))
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(message)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.tteDarkGray)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(message)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.tteDarkGray)
+                HStack(spacing: 6) {
                     Text(item.createdAt.relativeDescription)
                         .font(.system(size: 12))
                         .foregroundColor(.tteMediumGray)
+                    if item.commentCount > 0 {
+                        Text("·")
+                            .foregroundColor(.tteMediumGray.opacity(0.5))
+                            .font(.system(size: 12))
+                        Text("댓글 \(item.commentCount)개")
+                            .font(.system(size: 12))
+                            .foregroundColor(.tteOrange.opacity(0.8))
+                    }
                 }
-                Spacer()
             }
 
-            if item.commentCount > 0 {
-                HStack(spacing: 4) {
-                    Image(systemName: "bubble.left")
-                        .font(.system(size: 12))
-                        .foregroundColor(.tteMediumGray)
-                    Text("댓글 \(item.commentCount)개")
-                        .font(.system(size: 12))
-                        .foregroundColor(.tteMediumGray)
-                }
-                .padding(.leading, 54)
-            } else {
-                Text("댓글 달기")
-                    .font(.system(size: 12))
-                    .foregroundColor(.tteMediumGray.opacity(0.6))
-                    .padding(.leading, 54)
+            Spacer()
+
+            Button {
+                onComment?()
+            } label: {
+                Image(systemName: item.commentCount > 0 ? "bubble.left.fill" : "bubble.left")
+                    .font(.system(size: 20))
+                    .foregroundColor(item.commentCount > 0 ? .tteOrange : .tteMediumGray.opacity(0.5))
+                    .frame(width: 40, height: 40)
             }
         }
         .padding(14)
@@ -457,5 +351,17 @@ struct SharedCourseCard: View {
         }
         .padding(16)
         .background(RoundedRectangle(cornerRadius: 16).fill(Color(UIColor.secondarySystemBackground)))
+    }
+}
+
+struct FeedMember: Identifiable {
+    let id: String
+    let userId: String
+    let nickname: String
+
+    init(userId: String, nickname: String) {
+        self.id = userId
+        self.userId = userId
+        self.nickname = nickname
     }
 }
