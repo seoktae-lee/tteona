@@ -225,29 +225,24 @@ struct MainView: View {
 struct CourseMapPin: View {
     let course: Course
 
-    var body: some View {
-        VStack(spacing: 0) {
-            Text(course.tag.emoji)
-                .font(.system(size: 18))
-                .frame(width: 40, height: 40)
-                .background(Circle().fill(Color.tteOrange).shadow(color: .tteOrange.opacity(0.4), radius: 4))
-            Triangle()
-                .fill(Color.tteOrange)
-                .frame(width: 10, height: 6)
+    private var pinImageName: String {
+        switch course.tag {
+        case .couple:  return "pin_couple"
+        case .family:  return "pin_family"
+        case .solo:    return "pin_solo"
+        case .friends: return "pin_friends"
         }
+    }
+
+    var body: some View {
+        Image(pinImageName)
+            .resizable()
+            .scaledToFit()
+            .frame(width: 46, height: 46)
+            .shadow(color: .tteOrange.opacity(0.4), radius: 4)
     }
 }
 
-struct Triangle: Shape {
-    func path(in rect: CGRect) -> Path {
-        Path { p in
-            p.move(to: CGPoint(x: rect.midX, y: rect.maxY))
-            p.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
-            p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-            p.closeSubpath()
-        }
-    }
-}
 
 // MARK: - Course Card (나의 코스 탭용으로 유지)
 struct CourseCardView: View {
