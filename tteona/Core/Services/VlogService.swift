@@ -218,9 +218,9 @@ class VlogService {
         let H = size.height
         let cY = H / 2
 
-        let prostoFont = UIFont(name: "Jua-Regular", size: 80)
+        let prostoFont = UIFont(name: "GowunBatang-Regular", size: 80)
             ?? UIFont.systemFont(ofSize: 80, weight: .bold)
-        let prostoSmallFont = UIFont(name: "Jua-Regular", size: 52)
+        let prostoSmallFont = UIFont(name: "GowunBatang-Regular", size: 52)
             ?? UIFont.systemFont(ofSize: 52, weight: .regular)
 
         let placeLayer = CATextLayer()

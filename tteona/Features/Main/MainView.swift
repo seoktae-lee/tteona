@@ -43,6 +43,15 @@ struct MainView: View {
             await courseService.fetchCourses()
             locationService.requestPermission()
             locationService.startTracking(places: [])
+            if let coord = locationService.currentLocation?.coordinate {
+                await moveToCountry(coord: coord)
+            }
+        }
+        .onChange(of: locationService.currentLocation) { _, location in
+            guard mapRegion.center.latitude == 36.5,
+                  mapRegion.center.longitude == 127.8,
+                  let coord = location?.coordinate else { return }
+            Task { await moveToCountry(coord: coord) }
         }
         .sheet(item: $selectedCourse) { course in
             CourseDetailView(course: course)
@@ -164,6 +173,39 @@ struct MainView: View {
             .padding(.top, 56)
 
             Spacer()
+        }
+    }
+
+    // MARK: - 나라 크기에 맞는 줌 레벨로 이동
+    private func moveToCountry(coord: CLLocationCoordinate2D) async {
+        let location = CLLocation(latitude: coord.latitude, longitude: coord.longitude)
+        let placemarks = try? await CLGeocoder().reverseGeocodeLocation(location)
+        let countryCode = placemarks?.first?.isoCountryCode ?? ""
+        let delta = countrySpan(for: countryCode)
+        await MainActor.run {
+            withAnimation {
+                cameraPosition = .region(MKCoordinateRegion(
+                    center: coord,
+                    span: MKCoordinateSpan(latitudeDelta: delta, longitudeDelta: delta)
+                ))
+            }
+        }
+    }
+
+    private func countrySpan(for isoCode: String) -> Double {
+        switch isoCode {
+        // 소형 국가
+        case "SG", "MC", "LI", "SM", "VA", "MV", "BH", "HK", "MO": return 0.5
+        // 소~중형 국가
+        case "KR", "JP", "GB", "DE", "FR", "IT", "ES", "NL", "BE",
+             "CH", "AT", "CZ", "SK", "HU", "PT", "SE", "NO", "DK",
+             "FI", "PL", "GR", "TH", "VN", "MY", "PH", "NZ", "TW": return 8
+        // 중형 국가
+        case "MX", "SA", "IR", "MN", "ID", "PE", "CO", "ZA", "EG",
+             "TR", "NG", "ET", "TZ", "KZ": return 20
+        // 대형 국가
+        case "US", "CN", "RU", "CA", "BR", "AU", "IN", "AR": return 40
+        default: return 10
         }
     }
 

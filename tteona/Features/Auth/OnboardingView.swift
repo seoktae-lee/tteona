@@ -7,6 +7,7 @@ struct OnboardingView: View {
     @EnvironmentObject private var authService: AuthService
     @StateObject private var userService = UserService()
     @State private var step = 0
+    @State private var featureSlide = 0
     @State private var nickname = ""
     @State private var agreedTerms = false
     @State private var agreedPrivacy = false
@@ -14,23 +15,32 @@ struct OnboardingView: View {
     @State private var notificationGranted = false
     @State private var cameraGranted = false
 
-    private let totalSteps = 4
+    private let totalSteps = 5
+    private let featureSlides: [(emoji: String, title: String, description: String)] = [
+        ("🗺", "코스 탐색", "전세계 다양한 코스를\n지도에서 찾아보세요"),
+        ("📹", "나의 오늘", "일상을 자유롭게\n기록하세요"),
+        ("🎬", "Vlog 생성", "여행이 끝나면\n자동으로 영상이 완성돼요"),
+        ("👥", "그룹", "친구/가족과 함께 코스와\n나의 오늘을 공유해보세요"),
+    ]
 
     var body: some View {
         ZStack {
             Color.tteBackground.ignoresSafeArea()
 
             VStack(spacing: 0) {
-                progressBar
-                    .padding(.top, 56)
-                    .padding(.horizontal, 24)
+                if step > 0 {
+                    progressBar
+                        .padding(.top, 56)
+                        .padding(.horizontal, 24)
+                }
 
                 Group {
                     switch step {
-                    case 0: welcomeStep
-                    case 1: nicknameStep
-                    case 2: permissionStep
-                    case 3: termsStep
+                    case 0: featureIntroStep
+                    case 1: welcomeStep
+                    case 2: nicknameStep
+                    case 3: permissionStep
+                    case 4: termsStep
                     default: EmptyView()
                     }
                 }
@@ -43,10 +53,10 @@ struct OnboardingView: View {
         }
     }
 
-    // MARK: - Progress Bar
+    // MARK: - Progress Bar (step 1~4 전용)
     private var progressBar: some View {
         HStack(spacing: 6) {
-            ForEach(0..<totalSteps, id: \.self) { i in
+            ForEach(1..<totalSteps, id: \.self) { i in
                 Capsule()
                     .fill(i <= step ? Color.tteOrange : Color(UIColor.tertiarySystemFill))
                     .frame(height: 4)
@@ -55,7 +65,76 @@ struct OnboardingView: View {
         }
     }
 
-    // MARK: - Step 0: 환영
+    // MARK: - Step 0: 기능 소개 슬라이드
+    private var featureIntroStep: some View {
+        VStack(spacing: 0) {
+            Spacer()
+
+            // 슬라이드 콘텐츠
+            let slide = featureSlides[featureSlide]
+            VStack(spacing: 28) {
+                ZStack {
+                    Circle()
+                        .fill(Color.tteOrange.opacity(0.1))
+                        .frame(width: 140, height: 140)
+                    Text(slide.emoji)
+                        .font(.system(size: 72))
+                }
+
+                VStack(spacing: 12) {
+                    Text(slide.title)
+                        .font(.system(size: 28, weight: .bold))
+                        .foregroundColor(.tteOrange)
+                    Text(slide.description)
+                        .font(.system(size: 17))
+                        .foregroundColor(.tteMediumGray)
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(4)
+                }
+            }
+            .id(featureSlide)
+            .transition(.asymmetric(
+                insertion: .move(edge: .trailing).combined(with: .opacity),
+                removal: .move(edge: .leading).combined(with: .opacity)
+            ))
+            .animation(.easeInOut(duration: 0.3), value: featureSlide)
+
+            Spacer()
+
+            // 페이지 인디케이터
+            HStack(spacing: 8) {
+                ForEach(0..<featureSlides.count, id: \.self) { i in
+                    Capsule()
+                        .fill(i == featureSlide ? Color.tteOrange : Color(UIColor.tertiarySystemFill))
+                        .frame(width: i == featureSlide ? 20 : 8, height: 8)
+                        .animation(.easeInOut(duration: 0.2), value: featureSlide)
+                }
+            }
+            .padding(.bottom, 32)
+
+            // 버튼
+            VStack(spacing: 12) {
+                if featureSlide < featureSlides.count - 1 {
+                    nextButton(title: "다음") {
+                        withAnimation { featureSlide += 1 }
+                    }
+                    Button("건너뛰기") {
+                        withAnimation { step = 1 }
+                    }
+                    .font(.system(size: 14))
+                    .foregroundColor(.tteMediumGray)
+                } else {
+                    nextButton(title: "시작하기 🎉") {
+                        withAnimation { step = 1 }
+                    }
+                }
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 48)
+        }
+    }
+
+    // MARK: - Step 1: 환영
     private var welcomeStep: some View {
         VStack(spacing: 0) {
             Spacer()
@@ -83,7 +162,7 @@ struct OnboardingView: View {
             featurePreview
                 .padding(.bottom, 48)
 
-            nextButton(title: "시작하기") { step = 1 }
+            nextButton(title: "닉네임 설정하기") { step = 2 }
                 .padding(.horizontal, 24)
                 .padding(.bottom, 48)
         }
@@ -112,7 +191,7 @@ struct OnboardingView: View {
         }
     }
 
-    // MARK: - Step 1: 닉네임
+    // MARK: - Step 2: 닉네임
     private var nicknameStep: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 12) {
@@ -152,7 +231,7 @@ struct OnboardingView: View {
                 .disabled(nickname.trimmingCharacters(in: .whitespaces).count < 2 || nickname.count > 10)
                 .opacity(nickname.trimmingCharacters(in: .whitespaces).count < 2 || nickname.count > 10 ? 0.4 : 1)
 
-                Button("나중에 설정하기") { step = 2 }
+                Button("나중에 설정하기") { step = 3 }
                     .font(.system(size: 14))
                     .foregroundColor(.tteMediumGray)
             }
@@ -161,7 +240,7 @@ struct OnboardingView: View {
         }
     }
 
-    // MARK: - Step 2: 권한
+    // MARK: - Step 3: 권한
     private var permissionStep: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 12) {
@@ -211,13 +290,13 @@ struct OnboardingView: View {
 
             Spacer()
 
-            nextButton(title: "다음") { step = 3 }
+            nextButton(title: "다음") { step = 4 }
                 .padding(.horizontal, 24)
                 .padding(.bottom, 48)
         }
     }
 
-    // MARK: - Step 3: 약관
+    // MARK: - Step 4: 약관
     private var termsStep: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 12) {
@@ -301,7 +380,7 @@ struct OnboardingView: View {
             nickname: nickname.trimmingCharacters(in: .whitespaces)
         )
         try? await userService.saveUser(user)
-        step = 2
+        step = 3
     }
 
     private func finishOnboarding() async {
