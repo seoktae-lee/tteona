@@ -62,11 +62,7 @@ struct MyCourseView: View {
         .task {
             if let uid = authService.currentUser?.uid {
                 await courseService.fetchLikedCourseIds(userId: uid)
-                roomService.startListeningMyRooms(userId: uid)
             }
-        }
-        .onDisappear {
-            roomService.stopListeningMyRooms()
         }
     }
 

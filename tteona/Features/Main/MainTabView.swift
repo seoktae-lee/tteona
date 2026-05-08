@@ -17,9 +17,9 @@ struct MainTabView: View {
                     Label("홈", systemImage: "map.fill")
                 }
 
-            MyCourseView()
+            FeedTabView()
                 .tabItem {
-                    Label("나의 코스", systemImage: "heart.fill")
+                    Label("피드", systemImage: "bubble.left.and.bubble.right.fill")
                 }
 
             SettingsView()

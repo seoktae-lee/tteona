@@ -15,6 +15,9 @@ struct MainView: View {
     @State private var selectedRoomIds: Set<String> = []
     @State private var searchedRegionName: String? = nil
     @State private var showRegionSearch = false
+    @State private var courseFilter: CourseFilter = .all
+
+    enum CourseFilter { case all, liked, mine }
     @State private var mapRegion = MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 36.5, longitude: 127.8),
         span: MKCoordinateSpan(latitudeDelta: 5, longitudeDelta: 5)
@@ -26,8 +29,16 @@ struct MainView: View {
         )
     )
 
+    private var filteredCourses: [Course] {
+        switch courseFilter {
+        case .all:   return courseService.courses
+        case .liked: return courseService.courses.filter { courseService.likedCourseIds.contains($0.courseId) }
+        case .mine:  return courseService.courses.filter { $0.authorId == authService.currentUser?.uid }
+        }
+    }
+
     private var visibleCourses: [Course] {
-        courseService.courses.filter { course in
+        filteredCourses.filter { course in
             guard let first = course.places.first else { return false }
             return mapRegion.contains(first.coordinate)
         }
@@ -43,6 +54,9 @@ struct MainView: View {
         .ignoresSafeArea()
         .task {
             await courseService.fetchCourses()
+            if let uid = authService.currentUser?.uid {
+                await courseService.fetchLikedCourseIds(userId: uid)
+            }
             locationService.requestPermission()
             locationService.startTracking(places: [])
             if let coord = locationService.currentLocation?.coordinate {
@@ -125,64 +139,78 @@ struct MainView: View {
     // MARK: - Top Bar
     private var topBar: some View {
         VStack {
-            HStack(spacing: 10) {
-                // 지역 검색 버튼
-                Button {
-                    showRegionSearch = true
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "magnifyingglass")
-                            .font(.system(size: 14, weight: .medium))
-                        Text(searchedRegionName ?? "지역 검색")
-                            .font(.system(size: 14, weight: .medium))
-                            .lineLimit(1)
-                        if searchedRegionName != nil {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 14))
-                                .foregroundColor(.tteMediumGray)
-                                .onTapGesture {
-                                    searchedRegionName = nil
-                                    cameraPosition = .region(MKCoordinateRegion(
-                                        center: CLLocationCoordinate2D(latitude: 36.5, longitude: 127.8),
-                                        span: MKCoordinateSpan(latitudeDelta: 5, longitudeDelta: 5)
-                                    ))
-                                }
+            GeometryReader { geo in
+                let spacing: CGFloat = 12
+                let totalPadding: CGFloat = 32 + spacing + spacing
+                let plusSize: CGFloat = 40
+                let searchWidth: CGFloat = plusSize
+                let filterWidth: CGFloat = geo.size.width - totalPadding - searchWidth - plusSize
+
+                HStack(spacing: spacing) {
+                    // 지역 검색 버튼
+                    Button {
+                        showRegionSearch = true
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "magnifyingglass")
+                                .font(.system(size: 14, weight: .medium))
+                            if let name = searchedRegionName {
+                                Text(name)
+                                    .font(.system(size: 13, weight: .medium))
+                                    .lineLimit(1)
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 13))
+                                    .foregroundColor(.tteMediumGray)
+                                    .onTapGesture {
+                                        searchedRegionName = nil
+                                        cameraPosition = .region(MKCoordinateRegion(
+                                            center: CLLocationCoordinate2D(latitude: 36.5, longitude: 127.8),
+                                            span: MKCoordinateSpan(latitudeDelta: 5, longitudeDelta: 5)
+                                        ))
+                                    }
+                            }
+                        }
+                        .foregroundColor(searchedRegionName != nil ? .tteOrange : .tteDarkGray)
+                        .frame(width: searchedRegionName != nil ? nil : searchWidth, height: plusSize)
+                        .padding(.horizontal, searchedRegionName != nil ? 12 : 0)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        .shadow(color: .black.opacity(0.1), radius: 6, y: 2)
+                    }
+
+                    // 코스 필터
+                    HStack(spacing: 0) {
+                        ForEach([("전체", CourseFilter.all), ("좋아요", .liked), ("내 코스", .mine)], id: \.0) { label, filter in
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.2)) { courseFilter = filter }
+                            } label: {
+                                Text(label)
+                                    .font(.system(size: 13, weight: courseFilter == filter ? .semibold : .regular))
+                                    .foregroundColor(courseFilter == filter ? .white : .primary.opacity(0.7))
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: plusSize)
+                                    .background(Capsule().fill(courseFilter == filter ? Color.tteOrange : Color.clear))
+                            }
                         }
                     }
-                    .foregroundColor(searchedRegionName != nil ? .tteOrange : .tteDarkGray)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(
-                        Capsule()
-                            .fill(Color.tteBackground)
-                            .shadow(color: .black.opacity(0.1), radius: 6, y: 2)
-                    )
-                }
+                    .frame(width: filterWidth)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .shadow(color: .black.opacity(0.1), radius: 6, y: 2)
 
-                Spacer()
-
-                // 코스 만들기
-                Button {
-                    showCreateCourse = true
-                } label: {
-                    HStack(spacing: 5) {
+                    // 코스 만들기
+                    Button {
+                        showCreateCourse = true
+                    } label: {
                         Image(systemName: "plus")
-                            .font(.system(size: 12, weight: .semibold))
-                        Text("코스 만들기")
-                            .font(.system(size: 13, weight: .semibold))
-                    }
-                    .foregroundColor(.tteDarkGray)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(
-                        Capsule()
-                            .fill(Color.tteBackground)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(.tteDarkGray)
+                            .frame(width: plusSize, height: plusSize)
+                            .background(.ultraThinMaterial, in: Circle())
                             .shadow(color: .black.opacity(0.1), radius: 6, y: 2)
-                    )
+                    }
                 }
-
+                .padding(.horizontal, 16)
             }
-            .padding(.horizontal, 16)
+            .frame(height: 40)
             .padding(.top, 56)
 
             Spacer()
