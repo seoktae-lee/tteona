@@ -31,7 +31,8 @@ class FCMService: NSObject {
         senderUserId: String,
         senderNickname: String,
         roomIds: [String],
-        courseName: String? = nil
+        courseName: String? = nil,
+        placeName: String? = nil
     ) {
         guard !roomIds.isEmpty else { return }
         let data: [String: Any] = [
@@ -40,6 +41,7 @@ class FCMService: NSObject {
             "senderNickname": senderNickname,
             "roomIds": roomIds,
             "courseName": courseName as Any,
+            "placeName": placeName as Any,
             "createdAt": FieldValue.serverTimestamp(),
             "processed": false
         ]
@@ -86,5 +88,6 @@ enum GroupNotificationType: String {
     case freeTripStart = "free_trip_start"       // 나의 오늘 시작
     case freeTripEnd = "free_trip_end"           // 나의 오늘 종료
     case courseTripStart = "course_trip_start"   // 코스 여행 시작
+    case videoRecorded = "video_recorded"        // 장소 영상 촬영
     case feedComment = "feed_comment"            // 피드 댓글
 }

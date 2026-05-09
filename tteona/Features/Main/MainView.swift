@@ -8,11 +8,14 @@ struct MainView: View {
     @EnvironmentObject private var roomService: RoomService
     @EnvironmentObject private var notificationManager: AppNotificationManager
     @StateObject private var locationService = LocationService()
+    @ObservedObject private var activeSessionStore = ActiveSessionStore.shared
+    @ObservedObject private var impromptuSessionStore = ImpromptuSessionStore.shared
     @State private var selectedCourse: Course?
     @State private var impromptuRoomIds: Set<String>? = nil
     @State private var resumeActiveSession: Set<String>? = nil
-    @State private var hasSavedImpromptuSession = false
-    @State private var hasSavedCourseSession = false
+    @State private var courseSessionInfo: CourseSessionInfo? = nil
+    @State private var showCourseResumeSheet = false
+    @State private var pendingNewCourse: Course? = nil
     @State private var showRoomSelect = false
     @State private var selectedRoomIds: Set<String> = []
     @State private var searchedRegionName: String? = nil
@@ -54,15 +57,6 @@ struct MainView: View {
             createCourseButton
         }
         .ignoresSafeArea()
-        .onAppear {
-            refreshSessionState()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
-            refreshSessionState()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .activeSessionDidChange)) { _ in
-            refreshSessionState()
-        }
         .task {
             await courseService.fetchCourses()
             if let uid = authService.currentUser?.uid {
@@ -80,12 +74,17 @@ struct MainView: View {
                   let coord = location?.coordinate else { return }
             Task { await moveToCountry(coord: coord) }
         }
-        .sheet(item: $selectedCourse, onDismiss: refreshSessionState) { course in
-            CourseDetailView(course: course)
-                .environmentObject(authService)
-                .environmentObject(courseService)
-                .environmentObject(userService)
-                .environmentObject(roomService)
+        .sheet(item: $selectedCourse) { course in
+            CourseDetailView(course: course) { roomIds in
+                selectedCourse = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                    courseSessionInfo = CourseSessionInfo(course: course, roomIds: roomIds)
+                }
+            }
+            .environmentObject(authService)
+            .environmentObject(courseService)
+            .environmentObject(userService)
+            .environmentObject(roomService)
         }
         .sheet(isPresented: $showRegionSearch) {
             RegionSearchView { name, coord in
@@ -98,6 +97,9 @@ struct MainView: View {
                 }
             }
         }
+        .sheet(isPresented: $showCourseResumeSheet) {
+            courseResumeSheet()
+        }
         .fullScreenCover(isPresented: $showRoomSelect) {
             RoomSelectView(selectedRoomIds: $selectedRoomIds) {
                 let confirmed = selectedRoomIds
@@ -108,7 +110,7 @@ struct MainView: View {
             }
             .environmentObject(roomService)
         }
-        .fullScreenCover(item: $impromptuRoomIds, onDismiss: refreshSessionState) { roomIds in
+        .fullScreenCover(item: $impromptuRoomIds) { roomIds in
             ImpromptuSessionView(selectedRoomIds: roomIds) {
                 impromptuRoomIds = nil
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
@@ -120,14 +122,12 @@ struct MainView: View {
             .environmentObject(courseService)
             .environmentObject(roomService)
         }
-        .fullScreenCover(item: $resumeActiveSession, onDismiss: refreshSessionState) { roomIds in
-            if let saved = ActiveSessionStore.shared.loadTodaySession() {
-                ActiveSessionView(course: saved.course, roomIds: roomIds)
-                    .environmentObject(AppNotificationManager.shared)
-                    .environmentObject(authService)
-                    .environmentObject(userService)
-                    .environmentObject(roomService)
-            }
+        .fullScreenCover(item: $courseSessionInfo) { info in
+            ActiveSessionView(course: info.course, roomIds: info.roomIds)
+                .environmentObject(AppNotificationManager.shared)
+                .environmentObject(authService)
+                .environmentObject(userService)
+                .environmentObject(roomService)
         }
         .onChange(of: notificationManager.shouldOpenTodaySession) { _, should in
             guard should else { return }
@@ -144,7 +144,12 @@ struct MainView: View {
                     Annotation(course.courseName, coordinate: first.coordinate) {
                         CourseMapPin(course: course)
                             .onTapGesture {
-                                withAnimation { selectedCourse = course }
+                                if activeSessionStore.hasTodaySession {
+                                    pendingNewCourse = course
+                                    showCourseResumeSheet = true
+                                } else {
+                                    withAnimation { selectedCourse = course }
+                                }
                             }
                     }
                 }
@@ -261,12 +266,6 @@ struct MainView: View {
         }
     }
 
-    private func refreshSessionState() {
-        let impromptu = ImpromptuSessionStore.shared.loadTodaySession()
-        hasSavedImpromptuSession = impromptu.map { !$0.places.isEmpty } ?? false
-        hasSavedCourseSession = ActiveSessionStore.shared.loadTodaySession() != nil
-    }
-
     private func handleImpromptuTap() {
         selectedRoomIds = []
         let saved = ImpromptuSessionStore.shared.loadTodaySession()
@@ -277,6 +276,83 @@ struct MainView: View {
         } else {
             showRoomSelect = true
         }
+    }
+
+    // MARK: - Course Resume Sheet
+    @ViewBuilder
+    private func courseResumeSheet() -> some View {
+        let saved = ActiveSessionStore.shared.loadTodaySession()
+        VStack(spacing: 0) {
+            RoundedRectangle(cornerRadius: 3)
+                .fill(Color.secondary.opacity(0.3))
+                .frame(width: 36, height: 5)
+                .padding(.top, 12)
+                .padding(.bottom, 24)
+
+            ZStack {
+                Circle()
+                    .fill(Color.tteOrange.opacity(0.12))
+                    .frame(width: 72, height: 72)
+                Image(systemName: "clock.arrow.circlepath")
+                    .font(.system(size: 30))
+                    .foregroundColor(.tteOrange)
+            }
+            .padding(.bottom, 16)
+
+            VStack(spacing: 6) {
+                Text("진행 중인 코스가 있어요")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundColor(.tteDarkGray)
+                if let saved {
+                    Text("\(saved.course.courseName) · \(saved.visitedPlaceOrders.count)/\(saved.orderedPlaces.count)곳 완료")
+                        .font(.system(size: 14))
+                        .foregroundColor(.tteMediumGray)
+                }
+            }
+            .padding(.bottom, 32)
+
+            VStack(spacing: 12) {
+                // 이어서 기록하기
+                Button {
+                    showCourseResumeSheet = false
+                    pendingNewCourse = nil
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                        if let session = ActiveSessionStore.shared.load() {
+                            courseSessionInfo = CourseSessionInfo(course: session.course, roomIds: Set(session.roomIds))
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "play.fill").font(.system(size: 15))
+                        Text("이어서 기록하기").font(.system(size: 16, weight: .semibold))
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity).frame(height: 56)
+                    .background(RoundedRectangle(cornerRadius: 16).fill(Color.tteOrange))
+                }
+
+                // 새로 시작하기 — 세션 삭제 후 홈으로
+                Button {
+                    showCourseResumeSheet = false
+                    pendingNewCourse = nil
+                    ActiveSessionStore.shared.clear()
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "arrow.counterclockwise").font(.system(size: 15))
+                        Text("새로 시작하기")
+                            .font(.system(size: 16, weight: .medium))
+                    }
+                    .foregroundColor(.tteDarkGray)
+                    .frame(maxWidth: .infinity).frame(height: 56)
+                    .background(RoundedRectangle(cornerRadius: 16).fill(Color(UIColor.secondarySystemBackground)))
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 40)
+        }
+        .presentationDetents([.height(360)])
+        .presentationDragIndicator(.hidden)
+        .interactiveDismissDisabled()
     }
 
     // MARK: - Bottom Buttons
@@ -310,7 +386,7 @@ struct MainView: View {
                 HStack {
                     HStack(spacing: 10) {
                         // 나의 오늘 이어하기
-                        if hasSavedImpromptuSession,
+                        if impromptuSessionStore.hasTodaySession,
                            let saved = ImpromptuSessionStore.shared.loadTodaySession() {
                             Button {
                                 impromptuRoomIds = Set(saved.roomIds)
@@ -328,15 +404,15 @@ struct MainView: View {
                         }
 
                         // 코스 이어하기
-                        if hasSavedCourseSession,
-                           let saved = ActiveSessionStore.shared.loadTodaySession() {
+                        if activeSessionStore.hasTodaySession {
                             Button {
-                                resumeActiveSession = Set(saved.roomIds)
+                                pendingNewCourse = nil
+                                showCourseResumeSheet = true
                             } label: {
                                 VStack(spacing: 3) {
                                     Image(systemName: "map.fill")
                                         .font(.system(size: 16, weight: .semibold))
-                                    Text("이어하기")
+                                    Text("코스")
                                         .font(.system(size: 9, weight: .medium))
                                 }
                                 .foregroundColor(.tteOrange)

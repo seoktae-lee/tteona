@@ -9,6 +9,7 @@ struct MainTabView: View {
     @State private var deepLinkedCourse: Course? = nil
     @State private var deepLinkedRoomCode: String? = nil
     @State private var showJoinRoomFromDeepLink = false
+    @State private var courseSessionInfo: CourseSessionInfo? = nil
 
     var body: some View {
         TabView {
@@ -30,12 +31,22 @@ struct MainTabView: View {
         .tint(.tteOrange)
         .environmentObject(userService)
         .environmentObject(roomService)
-        .sheet(item: $deepLinkedCourse, onDismiss: {
-            NotificationCenter.default.post(name: .activeSessionDidChange, object: nil)
-        }) { course in
-            CourseDetailView(course: course)
+        .sheet(item: $deepLinkedCourse) { course in
+            CourseDetailView(course: course) { roomIds in
+                deepLinkedCourse = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                    courseSessionInfo = CourseSessionInfo(course: course, roomIds: roomIds)
+                }
+            }
+            .environmentObject(authService)
+            .environmentObject(courseService)
+            .environmentObject(userService)
+            .environmentObject(roomService)
+        }
+        .fullScreenCover(item: $courseSessionInfo) { info in
+            ActiveSessionView(course: info.course, roomIds: info.roomIds)
+                .environmentObject(AppNotificationManager.shared)
                 .environmentObject(authService)
-                .environmentObject(courseService)
                 .environmentObject(userService)
                 .environmentObject(roomService)
         }

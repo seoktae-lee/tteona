@@ -13,6 +13,7 @@ interface FCMRequest {
   senderNickname: string;
   roomIds?: string[];
   courseName?: string;
+  placeName?: string;
   // feed_comment 전용
   targetUserId?: string;
   roomId?: string;
@@ -22,7 +23,7 @@ interface FCMRequest {
 }
 
 // 알림 타입별 메시지 생성
-function buildMessage(type: string, nickname: string, courseName?: string, commentText?: string): { title: string; body: string } {
+function buildMessage(type: string, nickname: string, courseName?: string, commentText?: string, placeName?: string): { title: string; body: string } {
   switch (type) {
     case "free_trip_start":
       return {
@@ -42,6 +43,13 @@ function buildMessage(type: string, nickname: string, courseName?: string, comme
         body: courseName
           ? `${nickname}님이 '${courseName}' 코스 여행을 시작했어요!`
           : `${nickname}님이 코스 여행을 시작했어요!`,
+      };
+    case "video_recorded":
+      return {
+        title: "📹 영상 촬영",
+        body: placeName
+          ? `${nickname}님이 ${placeName}에서 영상을 남겼어요`
+          : `${nickname}님이 영상을 남겼어요`,
       };
     case "feed_comment":
       return {
@@ -93,8 +101,8 @@ export const sendGroupNotification = onDocumentCreated(
     const data = event.data?.data() as FCMRequest | undefined;
     if (!data || data.processed) return;
 
-    const { type, senderUserId, senderNickname, roomIds, courseName, commentText } = data;
-    const { title, body } = buildMessage(type, senderNickname, courseName, commentText);
+    const { type, senderUserId, senderNickname, roomIds, courseName, commentText, placeName } = data;
+    const { title, body } = buildMessage(type, senderNickname, courseName, commentText, placeName);
 
     // 각 룸의 멤버 ID 수집 (발신자 제외)
     const recipientUserIds = new Set<string>();
@@ -147,7 +155,6 @@ export const sendGroupNotification = onDocumentCreated(
         payload: {
           aps: {
             sound: "default",
-            badge: 1,
           },
         },
       },

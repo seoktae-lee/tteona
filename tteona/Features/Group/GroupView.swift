@@ -171,6 +171,15 @@ struct JoinRoomView: View {
     @State private var inviteCode = ""
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var failCount = 0
+    @State private var lockUntil: Date? = nil
+    @State private var cooldownRemaining = 0
+    @State private var cooldownTimer: Timer? = nil
+
+    private let maxAttempts = 5
+    private let lockSeconds = 3600
+
+    private var isLocked: Bool { lockUntil.map { Date() < $0 } ?? false }
 
     var body: some View {
         NavigationStack {
@@ -195,11 +204,22 @@ struct JoinRoomView: View {
                 .padding(.horizontal, 20)
                 .padding(.top, 12)
 
-                if let error = errorMessage {
-                    Text(error)
+                if isLocked {
+                    Text("코드 입력 횟수를 초과했어요.\n\(cooldownRemaining / 60)분 후 다시 시도해주세요.")
                         .font(.system(size: 14))
                         .foregroundColor(.red)
+                        .multilineTextAlignment(.center)
                         .padding(.horizontal, 20)
+                } else if let error = errorMessage {
+                    VStack(spacing: 4) {
+                        Text(error)
+                            .font(.system(size: 14))
+                            .foregroundColor(.red)
+                        Text("\(failCount)/\(maxAttempts)회 실패")
+                            .font(.system(size: 12))
+                            .foregroundColor(.tteMediumGray)
+                    }
+                    .padding(.horizontal, 20)
                 }
 
                 Spacer()
@@ -220,10 +240,10 @@ struct JoinRoomView: View {
                     .frame(height: 54)
                     .background(
                         RoundedRectangle(cornerRadius: 14)
-                            .fill(inviteCode.count < 6 ? Color.gray.opacity(0.4) : Color.tteOrange)
+                            .fill(inviteCode.count < 6 || isLocked ? Color.gray.opacity(0.4) : Color.tteOrange)
                     )
                 }
-                .disabled(inviteCode.count < 6 || isLoading)
+                .disabled(inviteCode.count < 6 || isLoading || isLocked)
                 .padding(.horizontal, 20)
                 .padding(.bottom, 36)
             }
@@ -244,7 +264,7 @@ struct JoinRoomView: View {
     }
 
     private func join() async {
-        guard let uid = authService.currentUser?.uid else { return }
+        guard !isLocked, let uid = authService.currentUser?.uid else { return }
         let nickname = userService.currentUser?.nickname ?? "멤버"
         isLoading = true
         errorMessage = nil
@@ -252,8 +272,29 @@ struct JoinRoomView: View {
             _ = try await roomService.joinRoom(inviteCode: inviteCode, userId: uid, nickname: nickname)
             dismiss()
         } catch {
-            errorMessage = error.localizedDescription
+            failCount += 1
+            if failCount >= maxAttempts {
+                lockUntil = Date().addingTimeInterval(TimeInterval(lockSeconds))
+                cooldownRemaining = lockSeconds
+                startCooldownTimer()
+                errorMessage = nil
+            } else {
+                errorMessage = error.localizedDescription
+            }
         }
         isLoading = false
+    }
+
+    private func startCooldownTimer() {
+        cooldownTimer?.invalidate()
+        cooldownTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+            cooldownRemaining -= 1
+            if cooldownRemaining <= 0 {
+                cooldownTimer?.invalidate()
+                cooldownTimer = nil
+                lockUntil = nil
+                failCount = 0
+            }
+        }
     }
 }

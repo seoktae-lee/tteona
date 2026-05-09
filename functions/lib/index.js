@@ -41,7 +41,7 @@ admin.initializeApp();
 const db = admin.firestore();
 const messaging = admin.messaging();
 // 알림 타입별 메시지 생성
-function buildMessage(type, nickname, courseName, commentText) {
+function buildMessage(type, nickname, courseName, commentText, placeName) {
     switch (type) {
         case "free_trip_start":
             return {
@@ -61,6 +61,13 @@ function buildMessage(type, nickname, courseName, commentText) {
                 body: courseName
                     ? `${nickname}님이 '${courseName}' 코스 여행을 시작했어요!`
                     : `${nickname}님이 코스 여행을 시작했어요!`,
+            };
+        case "video_recorded":
+            return {
+                title: "📹 영상 촬영",
+                body: placeName
+                    ? `${nickname}님이 ${placeName}에서 영상을 남겼어요`
+                    : `${nickname}님이 영상을 남겼어요`,
             };
         case "feed_comment":
             return {
@@ -103,8 +110,8 @@ exports.sendGroupNotification = (0, firestore_1.onDocumentCreated)("fcmRequests/
     const data = event.data?.data();
     if (!data || data.processed)
         return;
-    const { type, senderUserId, senderNickname, roomIds, courseName, commentText } = data;
-    const { title, body } = buildMessage(type, senderNickname, courseName, commentText);
+    const { type, senderUserId, senderNickname, roomIds, courseName, commentText, placeName } = data;
+    const { title, body } = buildMessage(type, senderNickname, courseName, commentText, placeName);
     // 각 룸의 멤버 ID 수집 (발신자 제외)
     const recipientUserIds = new Set();
     // 방 전체 멤버에게 (발신자 제외)
@@ -147,7 +154,6 @@ exports.sendGroupNotification = (0, firestore_1.onDocumentCreated)("fcmRequests/
             payload: {
                 aps: {
                     sound: "default",
-                    badge: 1,
                 },
             },
         },

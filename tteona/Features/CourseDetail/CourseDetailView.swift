@@ -3,6 +3,7 @@ import MapKit
 
 struct CourseDetailView: View {
     let course: Course
+    var onStartSession: ((Set<String>) -> Void)? = nil
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var courseService: CourseService
     @EnvironmentObject private var userService: UserService
@@ -13,7 +14,6 @@ struct CourseDetailView: View {
     @State private var cameraPosition: MapCameraPosition = .automatic
     @State private var isLikeProcessing = false
     @State private var selectedRoomIds: Set<String> = []
-    @State private var activeRoomIds: Set<String>? = nil
 
     private let sessionStore = ActiveSessionStore.shared
 
@@ -75,24 +75,21 @@ struct CourseDetailView: View {
                 let confirmed = selectedRoomIds
                 showRoomSelect = false
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    activeRoomIds = confirmed
+                    dismiss()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                        onStartSession?(confirmed)
+                    }
                 }
             }
-            .environmentObject(roomService)
-        }
-        .fullScreenCover(item: $activeRoomIds) { roomIds in
-            ActiveSessionView(course: course, roomIds: roomIds) {
-                dismiss()
-            }
-            .environmentObject(AppNotificationManager.shared)
-            .environmentObject(authService)
-            .environmentObject(userService)
             .environmentObject(roomService)
         }
         .confirmationDialog("진행 중인 코스가 있어요", isPresented: $showOtherCourseAlert, titleVisibility: .visible) {
             Button("이어서 하기") {
                 if let saved = sessionStore.loadTodaySession() {
-                    activeRoomIds = Set(saved.roomIds)
+                    dismiss()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                        onStartSession?(Set(saved.roomIds))
+                    }
                 }
             }
             Button("새로 시작", role: .destructive) {
@@ -197,8 +194,11 @@ struct CourseDetailView: View {
         Button {
             if let saved = sessionStore.loadTodaySession() {
                 if saved.course.courseId == course.courseId {
-                    // 같은 코스 → 바로 열기 (내부 resumeSheet에서 이어서/새로 처리)
-                    activeRoomIds = Set(saved.roomIds)
+                    // 같은 코스 → MainView에서 직접 열기
+                    dismiss()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                        onStartSession?(Set(saved.roomIds))
+                    }
                 } else {
                     // 다른 코스 진행 중 → 막기
                     showOtherCourseAlert = true

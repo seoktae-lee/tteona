@@ -9,6 +9,7 @@ struct MyCourseView: View {
     @State private var selectedCourse: Course?
     @State private var courseToDelete: Course?
     @State private var showDeleteConfirm = false
+    @State private var courseSessionInfo: CourseSessionInfo? = nil
 
     enum MyCourseTab: String, CaseIterable {
         case liked = "좋아요"
@@ -43,9 +44,21 @@ struct MyCourseView: View {
             }
         }
         .sheet(item: $selectedCourse) { course in
-            CourseDetailView(course: course)
+            CourseDetailView(course: course) { roomIds in
+                selectedCourse = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                    courseSessionInfo = CourseSessionInfo(course: course, roomIds: roomIds)
+                }
+            }
+            .environmentObject(authService)
+            .environmentObject(courseService)
+            .environmentObject(userService)
+            .environmentObject(roomService)
+        }
+        .fullScreenCover(item: $courseSessionInfo) { info in
+            ActiveSessionView(course: info.course, roomIds: info.roomIds)
+                .environmentObject(AppNotificationManager.shared)
                 .environmentObject(authService)
-                .environmentObject(courseService)
                 .environmentObject(userService)
                 .environmentObject(roomService)
         }

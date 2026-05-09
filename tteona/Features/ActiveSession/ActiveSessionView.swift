@@ -4,7 +4,6 @@ import MapKit
 struct ActiveSessionView: View {
     let course: Course
     var roomIds: Set<String> = []
-    var onExit: (() -> Void)? = nil
     @StateObject private var locationService = LocationService()
     @EnvironmentObject private var notificationManager: AppNotificationManager
     @EnvironmentObject private var authService: AuthService
@@ -174,10 +173,6 @@ struct ActiveSessionView: View {
                     saveSession()
                     locationService.stopTracking()
                     dismiss()
-                    onExit?()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        NotificationCenter.default.post(name: .activeSessionDidChange, object: nil)
-                    }
                 } label: {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 16, weight: .semibold))
@@ -188,15 +183,30 @@ struct ActiveSessionView: View {
 
                 Spacer()
 
-                HStack(spacing: 6) {
-                    Circle().fill(Color.red).frame(width: 8, height: 8)
-                    Text("코스 진행 중")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(.white)
+                VStack(spacing: 4) {
+                    HStack(spacing: 6) {
+                        Circle().fill(Color.red).frame(width: 8, height: 8)
+                        Text("코스 진행 중")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.white)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(Capsule().fill(Color.black.opacity(0.6)))
+
+                    if !roomIds.isEmpty {
+                        HStack(spacing: 4) {
+                            Image(systemName: "location.fill")
+                                .font(.system(size: 10))
+                            Text("그룹 위치 공유 중")
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .foregroundColor(.white.opacity(0.9))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(Color.tteOrange.opacity(0.85)))
+                    }
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(Capsule().fill(Color.black.opacity(0.6)))
 
                 Spacer()
 
@@ -227,6 +237,32 @@ struct ActiveSessionView: View {
         VStack {
             Spacer()
             VStack(spacing: 16) {
+                // 촬영 완료된 장소 칩
+                let visitedList = orderedPlaces.filter { visitedPlaces.contains($0.order) }
+                if !visitedList.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(visitedList) { place in
+                                HStack(spacing: 4) {
+                                    Text("\(place.order)")
+                                        .font(.system(size: 11, weight: .bold))
+                                        .foregroundColor(.white)
+                                        .frame(width: 20, height: 20)
+                                        .background(Circle().fill(Color.tteOrange))
+                                    Text(place.placeName)
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundColor(.tteDarkGray)
+                                        .lineLimit(1)
+                                }
+                                .padding(.leading, 10).padding(.trailing, 12).padding(.vertical, 6)
+                                .background(RoundedRectangle(cornerRadius: 20)
+                                    .fill(Color(UIColor.secondarySystemBackground)))
+                            }
+                        }
+                        .padding(.horizontal, 4)
+                    }
+                }
+
                 if let place = currentPlace, !allVisited {
                     // 거리 표시
                     if let distance = locationService.distance(to: place) {
@@ -309,6 +345,13 @@ struct ActiveSessionView: View {
                                      placeName: place.placeName,
                                      latitude: lat, longitude: lon)
             }
+            FCMService.shared.requestGroupNotification(
+                type: .videoRecorded,
+                senderUserId: uid,
+                senderNickname: nickname,
+                roomIds: Array(roomIds),
+                placeName: place.placeName
+            )
         }
         if currentPlaceIndex < orderedPlaces.count - 1 {
             currentPlaceIndex += 1

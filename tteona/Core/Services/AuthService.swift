@@ -195,6 +195,8 @@ class AuthService: NSObject, ObservableObject {
 
     // MARK: - 로그아웃
     func signOut() {
+        ActiveSessionStore.shared.clear()
+        ImpromptuSessionStore.shared.clear()
         try? Auth.auth().signOut()
         GIDSignIn.sharedInstance.signOut()
     }
@@ -203,10 +205,7 @@ class AuthService: NSObject, ObservableObject {
     func deleteAccount(userId: String) async throws {
         let db = Firestore.firestore()
 
-        // users 문서 삭제
-        try await db.collection("users").document(userId).delete()
-
-        // 내가 만든 코스 삭제
+        // 1. 내가 만든 코스 삭제
         let coursesSnapshot = try await db.collection("courses")
             .whereField("authorId", isEqualTo: userId)
             .getDocuments()
@@ -214,7 +213,7 @@ class AuthService: NSObject, ObservableObject {
             try await doc.reference.delete()
         }
 
-        // 내가 속한 방에서 제거
+        // 2. 내가 속한 방에서 제거 + 내가 작성한 피드 삭제
         let roomsSnapshot = try await db.collection("rooms")
             .whereField("memberIds", arrayContains: userId)
             .getDocuments()
@@ -226,12 +225,26 @@ class AuthService: NSObject, ObservableObject {
                 .collection("members").document(userId).delete()
             try await db.collection("rooms").document(roomId)
                 .collection("locations").document(userId).delete()
+            let feedSnapshot = try? await db.collection("rooms").document(roomId)
+                .collection("feed")
+                .whereField("userId", isEqualTo: userId)
+                .getDocuments()
+            for feedDoc in feedSnapshot?.documents ?? [] {
+                try? await feedDoc.reference.delete()
+            }
         }
 
-        // UserDefaults 정리
-        UserDefaults.standard.removeObject(forKey: "onboarding_\(userId)")
+        // 3. users 문서 삭제 (likedCourseIds, fcmToken 등 포함)
+        try await db.collection("users").document(userId).delete()
 
-        // Firebase Auth 계정 삭제
+        // 4. 기기 로컬 데이터 정리
+        UserDefaults.standard.removeObject(forKey: "onboarding_\(userId)")
+        ActiveSessionStore.shared.clear()
+        ImpromptuSessionStore.shared.clear()
+        let docsDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        try? FileManager.default.removeItem(at: docsDir.appendingPathComponent("Tteona"))
+
+        // 5. Firebase Auth 계정 삭제
         try await Auth.auth().currentUser?.delete()
         GIDSignIn.sharedInstance.signOut()
     }

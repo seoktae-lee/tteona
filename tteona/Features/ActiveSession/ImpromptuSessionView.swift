@@ -190,14 +190,29 @@ struct ImpromptuSessionView: View {
                         .background(Circle().fill(Color.black.opacity(0.5)))
                 }
                 Spacer()
-                HStack(spacing: 6) {
-                    Circle().fill(Color.red).frame(width: 8, height: 8)
-                    Text("나의 오늘 기록 중")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(.white)
+                VStack(spacing: 4) {
+                    HStack(spacing: 6) {
+                        Circle().fill(Color.red).frame(width: 8, height: 8)
+                        Text("나의 오늘 기록 중")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.white)
+                    }
+                    .padding(.horizontal, 14).padding(.vertical, 8)
+                    .background(Capsule().fill(Color.black.opacity(0.6)))
+
+                    if !activeRoomIds.isEmpty {
+                        HStack(spacing: 4) {
+                            Image(systemName: "location.fill")
+                                .font(.system(size: 10))
+                            Text("그룹 위치 공유 중")
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .foregroundColor(.white.opacity(0.9))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(Color.tteOrange.opacity(0.85)))
+                    }
                 }
-                .padding(.horizontal, 14).padding(.vertical, 8)
-                .background(Capsule().fill(Color.black.opacity(0.6)))
                 Spacer()
                 Text("\(capturedPlaces.count)곳")
                     .font(.system(size: 14, weight: .bold))
@@ -478,6 +493,15 @@ struct ImpromptuSessionView: View {
                                  placeName: place.placeName,
                                  latitude: place.latitude,
                                  longitude: place.longitude)
+        }
+        if !activeRoomIds.isEmpty {
+            FCMService.shared.requestGroupNotification(
+                type: .videoRecorded,
+                senderUserId: uid,
+                senderNickname: nickname,
+                roomIds: Array(activeRoomIds),
+                placeName: place.placeName
+            )
         }
         pendingPlace = nil
     }

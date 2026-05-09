@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 import UserNotifications
 
 struct SavedImpromptuSession: Codable {
@@ -7,10 +8,16 @@ struct SavedImpromptuSession: Codable {
     var roomIds: [String]
 }
 
-class ImpromptuSessionStore {
+class ImpromptuSessionStore: ObservableObject {
     static let shared = ImpromptuSessionStore()
     private let key = "savedImpromptuSession"
     private let reminderID = "tteona.today.session.reminder"
+
+    @Published var hasTodaySession: Bool = false
+
+    private init() {
+        hasTodaySession = loadTodaySession() != nil
+    }
 
     func save(places: [Place], roomIds: [String] = []) {
         guard !places.isEmpty else { return }
@@ -20,6 +27,7 @@ class ImpromptuSessionStore {
         if let data = try? JSONEncoder().encode(session) {
             UserDefaults.standard.set(data, forKey: key)
         }
+        hasTodaySession = true
         scheduleReminderIfNeeded(placesCount: places.count)
     }
 
@@ -37,6 +45,7 @@ class ImpromptuSessionStore {
 
     func clear() {
         UserDefaults.standard.removeObject(forKey: key)
+        hasTodaySession = false
         cancelReminder()
     }
 

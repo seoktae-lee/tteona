@@ -42,6 +42,9 @@ struct TteonaApp: App {
                         await FCMService.shared.saveFCMToken(userId: uid)
                     }
                 }
+                .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+                    UNUserNotificationCenter.current().setBadgeCount(0)
+                }
         }
     }
 }
@@ -71,7 +74,7 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                  willPresent notification: UNNotification,
                                  withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
-        completionHandler([.banner, .sound, .badge])
+        completionHandler([.banner, .sound])
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter,
