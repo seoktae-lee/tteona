@@ -93,7 +93,7 @@ export const sendGroupNotification = onDocumentCreated(
     const data = event.data?.data() as FCMRequest | undefined;
     if (!data || data.processed) return;
 
-    const { type, senderUserId, senderNickname, roomIds, courseName, targetUserId, commentText } = data;
+    const { type, senderUserId, senderNickname, roomIds, courseName, commentText } = data;
     const { title, body } = buildMessage(type, senderNickname, courseName, commentText);
 
     // 각 룸의 멤버 ID 수집 (발신자 제외)
@@ -131,6 +131,15 @@ export const sendGroupNotification = onDocumentCreated(
     }
 
     // FCM 멀티캐스트 전송
+    const fcmData: Record<string, string> = {
+      type,
+      senderUserId,
+      courseName: courseName ?? "",
+    };
+    if (type === "feed_comment" && data.roomId) {
+      fcmData.roomId = data.roomId;
+    }
+
     const response = await messaging.sendEachForMulticast({
       tokens,
       notification: { title, body },
@@ -142,11 +151,7 @@ export const sendGroupNotification = onDocumentCreated(
           },
         },
       },
-      data: {
-        type,
-        senderUserId,
-        courseName: courseName ?? "",
-      },
+      data: fcmData,
     });
 
     console.log(

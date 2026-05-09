@@ -62,6 +62,18 @@ class AuthService: NSObject, ObservableObject {
         }
     }
 
+    // MARK: - 비밀번호 재설정
+    func sendPasswordReset(email: String) async -> Bool {
+        guard isValidEmail(email) else { errorMessage = "올바른 이메일 형식이 아닙니다."; return false }
+        do {
+            try await Auth.auth().sendPasswordReset(withEmail: email)
+            return true
+        } catch {
+            errorMessage = firebaseErrorMessage(error)
+            return false
+        }
+    }
+
     // MARK: - 이메일 회원가입
     func signUp(email: String, password: String) async {
         isLoading = true

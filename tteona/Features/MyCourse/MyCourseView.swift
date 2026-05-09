@@ -3,6 +3,7 @@ import SwiftUI
 struct MyCourseView: View {
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var courseService: CourseService
+    @EnvironmentObject private var userService: UserService
     @EnvironmentObject private var roomService: RoomService
     @State private var selectedTab: MyCourseTab = .liked
     @State private var selectedCourse: Course?
@@ -45,7 +46,8 @@ struct MyCourseView: View {
             CourseDetailView(course: course)
                 .environmentObject(authService)
                 .environmentObject(courseService)
-                .environmentObject(UserService())
+                .environmentObject(userService)
+                .environmentObject(roomService)
         }
         .alert("코스를 삭제할까요?", isPresented: $showDeleteConfirm) {
             Button("삭제", role: .destructive) {

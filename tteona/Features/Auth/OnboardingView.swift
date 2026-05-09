@@ -2,6 +2,7 @@ import SwiftUI
 import CoreLocation
 import AVFoundation
 import UserNotifications
+import Photos
 
 struct OnboardingView: View {
     @EnvironmentObject private var authService: AuthService
@@ -9,18 +10,25 @@ struct OnboardingView: View {
     @State private var step = 0
     @State private var featureSlide = 0
     @State private var nickname = ""
+    @State private var nicknameState: NicknameState = .idle
+    @State private var debounceTask: Task<Void, Never>? = nil
     @State private var agreedTerms = false
+
+    enum NicknameState {
+        case idle, checking, available, taken
+    }
     @State private var agreedPrivacy = false
     @State private var locationGranted = false
     @State private var notificationGranted = false
     @State private var cameraGranted = false
+    @State private var photoLibraryGranted = false
 
     private let totalSteps = 5
-    private let featureSlides: [(emoji: String, title: String, description: String)] = [
-        ("🗺", "코스 탐색", "전세계 다양한 코스를\n지도에서 찾아보세요"),
-        ("📹", "나의 오늘", "일상을 자유롭게\n기록하세요"),
-        ("🎬", "Vlog 생성", "여행이 끝나면\n자동으로 영상이 완성돼요"),
-        ("👥", "그룹", "친구/가족과 함께 코스와\n나의 오늘을 공유해보세요"),
+    private let featureSlides: [(icon: String, title: String, description: String)] = [
+        ("map.fill", "코스 탐색", "전세계 다양한 코스를\n지도에서 찾아보세요"),
+        ("video.fill", "나의 오늘", "일상을 자유롭게\n기록하세요"),
+        ("film.fill", "Vlog 생성", "여행이 끝나면\n자동으로 영상이 완성돼요"),
+        ("person.2.fill", "그룹", "친구/가족과 함께 코스와\n나의 오늘을 공유해보세요"),
     ]
 
     var body: some View {
@@ -36,8 +44,8 @@ struct OnboardingView: View {
 
                 Group {
                     switch step {
-                    case 0: featureIntroStep
-                    case 1: welcomeStep
+                    case 0: splashStep
+                    case 1: featureIntroStep
                     case 2: nicknameStep
                     case 3: permissionStep
                     case 4: termsStep
@@ -53,43 +61,103 @@ struct OnboardingView: View {
         }
     }
 
-    // MARK: - Progress Bar (step 1~4 전용)
+    // MARK: - Progress Bar (step 2~4 전용)
     private var progressBar: some View {
         HStack(spacing: 6) {
             ForEach(1..<totalSteps, id: \.self) { i in
                 Capsule()
-                    .fill(i <= step ? Color.tteOrange : Color(UIColor.tertiarySystemFill))
+                    .fill(i < step ? Color.tteOrange : Color(UIColor.tertiarySystemFill))
                     .frame(height: 4)
                     .animation(.easeInOut(duration: 0.3), value: step)
             }
         }
     }
 
-    // MARK: - Step 0: 기능 소개 슬라이드
+    // MARK: - Step 0: 스플래시
+    private var splashStep: some View {
+        VStack(spacing: 0) {
+            Spacer()
+
+            VStack(spacing: 36) {
+                Image("tteona-logo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 120, height: 120)
+                    .clipShape(RoundedRectangle(cornerRadius: 28))
+                    .shadow(color: .tteOrange.opacity(0.3), radius: 20, y: 8)
+
+                VStack(spacing: 10) {
+                    Text("tteona")
+                        .font(.system(size: 44, weight: .bold))
+                        .foregroundColor(.tteOrange)
+
+                    Text("특별한 순간을 영상으로 기록하세요")
+                        .font(.system(size: 16))
+                        .foregroundColor(.tteMediumGray)
+                }
+            }
+
+            Spacer()
+
+            nextButton(title: "시작하기") {
+                withAnimation { step = 1 }
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 48)
+        }
+    }
+
+    // MARK: - Step 1: 기능 소개 슬라이드
     private var featureIntroStep: some View {
         VStack(spacing: 0) {
+            // 상단 로고 헤더
+            HStack {
+                HStack(spacing: 8) {
+                    Image("tteona-logo")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 28, height: 28)
+                        .clipShape(RoundedRectangle(cornerRadius: 7))
+                    Text("tteona")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(.tteOrange)
+                }
+                Spacer()
+                Button("건너뛰기") {
+                    withAnimation { step = 2 }
+                }
+                .font(.system(size: 14))
+                .foregroundColor(.tteMediumGray)
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 60)
+
             Spacer()
 
             // 슬라이드 콘텐츠
             let slide = featureSlides[featureSlide]
-            VStack(spacing: 28) {
+            VStack(spacing: 36) {
                 ZStack {
                     Circle()
-                        .fill(Color.tteOrange.opacity(0.1))
-                        .frame(width: 140, height: 140)
-                    Text(slide.emoji)
-                        .font(.system(size: 72))
+                        .fill(Color.tteOrange.opacity(0.08))
+                        .frame(width: 160, height: 160)
+                    Circle()
+                        .fill(Color.tteOrange.opacity(0.14))
+                        .frame(width: 120, height: 120)
+                    Image(systemName: slide.icon)
+                        .font(.system(size: 48, weight: .medium))
+                        .foregroundColor(.tteOrange)
                 }
 
-                VStack(spacing: 12) {
+                VStack(spacing: 14) {
                     Text(slide.title)
                         .font(.system(size: 28, weight: .bold))
-                        .foregroundColor(.tteOrange)
+                        .foregroundColor(.tteDarkGray)
                     Text(slide.description)
                         .font(.system(size: 17))
                         .foregroundColor(.tteMediumGray)
                         .multilineTextAlignment(.center)
-                        .lineSpacing(4)
+                        .lineSpacing(5)
                 }
             }
             .id(featureSlide)
@@ -106,7 +174,7 @@ struct OnboardingView: View {
                 ForEach(0..<featureSlides.count, id: \.self) { i in
                     Capsule()
                         .fill(i == featureSlide ? Color.tteOrange : Color(UIColor.tertiarySystemFill))
-                        .frame(width: i == featureSlide ? 20 : 8, height: 8)
+                        .frame(width: i == featureSlide ? 24 : 8, height: 8)
                         .animation(.easeInOut(duration: 0.2), value: featureSlide)
                 }
             }
@@ -118,76 +186,14 @@ struct OnboardingView: View {
                     nextButton(title: "다음") {
                         withAnimation { featureSlide += 1 }
                     }
-                    Button("건너뛰기") {
-                        withAnimation { step = 1 }
-                    }
-                    .font(.system(size: 14))
-                    .foregroundColor(.tteMediumGray)
                 } else {
-                    nextButton(title: "시작하기 🎉") {
-                        withAnimation { step = 1 }
+                    nextButton(title: "시작하기") {
+                        withAnimation { step = 2 }
                     }
                 }
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 48)
-        }
-    }
-
-    // MARK: - Step 1: 환영
-    private var welcomeStep: some View {
-        VStack(spacing: 0) {
-            Spacer()
-
-            VStack(spacing: 20) {
-                Text("✈️")
-                    .font(.system(size: 72))
-
-                VStack(spacing: 10) {
-                    Text("떠나에 오신 걸\n환영해요!")
-                        .font(.system(size: 32, weight: .bold))
-                        .foregroundColor(.tteDarkGray)
-                        .multilineTextAlignment(.center)
-
-                    Text("GPS가 장소 도착을 감지하면\n자동으로 촬영 알림을 보내드려요.\n여행이 끝나면 Vlog가 완성됩니다.")
-                        .font(.system(size: 16))
-                        .foregroundColor(.tteMediumGray)
-                        .multilineTextAlignment(.center)
-                        .lineSpacing(4)
-                }
-            }
-
-            Spacer()
-
-            featurePreview
-                .padding(.bottom, 48)
-
-            nextButton(title: "닉네임 설정하기") { step = 2 }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 48)
-        }
-    }
-
-    private var featurePreview: some View {
-        HStack(spacing: 16) {
-            ForEach([
-                ("📍", "코스 탐색"),
-                ("📹", "자동 촬영"),
-                ("🎬", "Vlog 생성")
-            ], id: \.0) { emoji, label in
-                VStack(spacing: 8) {
-                    Text(emoji)
-                        .font(.system(size: 32))
-                        .frame(width: 64, height: 64)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(Color.tteOrange.opacity(0.1))
-                        )
-                    Text(label)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(.tteDarkGray)
-                }
-            }
         }
     }
 
@@ -198,7 +204,7 @@ struct OnboardingView: View {
                 Text("닉네임을\n설정해주세요")
                     .font(.system(size: 30, weight: .bold))
                     .foregroundColor(.tteDarkGray)
-                    .padding(.top, 48)
+                    .padding(.top, 24)
 
                 Text("코스를 만들 때 닉네임이 표시됩니다.")
                     .font(.system(size: 15))
@@ -212,31 +218,60 @@ struct OnboardingView: View {
             VStack(spacing: 8) {
                 TteTextField(placeholder: "닉네임 입력 (2~10자)", text: $nickname)
                     .padding(.horizontal, 24)
+                    .onChange(of: nickname) { _, newValue in
+                        scheduleNicknameCheck(newValue)
+                    }
 
-                HStack {
+                HStack(spacing: 6) {
+                    switch nicknameState {
+                    case .checking:
+                        ProgressView().scaleEffect(0.7)
+                        Text("확인 중...")
+                            .font(.system(size: 12))
+                            .foregroundColor(.tteMediumGray)
+                    case .available:
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 13))
+                            .foregroundColor(.green)
+                        Text("사용 가능한 별명이에요")
+                            .font(.system(size: 12))
+                            .foregroundColor(.green)
+                    case .taken:
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 13))
+                            .foregroundColor(.red)
+                        Text("이미 사용 중인 별명이에요")
+                            .font(.system(size: 12))
+                            .foregroundColor(.red)
+                    case .idle:
+                        EmptyView()
+                    }
                     Spacer()
                     Text("\(nickname.count)/10")
                         .font(.system(size: 12))
                         .foregroundColor(nickname.count > 10 ? .red : .tteMediumGray)
-                        .padding(.trailing, 28)
                 }
+                .padding(.horizontal, 28)
+                .frame(height: 20)
             }
 
             Spacer()
 
+            let isInvalid = nickname.trimmingCharacters(in: .whitespaces).count < 2
+                || nickname.count > 10
+                || nicknameState == .taken
+                || nicknameState == .checking
+                || nicknameState == .idle
             VStack(spacing: 12) {
                 nextButton(title: "다음") {
                     Task { await saveNickname() }
                 }
-                .disabled(nickname.trimmingCharacters(in: .whitespaces).count < 2 || nickname.count > 10)
-                .opacity(nickname.trimmingCharacters(in: .whitespaces).count < 2 || nickname.count > 10 ? 0.4 : 1)
+                .disabled(isInvalid)
+                .opacity(isInvalid ? 0.4 : 1)
 
-                Button("나중에 설정하기") { step = 3 }
-                    .font(.system(size: 14))
-                    .foregroundColor(.tteMediumGray)
             }
             .padding(.horizontal, 24)
-            .padding(.bottom, 48)
+            .padding(.bottom, 40)
         }
     }
 
@@ -260,7 +295,7 @@ struct OnboardingView: View {
 
             VStack(spacing: 14) {
                 PermissionRow(
-                    emoji: "📍",
+                    icon: "location.fill",
                     title: "위치 권한",
                     description: "장소 도착을 감지하고 지도에 현재 위치를 표시해요",
                     isGranted: locationGranted
@@ -269,7 +304,7 @@ struct OnboardingView: View {
                 }
 
                 PermissionRow(
-                    emoji: "🔔",
+                    icon: "bell.fill",
                     title: "알림 권한",
                     description: "장소에 도착하면 촬영 알림을 보내드려요",
                     isGranted: notificationGranted
@@ -278,12 +313,21 @@ struct OnboardingView: View {
                 }
 
                 PermissionRow(
-                    emoji: "📷",
+                    icon: "video.fill",
                     title: "카메라 권한",
-                    description: "각 장소에서 10초 영상을 촬영해요",
+                    description: "각 장소에서 5초 영상을 촬영해요",
                     isGranted: cameraGranted
                 ) {
                     requestCamera()
+                }
+
+                PermissionRow(
+                    icon: "photo.fill",
+                    title: "사진 라이브러리 권한",
+                    description: "촬영한 영상을 앨범에 저장해요",
+                    isGranted: photoLibraryGranted
+                ) {
+                    requestPhotoLibrary()
                 }
             }
             .padding(.horizontal, 24)
@@ -346,7 +390,7 @@ struct OnboardingView: View {
 
             Spacer()
 
-            nextButton(title: "떠나기 시작! 🎉") {
+            nextButton(title: "떠나기 시작") {
                 Task { await finishOnboarding() }
             }
             .disabled(!agreedTerms || !agreedPrivacy)
@@ -372,15 +416,32 @@ struct OnboardingView: View {
     }
 
     // MARK: - Actions
+    private func scheduleNicknameCheck(_ value: String) {
+        debounceTask?.cancel()
+        let trimmed = value.trimmingCharacters(in: .whitespaces)
+        guard trimmed.count >= 2, trimmed.count <= 10 else {
+            nicknameState = .idle
+            return
+        }
+        nicknameState = .checking
+        debounceTask = Task {
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            guard !Task.isCancelled else { return }
+            let taken = await userService.isNicknameTaken(trimmed)
+            nicknameState = taken ? .taken : .available
+        }
+    }
+
     private func saveNickname() async {
-        guard let uid = authService.currentUser?.uid else { return }
+        guard let uid = authService.currentUser?.uid,
+              nicknameState == .available else { return }
         let user = AppUser(
             uid: uid,
             email: authService.currentUser?.email ?? "",
             nickname: nickname.trimmingCharacters(in: .whitespaces)
         )
         try? await userService.saveUser(user)
-        step = 3
+        withAnimation { step = 3 }
     }
 
     private func finishOnboarding() async {
@@ -417,11 +478,19 @@ struct OnboardingView: View {
             DispatchQueue.main.async { cameraGranted = granted }
         }
     }
+
+    private func requestPhotoLibrary() {
+        PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
+            DispatchQueue.main.async {
+                photoLibraryGranted = status == .authorized || status == .limited
+            }
+        }
+    }
 }
 
 // MARK: - Permission Row
 struct PermissionRow: View {
-    let emoji: String
+    let icon: String
     let title: String
     let description: String
     let isGranted: Bool
@@ -429,12 +498,13 @@ struct PermissionRow: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            Text(emoji)
-                .font(.system(size: 28))
+            Image(systemName: icon)
+                .font(.system(size: 22, weight: .medium))
+                .foregroundColor(.tteOrange)
                 .frame(width: 52, height: 52)
                 .background(
                     RoundedRectangle(cornerRadius: 14)
-                        .fill(Color.tteOrange.opacity(0.1))
+                        .fill(Color.tteOrange.opacity(0.12))
                 )
 
             VStack(alignment: .leading, spacing: 3) {
@@ -444,7 +514,7 @@ struct PermissionRow: View {
                 Text(description)
                     .font(.system(size: 12))
                     .foregroundColor(.tteMediumGray)
-                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Spacer()
@@ -506,6 +576,7 @@ struct TermsRow: View {
         }
     }
 }
+
 
 #Preview {
     OnboardingView()

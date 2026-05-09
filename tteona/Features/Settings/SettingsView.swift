@@ -87,6 +87,22 @@ struct SettingsView: View {
                     .foregroundColor(.tteMediumGray)
             }
             Button {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            } label: {
+                HStack {
+                    Label("언어", systemImage: "globe")
+                        .foregroundColor(.tteDarkGray)
+                    Spacer()
+                    Text("한국어")
+                        .foregroundColor(.tteMediumGray)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(Color(UIColor.tertiaryLabel))
+                }
+            }
+            Button {
                 // 추후 연결
             } label: {
                 Label("개인정보 처리방침", systemImage: "lock.shield")

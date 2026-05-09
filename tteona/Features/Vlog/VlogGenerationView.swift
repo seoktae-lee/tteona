@@ -11,6 +11,7 @@ struct VlogGenerationView: View {
     @State private var vlogURL: URL?
     @State private var errorMessage: String?
     @State private var progress: Double = 0
+    @State private var didGenerate = false
 
     private let vlogService = VlogService()
 
@@ -67,6 +68,8 @@ struct VlogGenerationView: View {
             }
         }
         .task {
+            guard !didGenerate else { return }
+            didGenerate = true
             do {
                 let url = try await vlogService.generateVlog(
                     course: course,

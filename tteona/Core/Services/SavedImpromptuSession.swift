@@ -4,6 +4,7 @@ import UserNotifications
 struct SavedImpromptuSession: Codable {
     let date: Date
     let places: [Place]
+    var roomIds: [String]
 }
 
 class ImpromptuSessionStore {
@@ -11,9 +12,11 @@ class ImpromptuSessionStore {
     private let key = "savedImpromptuSession"
     private let reminderID = "tteona.today.session.reminder"
 
-    func save(places: [Place]) {
+    func save(places: [Place], roomIds: [String] = []) {
         guard !places.isEmpty else { return }
-        let session = SavedImpromptuSession(date: Date(), places: places)
+        let existing = load()
+        let ids = roomIds.isEmpty ? (existing?.roomIds ?? []) : roomIds
+        let session = SavedImpromptuSession(date: Date(), places: places, roomIds: ids)
         if let data = try? JSONEncoder().encode(session) {
             UserDefaults.standard.set(data, forKey: key)
         }

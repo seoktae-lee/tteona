@@ -1,4 +1,5 @@
 import SwiftUI
+import MapKit
 
 // 채팅 타임라인에서 피드 이벤트와 댓글을 통합하는 타입
 enum ChatEntry: Identifiable {
@@ -31,6 +32,7 @@ struct MemberChatView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var entries: [ChatEntry] = []
+    @State private var feedItems: [FeedItem] = []
     @State private var commentText = ""
     @State private var isLoading = true
     @State private var isPosting = false
@@ -38,7 +40,6 @@ struct MemberChatView: View {
 
     private var uid: String { authService.currentUser?.uid ?? "" }
     private var nickname: String { userService.currentUser?.nickname ?? "멤버" }
-    private var isMyChat: Bool { uid == memberUserId }
 
     var body: some View {
         NavigationStack {
@@ -72,7 +73,15 @@ struct MemberChatView: View {
                 }
             }
         }
-        .task { await loadEntries() }
+        .onAppear {
+            roomService.startListeningMemberFeed(roomId: roomId, userId: memberUserId) { items in
+                feedItems = items
+                Task { await rebuildEntries(feeds: items) }
+            }
+        }
+        .onDisappear {
+            roomService.stopListeningMemberFeed()
+        }
     }
 
     // MARK: - 채팅 목록
@@ -93,15 +102,10 @@ struct MemberChatView: View {
                 }
                 .padding(.vertical, 12)
             }
-            .onAppear {
-                if let last = entries.last {
-                    proxy.scrollTo(last.id, anchor: .bottom)
-                }
-            }
+            .defaultScrollAnchor(.bottom)
             .onChange(of: entries.count) { _, _ in
-                if let last = entries.last {
-                    withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
-                }
+                guard let last = entries.last else { return }
+                withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
             }
         }
     }
@@ -133,12 +137,10 @@ struct MemberChatView: View {
         .background(Color.tteBackground.shadow(color: .black.opacity(0.06), radius: 8, y: -2))
     }
 
-    // MARK: - 데이터 로드
-    private func loadEntries() async {
-        let feeds = await roomService.fetchMemberFeedItems(roomId: roomId, userId: memberUserId)
+    // MARK: - 엔트리 재빌드 (피드 변경 시)
+    private func rebuildEntries(feeds: [FeedItem]) async {
         let feedIds = feeds.map(\.feedId)
         let commentsMap = await roomService.fetchAllCommentsForFeeds(roomId: roomId, feedIds: feedIds)
-
         var all: [ChatEntry] = []
         for feed in feeds {
             all.append(.feed(feed))
@@ -166,7 +168,7 @@ struct MemberChatView: View {
         } catch {
             print("[Comment] error: \(error)")
         }
-        await loadEntries()
+        await rebuildEntries(feeds: feedItems)
         isPosting = false
     }
 }
@@ -178,10 +180,11 @@ struct FeedEventRow: View {
     private var icon: String {
         switch item.type {
         case .tripStart:     return "🚀"
+        case .tripEnd:       return "✅"
         case .arrival:       return "📍"
         case .photo:         return "📸"
-        case .freeTripStart: return "🗺️"
-        case .freeCapture:   return "📸"
+        case .freeTripStart: return ""
+        case .freeCapture:   return "🎬"
         case .freeTripEnd:   return "✅"
         }
     }
@@ -189,6 +192,7 @@ struct FeedEventRow: View {
     private var message: String {
         switch item.type {
         case .tripStart:     return "\(item.courseName) 여행을 시작했어요!"
+        case .tripEnd:       return "\(item.courseName) 여행을 종료했어요!"
         case .arrival:       return "\(item.placeName ?? "")에 도착했어요!"
         case .photo:         return "사진을 공유했어요"
         case .freeTripStart: return "나의 오늘을 시작했어요!"
@@ -198,27 +202,83 @@ struct FeedEventRow: View {
     }
 
     var body: some View {
-        HStack {
-            Spacer()
-            HStack(spacing: 6) {
-                Text(icon)
-                    .font(.system(size: 13))
-                Text(message)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.tteMediumGray)
-                Text("·")
-                    .foregroundColor(.tteMediumGray.opacity(0.5))
-                Text(item.createdAt.relativeDescription)
-                    .font(.system(size: 11))
-                    .foregroundColor(.tteMediumGray.opacity(0.7))
+        if item.type == .freeCapture, let lat = item.latitude, let lon = item.longitude {
+            // 지도 썸네일 카드
+            let coord = CLLocationCoordinate2D(latitude: lat, longitude: lon)
+            Button {
+                openInMap(latitude: lat, longitude: lon, name: item.placeName ?? "영상 기록 장소")
+            } label: {
+                VStack(alignment: .leading, spacing: 0) {
+                    Map(position: .constant(.region(MKCoordinateRegion(
+                        center: coord,
+                        span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
+                    )))) {
+                        Annotation("", coordinate: coord) {
+                            ZStack {
+                                Circle().fill(Color.tteOrange).frame(width: 28, height: 28)
+                                Text("🎬").font(.system(size: 13))
+                            }
+                        }
+                    }
+                    .frame(height: 130)
+                    .disabled(true)
+                    .allowsHitTesting(false)
+
+                    HStack(spacing: 6) {
+                        Text("🎬")
+                            .font(.system(size: 12))
+                        Text(message)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.tteDarkGray)
+                        Spacer()
+                        Text(item.createdAt.relativeDescription)
+                            .font(.system(size: 11))
+                            .foregroundColor(.tteMediumGray.opacity(0.7))
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(UIColor.separator).opacity(0.3), lineWidth: 0.5))
             }
-            .padding(.horizontal, 12)
+            .buttonStyle(.plain)
+            .padding(.horizontal, 32)
             .padding(.vertical, 6)
-            .background(Capsule().fill(Color(UIColor.tertiarySystemBackground)))
-            Spacer()
+        } else {
+            // 기존 캡슐 스타일
+            HStack {
+                Spacer()
+                HStack(spacing: 6) {
+                    Text(icon)
+                        .font(.system(size: 13))
+                    Text(message)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.tteMediumGray)
+                    Text("·")
+                        .foregroundColor(.tteMediumGray.opacity(0.5))
+                    Text(item.createdAt.relativeDescription)
+                        .font(.system(size: 11))
+                        .foregroundColor(.tteMediumGray.opacity(0.7))
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Capsule().fill(Color(UIColor.tertiarySystemBackground)))
+                Spacer()
+            }
+            .padding(.vertical, 6)
+            .padding(.horizontal, 16)
         }
-        .padding(.vertical, 6)
-        .padding(.horizontal, 16)
+    }
+
+    private func openInMap(latitude: Double, longitude: Double, name: String) {
+        let kakaoScheme = "kakaomap://look?p=\(latitude),\(longitude)"
+        let appleURL = URL(string: "maps://?ll=\(latitude),\(longitude)&q=\(name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")")!
+
+        if let kakaoURL = URL(string: kakaoScheme), UIApplication.shared.canOpenURL(kakaoURL) {
+            UIApplication.shared.open(kakaoURL)
+        } else {
+            UIApplication.shared.open(appleURL)
+        }
     }
 }
 

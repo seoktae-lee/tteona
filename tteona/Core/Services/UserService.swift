@@ -27,4 +27,12 @@ class UserService: ObservableObject {
         try await db.collection("users").document(uid).updateData(["nickname": nickname])
         currentUser?.nickname = nickname
     }
+
+    func isNicknameTaken(_ nickname: String) async -> Bool {
+        let snapshot = try? await db.collection("users")
+            .whereField("nickname", isEqualTo: nickname.trimmingCharacters(in: .whitespaces))
+            .limit(to: 1)
+            .getDocuments()
+        return !(snapshot?.documents.isEmpty ?? true)
+    }
 }

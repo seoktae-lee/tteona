@@ -30,11 +30,14 @@ struct MainTabView: View {
         .tint(.tteOrange)
         .environmentObject(userService)
         .environmentObject(roomService)
-        .sheet(item: $deepLinkedCourse) { course in
+        .sheet(item: $deepLinkedCourse, onDismiss: {
+            NotificationCenter.default.post(name: .activeSessionDidChange, object: nil)
+        }) { course in
             CourseDetailView(course: course)
                 .environmentObject(authService)
                 .environmentObject(courseService)
                 .environmentObject(userService)
+                .environmentObject(roomService)
         }
         .sheet(isPresented: $showJoinRoomFromDeepLink) {
             JoinRoomView(initialCode: deepLinkedRoomCode ?? "")

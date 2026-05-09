@@ -32,6 +32,7 @@ struct ImpromptuSessionView: View {
     @State private var showResumeSheet = false
     @State private var savedSession: SavedImpromptuSession? = nil
     @State private var activeRoomIds: Set<String> = []
+    @State private var didStartSession = false
 
     private let sessionStore = ImpromptuSessionStore.shared
 
@@ -50,6 +51,8 @@ struct ImpromptuSessionView: View {
         }
         .ignoresSafeArea()
         .task {
+            guard !didStartSession else { return }
+            didStartSession = true
             locationService.requestPermission()
             locationService.startContinuousUpdates()
             activityManager.start()
@@ -466,13 +469,15 @@ struct ImpromptuSessionView: View {
         guard let place = pendingPlace else { return }
         capturedPlaces.append(place)
         reorderPlaces()
-        sessionStore.save(places: capturedPlaces)
+        sessionStore.save(places: capturedPlaces, roomIds: Array(activeRoomIds))
         activityManager.update(placesCount: capturedPlaces.count, lastPlaceName: place.placeName)
         for rid in activeRoomIds {
             roomService.postFeed(roomId: rid, type: .freeCapture,
                                  userId: uid, nickname: nickname,
                                  courseId: "free", courseName: "나의 오늘",
-                                 placeName: place.placeName)
+                                 placeName: place.placeName,
+                                 latitude: place.latitude,
+                                 longitude: place.longitude)
         }
         pendingPlace = nil
     }
@@ -554,10 +559,20 @@ struct ImpromptuSessionView: View {
     private func startNewSession() {
         capturedPlaces = []
         activeRoomIds = selectedRoomIds
+        let roomIds = Array(activeRoomIds)
+        print("[Feed] startNewSession uid=\(uid) nickname=\(nickname) roomIds=\(roomIds)")
+        for rid in roomIds {
+            roomService.postFeed(roomId: rid, type: .freeTripStart,
+                                 userId: uid, nickname: nickname,
+                                 courseId: "free", courseName: "나의 오늘")
+        }
     }
 
     private func resumeSession(_ session: SavedImpromptuSession) {
         capturedPlaces = session.places
+        if !session.roomIds.isEmpty {
+            activeRoomIds = Set(session.roomIds)
+        }
     }
 
     private func deleteAllClips() {

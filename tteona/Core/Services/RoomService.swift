@@ -17,6 +17,7 @@ class RoomService: ObservableObject {
     private var sharedCoursesListener: ListenerRegistration?
     private var locationsListener: ListenerRegistration?
     private var feedListener: ListenerRegistration?
+    private var memberFeedListener: ListenerRegistration?
 
     // MARK: - 방 생성
     func createRoom(name: String, userId: String, nickname: String) async throws -> Room {
@@ -211,7 +212,8 @@ class RoomService: ObservableObject {
 
     // MARK: - 피드 자동 기록
     func postFeed(roomId: String, type: FeedType, userId: String, nickname: String,
-                  courseId: String, courseName: String, placeName: String? = nil) {
+                  courseId: String, courseName: String, placeName: String? = nil,
+                  latitude: Double? = nil, longitude: Double? = nil) {
         let feedId = UUID().uuidString
         var data: [String: Any] = [
             "feedId": feedId,
@@ -224,6 +226,8 @@ class RoomService: ObservableObject {
             "createdAt": FieldValue.serverTimestamp()
         ]
         if let placeName { data["placeName"] = placeName }
+        if let latitude { data["latitude"] = latitude }
+        if let longitude { data["longitude"] = longitude }
         db.collection("rooms").document(roomId)
             .collection("feed").document(feedId).setData(data)
     }
@@ -231,7 +235,6 @@ class RoomService: ObservableObject {
     // MARK: - 피드 실시간 구독
     func startListeningFeed(roomId: String) {
         feedListener?.remove()
-        feedItems = []
         feedListener = db.collection("rooms").document(roomId)
             .collection("feed")
             .order(by: "createdAt", descending: true)
@@ -245,7 +248,47 @@ class RoomService: ObservableObject {
     func stopListeningFeed() {
         feedListener?.remove()
         feedListener = nil
-        feedItems = []
+    }
+
+    // MARK: - 멤버별 최신 피드 1개씩 가져오기
+    func fetchLatestFeedPerMember(roomId: String, memberIds: [String]) async -> [String: FeedItem] {
+        var result: [String: FeedItem] = [:]
+        await withTaskGroup(of: (String, FeedItem?).self) { group in
+            for userId in memberIds {
+                group.addTask {
+                    let snapshot = try? await self.db.collection("rooms").document(roomId)
+                        .collection("feed")
+                        .whereField("userId", isEqualTo: userId)
+                        .order(by: "createdAt", descending: true)
+                        .limit(to: 1)
+                        .getDocuments()
+                    let item = snapshot?.documents.first.flatMap { try? $0.data(as: FeedItem.self) }
+                    return (userId, item)
+                }
+            }
+            for await (userId, item) in group {
+                result[userId] = item
+            }
+        }
+        return result
+    }
+
+    // MARK: - 오늘 활동 중인 멤버 userId 집합 반환
+    func fetchActiveMemberIds(roomId: String) async -> Set<String> {
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: Date())
+        let snapshot = try? await db.collection("rooms").document(roomId)
+            .collection("feed")
+            .whereField("createdAt", isGreaterThanOrEqualTo: startOfDay)
+            .getDocuments()
+        let docs = snapshot?.documents ?? []
+        var active: Set<String> = []
+        for doc in docs {
+            if let userId = doc.data()["userId"] as? String {
+                active.insert(userId)
+            }
+        }
+        return active
     }
 
     // MARK: - 댓글 추가
@@ -287,6 +330,25 @@ class RoomService: ObservableObject {
             .order(by: "createdAt")
             .getDocuments()
         return snapshot?.documents.compactMap { try? $0.data(as: FeedComment.self) } ?? []
+    }
+
+    // MARK: - 멤버 피드 실시간 구독
+    func startListeningMemberFeed(roomId: String, userId: String, onChange: @escaping ([FeedItem]) -> Void) {
+        memberFeedListener?.remove()
+        memberFeedListener = db.collection("rooms").document(roomId)
+            .collection("feed")
+            .whereField("userId", isEqualTo: userId)
+            .order(by: "createdAt")
+            .addSnapshotListener { snapshot, _ in
+                guard let docs = snapshot?.documents else { return }
+                let items = docs.compactMap { try? $0.data(as: FeedItem.self) }
+                onChange(items)
+            }
+    }
+
+    func stopListeningMemberFeed() {
+        memberFeedListener?.remove()
+        memberFeedListener = nil
     }
 
     func fetchMemberFeedItems(roomId: String, userId: String) async -> [FeedItem] {

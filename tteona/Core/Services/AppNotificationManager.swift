@@ -10,11 +10,17 @@ import Foundation
 import UserNotifications
 import Combine
 
+struct PendingChatRoom: Equatable {
+    let roomId: String
+    let senderUserId: String
+}
+
 @MainActor
 class AppNotificationManager: NSObject, ObservableObject {
     static let shared = AppNotificationManager()
     @Published var pendingPlaceName: String? = nil
     @Published var shouldOpenTodaySession: Bool = false
+    @Published var pendingChatRoom: PendingChatRoom? = nil
 
     override init() {
         super.init()
@@ -39,8 +45,8 @@ extension AppNotificationManager: UNUserNotificationCenterDelegate {
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let userInfo = response.notification.request.content.userInfo
-        if let action = userInfo["action"] as? String {
-            Task { @MainActor in
+        Task { @MainActor in
+            if let action = userInfo["action"] as? String {
                 switch action {
                 case "openCamera":
                     if let placeName = userInfo["placeName"] as? String {
@@ -51,6 +57,12 @@ extension AppNotificationManager: UNUserNotificationCenterDelegate {
                 default:
                     break
                 }
+            }
+            // FCM data payload (no "action" key)
+            if let type = userInfo["type"] as? String, type == "feed_comment",
+               let roomId = userInfo["roomId"] as? String,
+               let senderUserId = userInfo["senderUserId"] as? String {
+                self.pendingChatRoom = PendingChatRoom(roomId: roomId, senderUserId: senderUserId)
             }
         }
         completionHandler()

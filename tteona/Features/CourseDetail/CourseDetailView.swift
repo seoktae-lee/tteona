@@ -6,10 +6,16 @@ struct CourseDetailView: View {
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var courseService: CourseService
     @EnvironmentObject private var userService: UserService
+    @EnvironmentObject private var roomService: RoomService
     @Environment(\.dismiss) private var dismiss
-    @State private var showActiveSession = false
+    @State private var showRoomSelect = false
+    @State private var showOtherCourseAlert = false
     @State private var cameraPosition: MapCameraPosition = .automatic
     @State private var isLikeProcessing = false
+    @State private var selectedRoomIds: Set<String> = []
+    @State private var activeRoomIds: Set<String>? = nil
+
+    private let sessionStore = ActiveSessionStore.shared
 
     private var isLiked: Bool {
         courseService.likedCourseIds.contains(course.courseId)
@@ -39,6 +45,22 @@ struct CourseDetailView: View {
                     HStack(spacing: 16) {
                         shareButton
                         likeButton
+                        if course.authorId == authService.currentUser?.uid {
+                            Menu {
+                                Button(role: .destructive) {
+                                    Task {
+                                        try? await courseService.deleteCourse(course)
+                                        dismiss()
+                                    }
+                                } label: {
+                                    Label("코스 삭제", systemImage: "trash")
+                                }
+                            } label: {
+                                Image(systemName: "ellipsis")
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(.tteDarkGray)
+                            }
+                        }
                     }
                 }
             }
@@ -48,12 +70,41 @@ struct CourseDetailView: View {
             await courseService.fetchLikedCourseIds(userId: uid)
             fitMapToCourse()
         }
-        .fullScreenCover(isPresented: $showActiveSession) {
-            ActiveSessionView(course: course)
-                .environmentObject(AppNotificationManager.shared)
-                .environmentObject(authService)
-                .environmentObject(userService)
-                .environmentObject(RoomService())
+        .fullScreenCover(isPresented: $showRoomSelect) {
+            RoomSelectView(selectedRoomIds: $selectedRoomIds) {
+                let confirmed = selectedRoomIds
+                showRoomSelect = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    activeRoomIds = confirmed
+                }
+            }
+            .environmentObject(roomService)
+        }
+        .fullScreenCover(item: $activeRoomIds) { roomIds in
+            ActiveSessionView(course: course, roomIds: roomIds) {
+                dismiss()
+            }
+            .environmentObject(AppNotificationManager.shared)
+            .environmentObject(authService)
+            .environmentObject(userService)
+            .environmentObject(roomService)
+        }
+        .confirmationDialog("진행 중인 코스가 있어요", isPresented: $showOtherCourseAlert, titleVisibility: .visible) {
+            Button("이어서 하기") {
+                if let saved = sessionStore.loadTodaySession() {
+                    activeRoomIds = Set(saved.roomIds)
+                }
+            }
+            Button("새로 시작", role: .destructive) {
+                sessionStore.clear()
+                selectedRoomIds = []
+                showRoomSelect = true
+            }
+            Button("취소", role: .cancel) {}
+        } message: {
+            if let saved = sessionStore.loadTodaySession() {
+                Text("'\(saved.course.courseName)' 코스가 진행 중이에요.\n이어서 할까요, 아니면 새로 시작할까요?")
+            }
         }
     }
 
@@ -144,9 +195,20 @@ struct CourseDetailView: View {
 
     private var startButton: some View {
         Button {
-            showActiveSession = true
+            if let saved = sessionStore.loadTodaySession() {
+                if saved.course.courseId == course.courseId {
+                    // 같은 코스 → 바로 열기 (내부 resumeSheet에서 이어서/새로 처리)
+                    activeRoomIds = Set(saved.roomIds)
+                } else {
+                    // 다른 코스 진행 중 → 막기
+                    showOtherCourseAlert = true
+                }
+            } else {
+                selectedRoomIds = []
+                showRoomSelect = true
+            }
         } label: {
-            Text("이 코스로 떠나기 ✈️")
+            Text("이 코스로 떠나기")
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
@@ -275,4 +337,5 @@ struct PlaceRow: View {
         .environmentObject(AuthService())
         .environmentObject(CourseService())
         .environmentObject(UserService())
+        .environmentObject(RoomService())
 }

@@ -1,3 +1,11 @@
+//
+//  SavedActiveSession.swift
+//  tteona
+//
+//  Created by 이석태 on 5/9/26.
+//
+
+
 import Foundation
 import Combine
 

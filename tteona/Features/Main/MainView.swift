@@ -9,8 +9,10 @@ struct MainView: View {
     @EnvironmentObject private var notificationManager: AppNotificationManager
     @StateObject private var locationService = LocationService()
     @State private var selectedCourse: Course?
-    @State private var showCreateCourse = false
-    @State private var showImpromptu = false
+    @State private var impromptuRoomIds: Set<String>? = nil
+    @State private var resumeActiveSession: Set<String>? = nil
+    @State private var hasSavedImpromptuSession = false
+    @State private var hasSavedCourseSession = false
     @State private var showRoomSelect = false
     @State private var selectedRoomIds: Set<String> = []
     @State private var searchedRegionName: String? = nil
@@ -52,6 +54,15 @@ struct MainView: View {
             createCourseButton
         }
         .ignoresSafeArea()
+        .onAppear {
+            refreshSessionState()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            refreshSessionState()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .activeSessionDidChange)) { _ in
+            refreshSessionState()
+        }
         .task {
             await courseService.fetchCourses()
             if let uid = authService.currentUser?.uid {
@@ -69,11 +80,12 @@ struct MainView: View {
                   let coord = location?.coordinate else { return }
             Task { await moveToCountry(coord: coord) }
         }
-        .sheet(item: $selectedCourse) { course in
+        .sheet(item: $selectedCourse, onDismiss: refreshSessionState) { course in
             CourseDetailView(course: course)
                 .environmentObject(authService)
                 .environmentObject(courseService)
                 .environmentObject(userService)
+                .environmentObject(roomService)
         }
         .sheet(isPresented: $showRegionSearch) {
             RegionSearchView { name, coord in
@@ -86,28 +98,36 @@ struct MainView: View {
                 }
             }
         }
-        .fullScreenCover(isPresented: $showCreateCourse) {
-            CreateCourseView()
-                .environmentObject(authService)
-                .environmentObject(courseService)
-        }
         .fullScreenCover(isPresented: $showRoomSelect) {
             RoomSelectView(selectedRoomIds: $selectedRoomIds) {
+                let confirmed = selectedRoomIds
                 showRoomSelect = false
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    showImpromptu = true
+                    impromptuRoomIds = confirmed
                 }
             }
             .environmentObject(roomService)
         }
-        .fullScreenCover(isPresented: $showImpromptu) {
-            ImpromptuSessionView(selectedRoomIds: selectedRoomIds) {
-                showRoomSelect = true
+        .fullScreenCover(item: $impromptuRoomIds, onDismiss: refreshSessionState) { roomIds in
+            ImpromptuSessionView(selectedRoomIds: roomIds) {
+                impromptuRoomIds = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    showRoomSelect = true
+                }
             }
             .environmentObject(authService)
             .environmentObject(userService)
             .environmentObject(courseService)
             .environmentObject(roomService)
+        }
+        .fullScreenCover(item: $resumeActiveSession, onDismiss: refreshSessionState) { roomIds in
+            if let saved = ActiveSessionStore.shared.loadTodaySession() {
+                ActiveSessionView(course: saved.course, roomIds: roomIds)
+                    .environmentObject(AppNotificationManager.shared)
+                    .environmentObject(authService)
+                    .environmentObject(userService)
+                    .environmentObject(roomService)
+            }
         }
         .onChange(of: notificationManager.shouldOpenTodaySession) { _, should in
             guard should else { return }
@@ -141,12 +161,9 @@ struct MainView: View {
         VStack {
             GeometryReader { geo in
                 let spacing: CGFloat = 12
-                let totalPadding: CGFloat = 32 + spacing + spacing
-                let plusSize: CGFloat = 40
-                let searchWidth: CGFloat = plusSize
-                let filterWidth: CGFloat = geo.size.width - totalPadding - searchWidth - plusSize
+                let buttonSize: CGFloat = 40
 
-                HStack(spacing: spacing) {
+                HStack(spacing: 0) {
                     // 지역 검색 버튼
                     Button {
                         showRegionSearch = true
@@ -171,11 +188,13 @@ struct MainView: View {
                             }
                         }
                         .foregroundColor(searchedRegionName != nil ? .tteOrange : .tteDarkGray)
-                        .frame(width: searchedRegionName != nil ? nil : searchWidth, height: plusSize)
+                        .frame(width: searchedRegionName != nil ? nil : buttonSize, height: buttonSize)
                         .padding(.horizontal, searchedRegionName != nil ? 12 : 0)
                         .background(.ultraThinMaterial, in: Capsule())
                         .shadow(color: .black.opacity(0.1), radius: 6, y: 2)
                     }
+
+                    Spacer()
 
                     // 코스 필터
                     HStack(spacing: 0) {
@@ -186,27 +205,19 @@ struct MainView: View {
                                 Text(label)
                                     .font(.system(size: 13, weight: courseFilter == filter ? .semibold : .regular))
                                     .foregroundColor(courseFilter == filter ? .white : .primary.opacity(0.7))
-                                    .frame(maxWidth: .infinity)
-                                    .frame(height: plusSize)
+                                    .padding(.horizontal, 16)
+                                    .frame(height: buttonSize)
                                     .background(Capsule().fill(courseFilter == filter ? Color.tteOrange : Color.clear))
                             }
                         }
                     }
-                    .frame(width: filterWidth)
                     .background(.ultraThinMaterial, in: Capsule())
                     .shadow(color: .black.opacity(0.1), radius: 6, y: 2)
 
-                    // 코스 만들기
-                    Button {
-                        showCreateCourse = true
-                    } label: {
-                        Image(systemName: "plus")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundColor(.tteDarkGray)
-                            .frame(width: plusSize, height: plusSize)
-                            .background(.ultraThinMaterial, in: Circle())
-                            .shadow(color: .black.opacity(0.1), radius: 6, y: 2)
-                    }
+                    Spacer()
+
+                    // 균형을 위한 더미 (검색 버튼과 동일 너비)
+                    Color.clear.frame(width: buttonSize, height: buttonSize)
                 }
                 .padding(.horizontal, 16)
             }
@@ -250,11 +261,19 @@ struct MainView: View {
         }
     }
 
+    private func refreshSessionState() {
+        let impromptu = ImpromptuSessionStore.shared.loadTodaySession()
+        hasSavedImpromptuSession = impromptu.map { !$0.places.isEmpty } ?? false
+        hasSavedCourseSession = ActiveSessionStore.shared.loadTodaySession() != nil
+    }
+
     private func handleImpromptuTap() {
         selectedRoomIds = []
-        let hasSavedSession = ImpromptuSessionStore.shared.loadTodaySession().map { !$0.places.isEmpty } ?? false
+        let saved = ImpromptuSessionStore.shared.loadTodaySession()
+        let hasSavedSession = saved.map { !$0.places.isEmpty } ?? false
         if hasSavedSession || roomService.myRooms.isEmpty {
-            showImpromptu = true
+            // 저장된 세션이 있으면 기존 roomIds 복원, 없으면 빈 set으로 시작
+            impromptuRoomIds = Set(saved?.roomIds ?? [])
         } else {
             showRoomSelect = true
         }
@@ -287,6 +306,49 @@ struct MainView: View {
                     )
                 }
 
+                // 좌측 — 이어하기 버튼들
+                HStack {
+                    HStack(spacing: 10) {
+                        // 나의 오늘 이어하기
+                        if hasSavedImpromptuSession,
+                           let saved = ImpromptuSessionStore.shared.loadTodaySession() {
+                            Button {
+                                impromptuRoomIds = Set(saved.roomIds)
+                            } label: {
+                                VStack(spacing: 3) {
+                                    Image(systemName: "figure.walk")
+                                        .font(.system(size: 16, weight: .semibold))
+                                    Text("이어하기")
+                                        .font(.system(size: 9, weight: .medium))
+                                }
+                                .foregroundColor(.tteOrange)
+                                .frame(width: 48, height: 48)
+                                .background(Circle().fill(Color.tteBackground).shadow(color: .black.opacity(0.15), radius: 8, y: 2))
+                            }
+                        }
+
+                        // 코스 이어하기
+                        if hasSavedCourseSession,
+                           let saved = ActiveSessionStore.shared.loadTodaySession() {
+                            Button {
+                                resumeActiveSession = Set(saved.roomIds)
+                            } label: {
+                                VStack(spacing: 3) {
+                                    Image(systemName: "map.fill")
+                                        .font(.system(size: 16, weight: .semibold))
+                                    Text("이어하기")
+                                        .font(.system(size: 9, weight: .medium))
+                                }
+                                .foregroundColor(.tteOrange)
+                                .frame(width: 48, height: 48)
+                                .background(Circle().fill(Color.tteBackground).shadow(color: .black.opacity(0.15), radius: 8, y: 2))
+                            }
+                        }
+                    }
+                    .padding(.leading, 24)
+                    Spacer()
+                }
+
                 // 현재 위치 — 나의 오늘 우측에 독립 배치
                 HStack {
                     Spacer()
@@ -312,6 +374,10 @@ struct MainView: View {
         }
     }
 
+}
+
+extension Notification.Name {
+    static let activeSessionDidChange = Notification.Name("activeSessionDidChange")
 }
 
 // MARK: - Map Pin
@@ -382,6 +448,10 @@ struct CourseCardView: View {
         .frame(width: 220)
         .background(RoundedRectangle(cornerRadius: 16).fill(Color(UIColor.secondarySystemBackground)))
     }
+}
+
+extension Set: @retroactive Identifiable where Element == String {
+    public var id: String { sorted().joined(separator: ",") }
 }
 
 extension MKCoordinateRegion {

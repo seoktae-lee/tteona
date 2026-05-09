@@ -3,7 +3,8 @@ import MapKit
 
 struct ActiveSessionView: View {
     let course: Course
-    var roomId: String? = nil
+    var roomIds: Set<String> = []
+    var onExit: (() -> Void)? = nil
     @StateObject private var locationService = LocationService()
     @EnvironmentObject private var notificationManager: AppNotificationManager
     @EnvironmentObject private var authService: AuthService
@@ -13,19 +14,26 @@ struct ActiveSessionView: View {
 
     @State private var currentPlaceIndex = 0
     @State private var visitedPlaces: Set<Int> = []
+    @State private var skippedPlaces: Set<Int> = []
     @State private var showCamera = false
     @State private var showVlog = false
     @State private var cameraPosition: MapCameraPosition = .automatic
     @State private var showArrivalBanner = false
     @State private var arrivedPlace: Place?
+    @State private var orderedPlaces: [Place] = []
+    @State private var showPlaceEditor = false
+    @State private var showResumeSheet = false
+    @State private var didStartSession = false
+
+    private let sessionStore = ActiveSessionStore.shared
 
     private var currentPlace: Place? {
-        guard currentPlaceIndex < course.places.count else { return nil }
-        return course.places[currentPlaceIndex]
+        guard currentPlaceIndex < orderedPlaces.count else { return nil }
+        return orderedPlaces[currentPlaceIndex]
     }
 
     private var allVisited: Bool {
-        visitedPlaces.count >= course.places.count
+        orderedPlaces.allSatisfy { visitedPlaces.contains($0.order) || skippedPlaces.contains($0.order) }
     }
 
     var body: some View {
@@ -42,36 +50,36 @@ struct ActiveSessionView: View {
         }
         .ignoresSafeArea()
         .task {
+            guard !didStartSession else { return }
+            didStartSession = true
             locationService.requestPermission()
             locationService.startTracking(places: course.places)
             fitMap()
-            if let uid = authService.currentUser?.uid {
-                let nickname = userService.currentUser?.nickname ?? "멤버"
-                let roomIds = roomService.myRooms.map(\.roomId)
-                FCMService.shared.requestGroupNotification(
-                    type: .courseTripStart,
-                    senderUserId: uid,
-                    senderNickname: nickname,
-                    roomIds: roomIds,
-                    courseName: course.courseName
-                )
-                if let rid = roomId {
-                    roomService.startListeningLocations(roomId: rid, myUserId: uid)
-                    roomService.postFeed(roomId: rid, type: .tripStart, userId: uid,
-                                         nickname: nickname, courseId: course.courseId,
-                                         courseName: course.courseName)
-                }
+            if let saved = sessionStore.loadTodaySession(),
+               saved.course.courseId == course.courseId {
+                // 저장된 세션 → 시트로 물어보기
+                orderedPlaces = saved.orderedPlaces
+                visitedPlaces = Set(saved.visitedPlaceOrders)
+                skippedPlaces = Set(saved.skippedPlaceOrders)
+                currentPlaceIndex = saved.currentPlaceIndex
+                showResumeSheet = true
+            } else {
+                startNewSession()
             }
         }
         .onDisappear {
+            saveSession()
             locationService.stopTracking()
-            if let rid = roomId {
+            if !roomIds.isEmpty {
+                let uid = authService.currentUser?.uid ?? ""
                 roomService.stopListeningLocations()
-                roomService.stopSharingLocation(roomId: rid, userId: authService.currentUser?.uid ?? "")
+                for rid in roomIds {
+                    roomService.stopSharingLocation(roomId: rid, userId: uid)
+                }
             }
         }
         .onChange(of: locationService.currentLocation) { _, location in
-            guard let rid = roomId,
+            guard let rid = roomIds.first,
                   let coord = location?.coordinate,
                   let uid = authService.currentUser?.uid else { return }
             let nickname = userService.currentUser?.nickname ?? "멤버"
@@ -83,12 +91,6 @@ struct ActiveSessionView: View {
             withAnimation { showArrivalBanner = true }
             DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
                 withAnimation { showArrivalBanner = false }
-            }
-            if let rid = roomId, let uid = authService.currentUser?.uid {
-                let nickname = userService.currentUser?.nickname ?? "멤버"
-                roomService.postFeed(roomId: rid, type: .arrival, userId: uid,
-                                     nickname: nickname, courseId: course.courseId,
-                                     courseName: course.courseName, placeName: place.placeName)
             }
         }
         .onChange(of: notificationManager.pendingPlaceName) { _, placeName in
@@ -107,8 +109,24 @@ struct ActiveSessionView: View {
                 }
             }
         }
-        .fullScreenCover(isPresented: $showVlog) {
-            VlogGenerationView(course: course, sessionId: course.courseId)
+        .fullScreenCover(isPresented: $showVlog, onDismiss: { sessionStore.clear() }) {
+            VlogGenerationView(course: course, sessionId: course.courseId) {
+                showVlog = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    dismiss()
+                }
+            }
+        }
+        .sheet(isPresented: $showResumeSheet) {
+            resumeSheet
+        }
+        .sheet(isPresented: $showPlaceEditor, onDismiss: saveSession) {
+            PlaceEditorSheet(
+                places: $orderedPlaces,
+                visitedPlaces: $visitedPlaces,
+                skippedPlaces: $skippedPlaces,
+                currentPlaceIndex: $currentPlaceIndex
+            )
         }
     }
 
@@ -123,19 +141,19 @@ struct ActiveSessionView: View {
             }
 
             // 코스 핀들
-            ForEach(course.places) { place in
+            ForEach(Array(orderedPlaces.enumerated()), id: \.element.id) { index, place in
                 Annotation(place.placeName, coordinate: place.coordinate) {
                     SessionPlacePin(
-                        order: place.order,
+                        order: index + 1,
                         isVisited: visitedPlaces.contains(place.order),
-                        isCurrent: place.order == (currentPlace?.order ?? -1)
+                        isCurrent: index == currentPlaceIndex
                     )
                 }
             }
 
             // 경로선
-            if course.places.count >= 2 {
-                MapPolyline(coordinates: course.places.map(\.coordinate))
+            if orderedPlaces.count >= 2 {
+                MapPolyline(coordinates: orderedPlaces.map(\.coordinate))
                     .stroke(Color.tteOrange.opacity(0.5), style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
             }
 
@@ -153,11 +171,16 @@ struct ActiveSessionView: View {
         VStack {
             HStack {
                 Button {
+                    saveSession()
                     locationService.stopTracking()
                     dismiss()
+                    onExit?()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        NotificationCenter.default.post(name: .activeSessionDidChange, object: nil)
+                    }
                 } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 16, weight: .medium))
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.white)
                         .frame(width: 40, height: 40)
                         .background(Circle().fill(Color.black.opacity(0.5)))
@@ -165,22 +188,32 @@ struct ActiveSessionView: View {
 
                 Spacer()
 
-                if let place = currentPlace {
-                    Text("다음: \(place.placeName)")
-                        .font(.system(size: 14, weight: .semibold))
+                HStack(spacing: 6) {
+                    Circle().fill(Color.red).frame(width: 8, height: 8)
+                    Text("코스 진행 중")
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(.white)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(Capsule().fill(Color.black.opacity(0.6)))
                 }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(Capsule().fill(Color.black.opacity(0.6)))
 
                 Spacer()
 
-                Text("\(visitedPlaces.count)/\(course.places.count)")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.white)
+                Button {
+                    showPlaceEditor = true
+                } label: {
+                    VStack(spacing: 1) {
+                        Text("\(visitedPlaces.count)/\(orderedPlaces.count)")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.white)
+                        Text("편집")
+                            .font(.system(size: 10))
+                            .foregroundColor(.white.opacity(0.8))
+                    }
                     .frame(width: 52, height: 40)
                     .background(Circle().fill(Color.tteOrange))
+                }
             }
             .padding(.horizontal, 20)
             .padding(.top, 60)
@@ -208,23 +241,26 @@ struct ActiveSessionView: View {
                     }
 
                     // 도착했어요 버튼 (수동 도착 처리)
+                    let isNearby = locationService.distance(to: place).map { $0 <= 200 } ?? false
                     Button {
                         showCamera = true
                     } label: {
-                        Text("📍 \(place.placeName) 도착! 촬영하기")
+                        Text(isNearby ? "📍 \(place.placeName) 도착! 촬영하기" : "📍 \(place.placeName)으로 이동 중...")
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
                             .frame(height: 54)
                             .background(
                                 RoundedRectangle(cornerRadius: 14)
-                                    .fill(Color.tteOrange)
+                                    .fill(isNearby ? Color.tteOrange : Color.gray.opacity(0.4))
                             )
                     }
+                    .disabled(!isNearby)
                 }
 
                 if allVisited {
                     Button {
+                        postTripEnd()
                         showVlog = true
                     } label: {
                         HStack(spacing: 8) {
@@ -260,12 +296,139 @@ struct ActiveSessionView: View {
 
     // MARK: - Helpers
     private func handleCameraDismiss() {
-        if let place = currentPlace {
-            visitedPlaces.insert(place.order)
+        guard let place = currentPlace else { return }
+        visitedPlaces.insert(place.order)
+        if !roomIds.isEmpty, let uid = authService.currentUser?.uid {
+            let nickname = userService.currentUser?.nickname ?? "멤버"
+            let lat = locationService.currentLocation?.coordinate.latitude ?? place.latitude
+            let lon = locationService.currentLocation?.coordinate.longitude ?? place.longitude
+            for rid in roomIds {
+                roomService.postFeed(roomId: rid, type: .freeCapture,
+                                     userId: uid, nickname: nickname,
+                                     courseId: course.courseId, courseName: course.courseName,
+                                     placeName: place.placeName,
+                                     latitude: lat, longitude: lon)
+            }
         }
-        if currentPlaceIndex < course.places.count - 1 {
+        if currentPlaceIndex < orderedPlaces.count - 1 {
             currentPlaceIndex += 1
         }
+        saveSession()
+    }
+
+    // MARK: - 이어서 / 새로 시작 시트
+    private var resumeSheet: some View {
+        VStack(spacing: 0) {
+            RoundedRectangle(cornerRadius: 3)
+                .fill(Color.secondary.opacity(0.3))
+                .frame(width: 36, height: 5)
+                .padding(.top, 12)
+                .padding(.bottom, 24)
+
+            ZStack {
+                Circle()
+                    .fill(Color.tteOrange.opacity(0.12))
+                    .frame(width: 72, height: 72)
+                Image(systemName: "clock.arrow.circlepath")
+                    .font(.system(size: 30))
+                    .foregroundColor(.tteOrange)
+            }
+            .padding(.bottom, 16)
+
+            VStack(spacing: 6) {
+                Text("오늘 코스가 남아있어요")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundColor(.tteDarkGray)
+                Text("\(course.courseName) · \(visitedPlaces.count)/\(orderedPlaces.count)곳 완료")
+                    .font(.system(size: 14))
+                    .foregroundColor(.tteMediumGray)
+            }
+            .padding(.bottom, 32)
+
+            VStack(spacing: 12) {
+                Button {
+                    showResumeSheet = false
+                    locationService.startTracking(places: orderedPlaces)
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "play.fill").font(.system(size: 15))
+                        Text("이어서 하기").font(.system(size: 16, weight: .semibold))
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity).frame(height: 56)
+                    .background(RoundedRectangle(cornerRadius: 16).fill(Color.tteOrange))
+                }
+
+                Button {
+                    showResumeSheet = false
+                    startNewSession()
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "arrow.counterclockwise").font(.system(size: 15))
+                        Text("새로 시작하기").font(.system(size: 16, weight: .medium))
+                    }
+                    .foregroundColor(.tteDarkGray)
+                    .frame(maxWidth: .infinity).frame(height: 56)
+                    .background(RoundedRectangle(cornerRadius: 16).fill(Color(UIColor.secondarySystemBackground)))
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 40)
+        }
+        .presentationDetents([.height(380)])
+        .presentationDragIndicator(.hidden)
+        .interactiveDismissDisabled()
+    }
+
+    private func startNewSession() {
+        sessionStore.clear()
+        orderedPlaces = course.places
+        visitedPlaces = []
+        skippedPlaces = []
+        currentPlaceIndex = 0
+        locationService.startTracking(places: orderedPlaces)
+        guard let uid = authService.currentUser?.uid else { return }
+        let nickname = userService.currentUser?.nickname ?? "멤버"
+        FCMService.shared.requestGroupNotification(
+            type: .courseTripStart,
+            senderUserId: uid,
+            senderNickname: nickname,
+            roomIds: Array(roomIds),
+            courseName: course.courseName
+        )
+        if !roomIds.isEmpty {
+            if let rid = roomIds.first {
+                roomService.startListeningLocations(roomId: rid, myUserId: uid)
+            }
+            for rid in roomIds {
+                roomService.postFeed(roomId: rid, type: .tripStart, userId: uid,
+                                     nickname: nickname, courseId: course.courseId,
+                                     courseName: course.courseName)
+            }
+        }
+    }
+
+    private func postTripEnd() {
+        guard !roomIds.isEmpty, let uid = authService.currentUser?.uid else { return }
+        let nickname = userService.currentUser?.nickname ?? "멤버"
+        for rid in roomIds {
+            roomService.postFeed(roomId: rid, type: .tripEnd, userId: uid,
+                                 nickname: nickname, courseId: course.courseId,
+                                 courseName: course.courseName)
+        }
+    }
+
+    private func saveSession() {
+        let session = SavedActiveSession(
+            date: Date(),
+            course: course,
+            orderedPlaces: orderedPlaces,
+            visitedPlaceOrders: Array(visitedPlaces),
+            skippedPlaceOrders: Array(skippedPlaces),
+            currentPlaceIndex: currentPlaceIndex,
+            roomIds: Array(roomIds)
+        )
+        sessionStore.save(session)
     }
 
     private func fitMap() {
@@ -389,6 +552,138 @@ struct MemberLocationPin: View {
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
                 .background(Capsule().fill(Color.purple.opacity(0.85)))
+        }
+    }
+}
+
+// MARK: - 코스 순서 편집 시트
+struct PlaceEditorSheet: View {
+    @Binding var places: [Place]
+    @Binding var visitedPlaces: Set<Int>
+    @Binding var skippedPlaces: Set<Int>
+    @Binding var currentPlaceIndex: Int
+    @Environment(\.dismiss) private var dismiss
+    @State private var editMode: EditMode = .active
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(Array(places.enumerated()), id: \.element.id) { index, place in
+                    let isVisited = visitedPlaces.contains(place.order)
+                    let isSkipped = skippedPlaces.contains(place.order)
+                    let isCurrent = index == currentPlaceIndex && !isVisited && !isSkipped
+
+                    HStack(spacing: 14) {
+                        // 순서 번호
+                        ZStack {
+                            Circle()
+                                .fill(isVisited ? Color.green
+                                      : isSkipped ? Color.gray.opacity(0.3)
+                                      : isCurrent ? Color.tteOrange
+                                      : Color.gray.opacity(0.25))
+                                .frame(width: 32, height: 32)
+                            if isVisited {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundColor(.white)
+                            } else if isSkipped {
+                                Image(systemName: "forward.fill")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundColor(.white.opacity(0.7))
+                            } else {
+                                Text("\(index + 1)")
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundColor(isCurrent ? .white : .tteDarkGray)
+                            }
+                        }
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(place.placeName)
+                                .font(.system(size: 15, weight: isCurrent ? .semibold : .regular))
+                                .foregroundColor(isVisited || isSkipped ? .tteMediumGray : .tteDarkGray)
+                                .strikethrough(isVisited || isSkipped)
+                            if isCurrent {
+                                Text("현재 목적지")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.tteOrange)
+                            } else if isSkipped {
+                                Text("건너뜀")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.tteMediumGray)
+                            }
+                        }
+
+                        Spacer()
+
+                        if !isVisited {
+                            if isSkipped {
+                                // 건너뛰기 취소
+                                Button {
+                                    skippedPlaces.remove(place.order)
+                                    updateCurrentIndex()
+                                } label: {
+                                    Text("취소")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.tteOrange)
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 5)
+                                        .background(Capsule().stroke(Color.tteOrange, lineWidth: 1))
+                                }
+                                .buttonStyle(.plain)
+                            } else if !isCurrent {
+                                // 건너뛰기
+                                Button {
+                                    skippedPlaces.insert(place.order)
+                                    updateCurrentIndex()
+                                } label: {
+                                    Text("건너뛰기")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.tteMediumGray)
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 5)
+                                        .background(Capsule().fill(Color(UIColor.tertiarySystemBackground)))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                    .padding(.vertical, 4)
+                    .listRowBackground(isCurrent ? Color.tteOrange.opacity(0.06) : Color.clear)
+                }
+                .onMove { from, to in
+                    places.move(fromOffsets: from, toOffset: to)
+                    if let fromIdx = from.first {
+                        if fromIdx == currentPlaceIndex {
+                            currentPlaceIndex = to > fromIdx ? to - 1 : to
+                        } else if fromIdx < currentPlaceIndex && to > currentPlaceIndex {
+                            currentPlaceIndex -= 1
+                        } else if fromIdx > currentPlaceIndex && to <= currentPlaceIndex {
+                            currentPlaceIndex += 1
+                        }
+                    }
+                }
+            }
+            .listStyle(.plain)
+            .environment(\.editMode, $editMode)
+            .navigationTitle("코스 편집")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("완료") { dismiss() }
+                        .fontWeight(.semibold)
+                        .foregroundColor(.tteOrange)
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+
+    private func updateCurrentIndex() {
+        if let next = places.indices.first(where: {
+            !visitedPlaces.contains(places[$0].order) && !skippedPlaces.contains(places[$0].order)
+        }) {
+            currentPlaceIndex = next
         }
     }
 }

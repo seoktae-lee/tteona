@@ -4,10 +4,12 @@ struct FeedTabView: View {
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var userService: UserService
     @EnvironmentObject private var roomService: RoomService
+    @EnvironmentObject private var notificationManager: AppNotificationManager
 
     @State private var selectedRoom: Room?
     @State private var showCreateRoom = false
     @State private var showJoinRoom = false
+    @State private var pendingMemberChat: FeedMember? = nil
 
     private var uid: String { authService.currentUser?.uid ?? "" }
 
@@ -51,10 +53,23 @@ struct FeedTabView: View {
                 }
             }
             .navigationDestination(item: $selectedRoom) { room in
-                RoomDetailView(room: room)
+                RoomDetailView(room: room, autoOpenUserId: pendingMemberChat?.userId)
                     .environmentObject(authService)
                     .environmentObject(userService)
                     .environmentObject(roomService)
+                    .onDisappear { pendingMemberChat = nil }
+            }
+        }
+        .onChange(of: notificationManager.pendingChatRoom) { _, pending in
+            guard let pending else { return }
+            notificationManager.pendingChatRoom = nil
+            guard let room = roomService.myRooms.first(where: { $0.roomId == pending.roomId }) else { return }
+            Task {
+                await roomService.fetchMembers(roomId: pending.roomId)
+                if let member = roomService.currentRoomMembers.first(where: { $0.userId == pending.senderUserId }) {
+                    pendingMemberChat = FeedMember(userId: member.userId, nickname: member.nickname)
+                }
+                selectedRoom = room
             }
         }
         .sheet(isPresented: $showCreateRoom) {

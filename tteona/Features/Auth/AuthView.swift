@@ -8,6 +8,8 @@ struct AuthView: View {
     @State private var email = ""
     @State private var password = ""
     @State private var confirmPassword = ""
+    @State private var showResetAlert = false
+    @State private var resetSent = false
     @FocusState private var focusedField: AuthField?
 
     enum AuthField { case email, password, confirm }
@@ -33,13 +35,45 @@ struct AuthView: View {
                         .padding(.horizontal, 24)
                         .padding(.top, 16)
 
+                    if !isSignUp {
+                        Button {
+                            showResetAlert = true
+                        } label: {
+                            Text("비밀번호를 잊으셨나요?")
+                                .font(.system(size: 13))
+                                .foregroundColor(.tteMediumGray)
+                                .underline()
+                        }
+                        .padding(.top, 12)
+                    }
+
                     toggleModeButton
-                        .padding(.top, 20)
+                        .padding(.top, 16)
                         .padding(.bottom, 40)
                 }
             }
         }
         .onTapGesture { focusedField = nil }
+        .alert("비밀번호 재설정", isPresented: $showResetAlert) {
+            TextField("이메일 주소", text: $email)
+                .keyboardType(.emailAddress)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+            Button("전송") {
+                Task {
+                    let success = await authService.sendPasswordReset(email: email)
+                    if success { resetSent = true }
+                }
+            }
+            Button("취소", role: .cancel) {}
+        } message: {
+            Text("가입한 이메일 주소를 입력하면 비밀번호 재설정 링크를 보내드려요.")
+        }
+        .alert("이메일을 보냈어요", isPresented: $resetSent) {
+            Button("확인", role: .cancel) {}
+        } message: {
+            Text("입력하신 이메일로 비밀번호 재설정 링크를 전송했어요. 메일함을 확인해주세요.")
+        }
     }
 
     // MARK: - Logo
@@ -141,6 +175,12 @@ struct AuthView: View {
                     if isSignUp { focusedField = .confirm }
                     else { Task { await submit() } }
                 }
+            Text("6자 이상 입력해주세요")
+                .font(.system(size: 12))
+                .foregroundColor(.tteMediumGray)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 4)
+                .padding(.top, -6)
 
             if isSignUp {
                 TteTextField(placeholder: "비밀번호 확인", text: $confirmPassword, isSecure: true)

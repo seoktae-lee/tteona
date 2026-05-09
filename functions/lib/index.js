@@ -45,12 +45,12 @@ function buildMessage(type, nickname, courseName, commentText) {
     switch (type) {
         case "free_trip_start":
             return {
-                title: "🗺 나의 오늘 시작",
+                title: "나의 오늘 시작",
                 body: `${nickname}님이 오늘의 기록을 시작했어요!`,
             };
         case "free_trip_end":
             return {
-                title: "✅ 나의 오늘 종료",
+                title: "나의 오늘 종료",
                 body: courseName
                     ? `${nickname}님이 오늘 ${courseName}을 완료했어요!`
                     : `${nickname}님이 오늘의 기록을 마쳤어요!`,
@@ -64,8 +64,8 @@ function buildMessage(type, nickname, courseName, commentText) {
             };
         case "feed_comment":
             return {
-                title: `💬 ${nickname}님이 댓글을 남겼어요`,
-                body: commentText ?? "",
+                title: `${nickname}님이 답장을 남겼어요`,
+                body: "답장을 확인해주세요!",
             };
         default:
             return {
@@ -103,23 +103,18 @@ exports.sendGroupNotification = (0, firestore_1.onDocumentCreated)("fcmRequests/
     const data = event.data?.data();
     if (!data || data.processed)
         return;
-    const { type, senderUserId, senderNickname, roomIds, courseName, targetUserId, commentText } = data;
+    const { type, senderUserId, senderNickname, roomIds, courseName, commentText } = data;
     const { title, body } = buildMessage(type, senderNickname, courseName, commentText);
     // 각 룸의 멤버 ID 수집 (발신자 제외)
     const recipientUserIds = new Set();
-    // feed_comment: 피드 작성자에게만
-    if (type === "feed_comment" && targetUserId) {
-        recipientUserIds.add(targetUserId);
-    }
-    else {
-        await Promise.all((roomIds ?? []).map(async (roomId) => {
-            const roomDoc = await db.collection("rooms").doc(roomId).get();
-            const memberIds = roomDoc.data()?.memberIds ?? [];
-            memberIds
-                .filter((id) => id !== senderUserId)
-                .forEach((id) => recipientUserIds.add(id));
-        }));
-    }
+    // 방 전체 멤버에게 (발신자 제외)
+    await Promise.all((roomIds ?? []).map(async (roomId) => {
+        const roomDoc = await db.collection("rooms").doc(roomId).get();
+        const memberIds = roomDoc.data()?.memberIds ?? [];
+        memberIds
+            .filter((id) => id !== senderUserId)
+            .forEach((id) => recipientUserIds.add(id));
+    }));
     if (recipientUserIds.size === 0) {
         await event.data?.ref.update({ processed: true });
         return;
@@ -137,6 +132,14 @@ exports.sendGroupNotification = (0, firestore_1.onDocumentCreated)("fcmRequests/
         return;
     }
     // FCM 멀티캐스트 전송
+    const fcmData = {
+        type,
+        senderUserId,
+        courseName: courseName ?? "",
+    };
+    if (type === "feed_comment" && data.roomId) {
+        fcmData.roomId = data.roomId;
+    }
     const response = await messaging.sendEachForMulticast({
         tokens,
         notification: { title, body },
@@ -148,11 +151,7 @@ exports.sendGroupNotification = (0, firestore_1.onDocumentCreated)("fcmRequests/
                 },
             },
         },
-        data: {
-            type,
-            senderUserId,
-            courseName: courseName ?? "",
-        },
+        data: fcmData,
     });
     console.log(`[FCM] sent: ${response.successCount} success, ${response.failureCount} failure for requestId=${requestId}`);
     // 처리 완료 표시

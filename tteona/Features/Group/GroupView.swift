@@ -5,28 +5,18 @@ struct RoomCard: View {
     let room: Room
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 14) {
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(room.name)
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundColor(.tteDarkGray)
-                    HStack(spacing: 4) {
-                        Image(systemName: "person.fill")
-                            .font(.system(size: 12))
-                            .foregroundColor(.tteMediumGray)
-                        Text("\(room.memberIds.count)명")
-                            .font(.system(size: 13))
-                            .foregroundColor(.tteMediumGray)
-                    }
-                }
+                Text(room.name)
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundColor(.tteDarkGray)
                 Spacer()
                 Image(systemName: "chevron.right")
                     .font(.system(size: 14))
                     .foregroundColor(.tteMediumGray)
             }
 
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
                 HStack(spacing: 6) {
                     Image(systemName: "key.horizontal")
                         .font(.system(size: 12))
@@ -36,6 +26,16 @@ struct RoomCard: View {
                         .foregroundColor(.tteOrange)
                         .kerning(2)
                     Text("초대 코드")
+                        .font(.system(size: 12))
+                        .foregroundColor(.tteMediumGray)
+                    Rectangle()
+                        .fill(Color(UIColor.separator))
+                        .frame(width: 1, height: 12)
+                        .padding(.horizontal, 2)
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 11))
+                        .foregroundColor(.tteMediumGray)
+                    Text("\(room.memberIds.count)명")
                         .font(.system(size: 12))
                         .foregroundColor(.tteMediumGray)
                 }

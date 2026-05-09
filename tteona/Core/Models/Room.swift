@@ -60,6 +60,7 @@ struct MemberLocation: Identifiable, Codable {
 
 enum FeedType: String, Codable {
     case tripStart = "tripStart"
+    case tripEnd = "tripEnd"
     case arrival = "arrival"
     case photo = "photo"
     case freeTripStart = "freeTripStart"
@@ -67,7 +68,7 @@ enum FeedType: String, Codable {
     case freeTripEnd = "freeTripEnd"
 }
 
-struct FeedItem: Identifiable, Codable {
+struct FeedItem: Identifiable, Codable, Equatable {
     @DocumentID var id: String?
     var feedId: String
     var type: FeedType
@@ -77,12 +78,15 @@ struct FeedItem: Identifiable, Codable {
     var courseName: String
     var placeName: String?
     var imageUrl: String?
+    var latitude: Double?
+    var longitude: Double?
     var commentCount: Int
     var createdAt: Date
 
     enum CodingKeys: String, CodingKey {
         case id, feedId, type, userId, nickname
         case courseId, courseName, placeName, imageUrl
+        case latitude, longitude
         case commentCount, createdAt
     }
 }
