@@ -15,6 +15,7 @@ struct MainView: View {
     @State private var resumeActiveSession: Set<String>? = nil
     @State private var courseSessionInfo: CourseSessionInfo? = nil
     @State private var showCourseResumeSheet = false
+    @State private var pendingCourseResume = false
     @State private var pendingNewCourse: Course? = nil
     @State private var showRoomSelect = false
     @State private var selectedRoomIds: Set<String> = []
@@ -97,7 +98,20 @@ struct MainView: View {
                 }
             }
         }
-        .sheet(isPresented: $showCourseResumeSheet) {
+        .sheet(isPresented: $showCourseResumeSheet, onDismiss: {
+            guard pendingCourseResume else { return }
+            pendingCourseResume = false
+            courseSessionInfo = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                if let session = ActiveSessionStore.shared.loadTodaySession() {
+                    courseSessionInfo = CourseSessionInfo(
+                        course: session.course.toCourse(),
+                        roomIds: Set(session.roomIds),
+                        isResuming: true
+                    )
+                }
+            }
+        }) {
             courseResumeSheet()
         }
         .fullScreenCover(isPresented: $showRoomSelect) {
@@ -123,7 +137,7 @@ struct MainView: View {
             .environmentObject(roomService)
         }
         .fullScreenCover(item: $courseSessionInfo) { info in
-            ActiveSessionView(course: info.course, roomIds: info.roomIds)
+            ActiveSessionView(course: info.course, roomIds: info.roomIds, isResuming: info.isResuming)
                 .environmentObject(AppNotificationManager.shared)
                 .environmentObject(authService)
                 .environmentObject(userService)
@@ -314,13 +328,9 @@ struct MainView: View {
             VStack(spacing: 12) {
                 // 이어서 기록하기
                 Button {
-                    showCourseResumeSheet = false
                     pendingNewCourse = nil
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                        if let session = ActiveSessionStore.shared.load() {
-                            courseSessionInfo = CourseSessionInfo(course: session.course, roomIds: Set(session.roomIds))
-                        }
-                    }
+                    pendingCourseResume = true
+                    showCourseResumeSheet = false
                 } label: {
                     HStack(spacing: 10) {
                         Image(systemName: "play.fill").font(.system(size: 15))

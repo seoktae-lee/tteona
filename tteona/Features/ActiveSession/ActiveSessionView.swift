@@ -4,6 +4,7 @@ import MapKit
 struct ActiveSessionView: View {
     let course: Course
     var roomIds: Set<String> = []
+    var isResuming: Bool = false
     @StateObject private var locationService = LocationService()
     @EnvironmentObject private var notificationManager: AppNotificationManager
     @EnvironmentObject private var authService: AuthService
@@ -56,12 +57,21 @@ struct ActiveSessionView: View {
             fitMap()
             if let saved = sessionStore.loadTodaySession(),
                saved.course.courseId == course.courseId {
-                // 저장된 세션 → 시트로 물어보기
-                orderedPlaces = saved.orderedPlaces
-                visitedPlaces = Set(saved.visitedPlaceOrders)
-                skippedPlaces = Set(saved.skippedPlaceOrders)
-                currentPlaceIndex = saved.currentPlaceIndex
-                showResumeSheet = true
+                if isResuming {
+                    // 바로 이어서 하기
+                    orderedPlaces = saved.orderedPlaces
+                    visitedPlaces = Set(saved.visitedPlaceOrders)
+                    skippedPlaces = Set(saved.skippedPlaceOrders)
+                    currentPlaceIndex = saved.currentPlaceIndex
+                    locationService.startTracking(places: orderedPlaces)
+                } else {
+                    // 저장된 세션 → 시트로 물어보기
+                    orderedPlaces = saved.orderedPlaces
+                    visitedPlaces = Set(saved.visitedPlaceOrders)
+                    skippedPlaces = Set(saved.skippedPlaceOrders)
+                    currentPlaceIndex = saved.currentPlaceIndex
+                    showResumeSheet = true
+                }
             } else {
                 startNewSession()
             }
@@ -464,7 +474,7 @@ struct ActiveSessionView: View {
     private func saveSession() {
         let session = SavedActiveSession(
             date: Date(),
-            course: course,
+            course: SavedCourse(from: course),
             orderedPlaces: orderedPlaces,
             visitedPlaceOrders: Array(visitedPlaces),
             skippedPlaceOrders: Array(skippedPlaces),

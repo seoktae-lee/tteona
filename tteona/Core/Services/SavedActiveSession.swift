@@ -9,9 +9,45 @@
 import Foundation
 import Combine
 
+struct SavedCourse: Codable {
+    var courseId: String
+    var authorId: String
+    var courseName: String
+    var tag: CourseTag
+    var region: String
+    var likeCount: Int
+    var createdAt: Date
+    var places: [Place]
+
+    init(from course: Course) {
+        self.courseId = course.courseId
+        self.authorId = course.authorId
+        self.courseName = course.courseName
+        self.tag = course.tag
+        self.region = course.region
+        self.likeCount = course.likeCount
+        self.createdAt = course.createdAt
+        self.places = course.places
+    }
+
+    func toCourse() -> Course {
+        Course(
+            id: nil,
+            courseId: courseId,
+            authorId: authorId,
+            courseName: courseName,
+            tag: tag,
+            region: region,
+            likeCount: likeCount,
+            createdAt: createdAt,
+            places: places
+        )
+    }
+}
+
 struct SavedActiveSession: Codable {
     let date: Date
-    let course: Course
+    let course: SavedCourse
     var orderedPlaces: [Place]
     var visitedPlaceOrders: [Int]
     var skippedPlaceOrders: [Int]
@@ -30,10 +66,14 @@ class ActiveSessionStore: ObservableObject {
     }
 
     func save(_ session: SavedActiveSession) {
-        if let data = try? JSONEncoder().encode(session) {
+        do {
+            let data = try JSONEncoder().encode(session)
             UserDefaults.standard.set(data, forKey: key)
+            hasTodaySession = true
+        } catch {
+            UserDefaults.standard.removeObject(forKey: key)
+            hasTodaySession = false
         }
-        hasTodaySession = true
     }
 
     func load() -> SavedActiveSession? {
