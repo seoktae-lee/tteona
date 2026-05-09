@@ -11,10 +11,19 @@ service cloud.firestore {
       return request.auth.uid == userId;
     }
 
+    function isRoomMember(roomId) {
+      return get(/databases/$(database)/documents/rooms/$(roomId)).data.memberIds.hasAny([request.auth.uid]);
+    }
+
     // users 컬렉션
     match /users/{userId} {
       allow read: if isSignedIn();
       allow write: if isOwner(userId);
+    }
+
+    // users 민감정보 (FCM 토큰 등)
+    match /userPrivate/{userId} {
+      allow read, write: if isSignedIn() && isOwner(userId);
     }
 
     // courses 컬렉션
@@ -46,31 +55,31 @@ service cloud.firestore {
 
       // members 서브컬렉션
       match /members/{memberId} {
-        allow read: if isSignedIn();
+        allow read: if isSignedIn() && isRoomMember(roomId);
         allow write: if isSignedIn() && (
           // 본인 정보 쓰기
           memberId == request.auth.uid ||
-          // 방 멤버가 다른 멤버 정보 읽기/쓰기
-          get(/databases/$(database)/documents/rooms/$(roomId)).data.memberIds.hasAny([request.auth.uid])
+          // 방 멤버가 다른 멤버 정보 쓰기(관리 기능이 필요할 때만)
+          isRoomMember(roomId)
         );
       }
 
       // locations 서브컬렉션
       match /locations/{userId} {
-        allow read: if isSignedIn();
+        allow read: if isSignedIn() && isRoomMember(roomId);
         allow write: if isSignedIn() && userId == request.auth.uid;
       }
 
       // feed 서브컬렉션
       match /feed/{feedId} {
-        allow read: if isSignedIn();
-        allow create: if isSignedIn();
+        allow read: if isSignedIn() && isRoomMember(roomId);
+        allow create: if isSignedIn() && isRoomMember(roomId);
         allow update, delete: if isSignedIn() && resource.data.userId == request.auth.uid;
 
         // comments 서브컬렉션
         match /comments/{commentId} {
-          allow read: if isSignedIn();
-          allow create: if isSignedIn();
+          allow read: if isSignedIn() && isRoomMember(roomId);
+          allow create: if isSignedIn() && isRoomMember(roomId);
           allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
         }
       }

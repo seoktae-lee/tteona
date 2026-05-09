@@ -41,30 +41,52 @@ class CourseService: ObservableObject {
     }
 
     func toggleLike(courseId: String, userId: String) async throws {
+        errorMessage = nil
+
         let alreadyLiked = likedCourseIds.contains(courseId)
         let userRef = db.collection("users").document(userId)
         let courseRef = db.collection("courses").document(courseId)
 
+        // Optimistic UI update
+        let previousLiked = likedCourseIds
+        let previousCourses = courses
+
         if alreadyLiked {
             likedCourseIds.remove(courseId)
             if let idx = courses.firstIndex(where: { $0.courseId == courseId }) {
-                courses[idx].likeCount -= 1
+                courses[idx].likeCount = max(0, courses[idx].likeCount - 1)
             }
-            try await userRef.setData(
-                ["likedCourseIds": FieldValue.arrayRemove([courseId])],
-                merge: true
-            )
-            try await courseRef.updateData(["likeCount": FieldValue.increment(Int64(-1))])
         } else {
             likedCourseIds.insert(courseId)
             if let idx = courses.firstIndex(where: { $0.courseId == courseId }) {
                 courses[idx].likeCount += 1
             }
-            try await userRef.setData(
-                ["likedCourseIds": FieldValue.arrayUnion([courseId])],
-                merge: true
-            )
-            try await courseRef.updateData(["likeCount": FieldValue.increment(Int64(1))])
+        }
+
+        do {
+            let batch = db.batch()
+            if alreadyLiked {
+                batch.setData(
+                    ["likedCourseIds": FieldValue.arrayRemove([courseId])],
+                    forDocument: userRef,
+                    merge: true
+                )
+                batch.updateData(["likeCount": FieldValue.increment(Int64(-1))], forDocument: courseRef)
+            } else {
+                batch.setData(
+                    ["likedCourseIds": FieldValue.arrayUnion([courseId])],
+                    forDocument: userRef,
+                    merge: true
+                )
+                batch.updateData(["likeCount": FieldValue.increment(Int64(1))], forDocument: courseRef)
+            }
+            try await batch.commit()
+        } catch {
+            // Rollback local state on failure
+            likedCourseIds = previousLiked
+            courses = previousCourses
+            errorMessage = "좋아요 처리에 실패했습니다. 네트워크 상태를 확인하고 다시 시도해주세요."
+            throw error
         }
     }
 

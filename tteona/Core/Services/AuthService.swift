@@ -236,6 +236,8 @@ class AuthService: NSObject, ObservableObject {
 
         // 3. users 문서 삭제 (likedCourseIds, fcmToken 등 포함)
         try await db.collection("users").document(userId).delete()
+        // 3-1. 민감정보 문서 삭제 (FCM 토큰 등)
+        try? await db.collection("userPrivate").document(userId).delete()
 
         // 4. 기기 로컬 데이터 정리
         UserDefaults.standard.removeObject(forKey: "onboarding_\(userId)")

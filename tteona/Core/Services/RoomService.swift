@@ -19,6 +19,12 @@ class RoomService: ObservableObject {
     private var feedListener: ListenerRegistration?
     private var memberFeedListener: ListenerRegistration?
 
+    private struct LocationUploadState {
+        var lastSentAt: Date
+        var lastSentLocation: CLLocation
+    }
+    private var locationUploadStates: [String: LocationUploadState] = [:]
+
     // MARK: - 방 생성
     func createRoom(name: String, userId: String, nickname: String) async throws -> Room {
         let roomId = UUID().uuidString
@@ -175,6 +181,36 @@ class RoomService: ObservableObject {
         ]
         db.collection("rooms").document(roomId)
             .collection("locations").document(userId).setData(data, merge: true)
+    }
+
+    // MARK: - 동행 세션: 위치 업데이트 (throttled)
+    func updateMyLocationThrottled(roomId: String, userId: String, nickname: String, location: CLLocation) {
+        let key = "\(roomId)|\(userId)"
+        let now = Date()
+
+        // speed: m/s (음수는 invalid)
+        let speed = max(0, location.speed)
+        let policy: (minInterval: TimeInterval, minDistance: CLLocationDistance) = {
+            // 걷기/정지
+            if speed < 1.5 { return (10, 50) }
+            // 느린 이동(자전거/도심 이동)
+            if speed < 6 { return (15, 100) }
+            // 차량/빠른 이동
+            return (25, 200)
+        }()
+
+        if let state = locationUploadStates[key] {
+            let elapsed = now.timeIntervalSince(state.lastSentAt)
+            let moved = location.distance(from: state.lastSentLocation)
+
+            // 60초에 1번은 무조건 보내서 "너무 오래 멈춘 것처럼" 보이지 않게 한다.
+            if elapsed < policy.minInterval || moved < policy.minDistance {
+                if elapsed < 60 { return }
+            }
+        }
+
+        locationUploadStates[key] = LocationUploadState(lastSentAt: now, lastSentLocation: location)
+        updateMyLocation(roomId: roomId, userId: userId, nickname: nickname, coordinate: location.coordinate)
     }
 
     func stopSharingLocation(roomId: String, userId: String) {

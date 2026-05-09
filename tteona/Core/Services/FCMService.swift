@@ -17,9 +17,16 @@ class FCMService: NSObject {
                 return
             }
             Task {
+                // 민감정보는 userPrivate로 분리 저장 (본인만 접근)
+                try? await Firestore.firestore()
+                    .collection("userPrivate").document(userId)
+                    .setData(["fcmToken": token], merge: true)
+
+                // 과거에 users 문서에 저장된 fcmToken이 남아있다면 제거
                 try? await Firestore.firestore()
                     .collection("users").document(userId)
-                    .setData(["fcmToken": token], merge: true)
+                    .updateData(["fcmToken": FieldValue.delete()])
+
                 print("[FCM] token saved: \(token.prefix(20))...")
             }
         }

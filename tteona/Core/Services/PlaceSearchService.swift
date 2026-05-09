@@ -59,8 +59,6 @@ class PlaceSearchService: ObservableObject {
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-            print("[Kakao] status: \(statusCode), query: \(query)")
-            print("[Kakao] response: \(String(data: data, encoding: .utf8) ?? "nil")")
             let decoded = try JSONDecoder().decode(KakaoSearchResponse.self, from: data)
             results = decoded.documents.map {
                 SearchResult(
@@ -70,9 +68,13 @@ class PlaceSearchService: ObservableObject {
                     longitude: Double($0.x) ?? 0
                 )
             }
-            print("[Kakao] results count: \(results.count)")
+#if DEBUG
+            print("[Kakao] keyword search status=\(statusCode) results=\(results.count)")
+#endif
         } catch {
-            print("[Kakao] error: \(error)")
+#if DEBUG
+            print("[Kakao] keyword search error: \(error)")
+#endif
             results = []
         }
     }

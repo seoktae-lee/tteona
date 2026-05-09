@@ -11,6 +11,7 @@ struct ActiveSessionView: View {
     @EnvironmentObject private var userService: UserService
     @EnvironmentObject private var roomService: RoomService
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var currentPlaceIndex = 0
     @State private var visitedPlaces: Set<Int> = []
@@ -89,10 +90,11 @@ struct ActiveSessionView: View {
         }
         .onChange(of: locationService.currentLocation) { _, location in
             guard let rid = roomIds.first,
-                  let coord = location?.coordinate,
+                  let location,
                   let uid = authService.currentUser?.uid else { return }
+            guard scenePhase == .active else { return }
             let nickname = userService.currentUser?.nickname ?? "멤버"
-            roomService.updateMyLocation(roomId: rid, userId: uid, nickname: nickname, coordinate: coord)
+            roomService.updateMyLocationThrottled(roomId: rid, userId: uid, nickname: nickname, location: location)
         }
         .onChange(of: locationService.arrivedAtPlace) { _, place in
             guard let place else { return }

@@ -13,6 +13,8 @@ struct CourseDetailView: View {
     @State private var showOtherCourseAlert = false
     @State private var cameraPosition: MapCameraPosition = .automatic
     @State private var isLikeProcessing = false
+    @State private var showLikeErrorAlert = false
+    @State private var likeErrorMessage: String = ""
     @State private var selectedRoomIds: Set<String> = []
 
     private let sessionStore = ActiveSessionStore.shared
@@ -102,6 +104,11 @@ struct CourseDetailView: View {
             if let saved = sessionStore.loadTodaySession() {
                 Text("'\(saved.course.courseName)' 코스가 진행 중이에요.\n이어서 할까요, 아니면 새로 시작할까요?")
             }
+        }
+        .alert("좋아요 오류", isPresented: $showLikeErrorAlert) {
+            Button("확인", role: .cancel) {}
+        } message: {
+            Text(likeErrorMessage)
         }
     }
 
@@ -226,7 +233,12 @@ struct CourseDetailView: View {
             isLikeProcessing = true
             Task {
                 let uid = authService.currentUser?.uid ?? ""
-                try? await courseService.toggleLike(courseId: course.courseId, userId: uid)
+                do {
+                    try await courseService.toggleLike(courseId: course.courseId, userId: uid)
+                } catch {
+                    likeErrorMessage = courseService.errorMessage ?? error.localizedDescription
+                    showLikeErrorAlert = true
+                }
                 isLikeProcessing = false
             }
         } label: {
