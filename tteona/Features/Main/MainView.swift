@@ -22,6 +22,8 @@ struct MainView: View {
     @State private var searchedRegionName: String? = nil
     @State private var showRegionSearch = false
     @State private var courseFilter: CourseFilter = .all
+    @State private var searchText = ""
+    @State private var isSearchActive = false
 
     enum CourseFilter { case all, liked, mine }
     @State private var mapRegion = MKCoordinateRegion(
@@ -36,10 +38,28 @@ struct MainView: View {
     )
 
     private var filteredCourses: [Course] {
+        let base: [Course]
         switch courseFilter {
-        case .all:   return courseService.courses
-        case .liked: return courseService.courses.filter { courseService.likedCourseIds.contains($0.courseId) }
-        case .mine:  return courseService.courses.filter { $0.authorId == authService.currentUser?.uid }
+        case .all:   base = courseService.courses
+        case .liked: base = courseService.courses.filter { courseService.likedCourseIds.contains($0.courseId) }
+        case .mine:  base = courseService.courses.filter { $0.authorId == authService.currentUser?.uid }
+        }
+        
+        let results: [Course]
+        if searchText.isEmpty {
+            results = base
+        } else {
+            let query = searchText.lowercased()
+            results = base.filter { 
+                $0.courseName.lowercased().contains(query) || 
+                $0.region.lowercased().contains(query) ||
+                $0.places.contains(where: { $0.placeName.lowercased().contains(query) })
+            }
+        }
+        
+        // 좋아요 순 정렬 (인기 코스 우선 노출)
+        return results.sorted { a, b in
+            return a.likeCount > b.likeCount
         }
     }
 
@@ -53,6 +73,13 @@ struct MainView: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             mapLayer
+            
+            if !searchText.isEmpty && filteredCourses.isEmpty {
+                emptySearchResultOverlay
+                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                    .zIndex(1)
+            }
+            
             topBar
             locationButton
             createCourseButton
@@ -182,61 +209,65 @@ struct MainView: View {
                 let spacing: CGFloat = 12
                 let buttonSize: CGFloat = 40
 
-                HStack(spacing: 0) {
-                    // 지역 검색 버튼
-                    Button {
-                        showRegionSearch = true
-                    } label: {
-                        HStack(spacing: 5) {
-                            Image(systemName: "magnifyingglass")
-                                .font(.system(size: 14, weight: .medium))
-                            if let name = searchedRegionName {
-                                Text(name)
-                                    .font(.system(size: 13, weight: .medium))
-                                    .lineLimit(1)
+                HStack(spacing: 12) {
+                    // 검색 바
+                    HStack(spacing: 8) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.tteMediumGray)
+                        
+                        TextField("코스명, 지역 검색", text: $searchText)
+                            .font(.system(size: 14))
+                            .foregroundColor(.tteDarkGray)
+                            .autocorrectionDisabled()
+                            .onSubmit {
+                                Task { await performMapSearch() }
+                            }
+                        
+                        if !searchText.isEmpty {
+                            Button {
+                                searchText = ""
+                            } label: {
                                 Image(systemName: "xmark.circle.fill")
-                                    .font(.system(size: 13))
                                     .foregroundColor(.tteMediumGray)
-                                    .onTapGesture {
-                                        searchedRegionName = nil
-                                        cameraPosition = .region(MKCoordinateRegion(
-                                            center: CLLocationCoordinate2D(latitude: 36.5, longitude: 127.8),
-                                            span: MKCoordinateSpan(latitudeDelta: 5, longitudeDelta: 5)
-                                        ))
-                                    }
                             }
                         }
-                        .foregroundColor(searchedRegionName != nil ? .tteOrange : .tteDarkGray)
-                        .frame(width: searchedRegionName != nil ? nil : buttonSize, height: buttonSize)
-                        .padding(.horizontal, searchedRegionName != nil ? 12 : 0)
-                        .background(.ultraThinMaterial, in: Capsule())
-                        .shadow(color: .black.opacity(0.1), radius: 6, y: 2)
+                        
+                        Divider()
+                            .frame(height: 16)
+                            .padding(.horizontal, 4)
+                        
+                        Button {
+                            showRegionSearch = true
+                        } label: {
+                            Image(systemName: "map.fill")
+                                .font(.system(size: 14))
+                                .foregroundColor(.tteOrange)
+                        }
                     }
-
-                    Spacer()
+                    .padding(.horizontal, 12)
+                    .frame(height: buttonSize)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .shadow(color: .black.opacity(0.1), radius: 6, y: 2)
 
                     // 코스 필터
                     HStack(spacing: 0) {
-                        ForEach([("전체", CourseFilter.all), ("좋아요", .liked), ("내 코스", .mine)], id: \.0) { label, filter in
+                        ForEach([("square.grid.2x2.fill", CourseFilter.all), ("heart.fill", .liked), ("person.fill", .mine)], id: \.0) { icon, filter in
                             Button {
-                                withAnimation(.easeInOut(duration: 0.2)) { courseFilter = filter }
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    courseFilter = filter
+                                }
                             } label: {
-                                Text(label)
-                                    .font(.system(size: 13, weight: courseFilter == filter ? .semibold : .regular))
-                                    .foregroundColor(courseFilter == filter ? .white : .primary.opacity(0.7))
-                                    .padding(.horizontal, 16)
-                                    .frame(height: buttonSize)
-                                    .background(Capsule().fill(courseFilter == filter ? Color.tteOrange : Color.clear))
+                                Image(systemName: icon)
+                                    .font(.system(size: 14))
+                                    .foregroundColor(courseFilter == filter ? .white : .tteOrange)
+                                    .frame(width: buttonSize, height: buttonSize)
+                                    .background(Circle().fill(courseFilter == filter ? Color.tteOrange : Color.clear))
                             }
                         }
                     }
                     .background(.ultraThinMaterial, in: Capsule())
                     .shadow(color: .black.opacity(0.1), radius: 6, y: 2)
-
-                    Spacer()
-
-                    // 균형을 위한 더미 (검색 버튼과 동일 너비)
-                    Color.clear.frame(width: buttonSize, height: buttonSize)
                 }
                 .padding(.horizontal, 16)
             }
@@ -533,6 +564,56 @@ struct CourseCardView: View {
         .padding(16)
         .frame(width: 220)
         .background(RoundedRectangle(cornerRadius: 16).fill(Color(UIColor.secondarySystemBackground)))
+    }
+}
+
+extension MainView {
+    // MARK: - Empty Search Result
+    private var emptySearchResultOverlay: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 40))
+                .foregroundColor(.tteOrange.opacity(0.6))
+            
+            Text("검색 결과가 없어요")
+                .font(.system(size: 17, weight: .bold))
+                .foregroundColor(.tteDarkGray)
+            
+            Text("다른 키워드로 검색해보세요!")
+                .font(.system(size: 14))
+                .foregroundColor(.tteMediumGray)
+        }
+        .padding(.horizontal, 32)
+        .padding(.vertical, 40)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 24))
+        .shadow(color: .black.opacity(0.1), radius: 20)
+        .padding(.bottom, 100)
+    }
+
+    // MARK: - Map Search & Move
+    private func performMapSearch() async {
+        let q = searchText.trimmingCharacters(in: .whitespaces)
+        guard !q.isEmpty else { return }
+        
+        let request = MKLocalSearch.Request()
+        request.naturalLanguageQuery = q
+        
+        do {
+            let response = try await MKLocalSearch(request: request).start()
+            if let firstItem = response.mapItems.first {
+                let coord = firstItem.placemark.coordinate
+                
+                withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+                    cameraPosition = .region(MKCoordinateRegion(
+                        center: coord,
+                        span: MKCoordinateSpan(latitudeDelta: 0.1, longitudeDelta: 0.1)
+                    ))
+                }
+            }
+        } catch {
+            print("[Search] Map search failed: \(error.localizedDescription)")
+        }
     }
 }
 
