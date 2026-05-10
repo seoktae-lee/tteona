@@ -33,6 +33,8 @@ struct ImpromptuSessionView: View {
     @State private var savedSession: SavedImpromptuSession? = nil
     @State private var activeRoomIds: Set<String> = []
     @State private var didStartSession = false
+    @State private var cameraResult = false
+    @State private var showIntegrityAlert = false
 
     private let sessionStore = ImpromptuSessionStore.shared
 
@@ -102,19 +104,21 @@ struct ImpromptuSessionView: View {
             }
         }
         // 2단계: 카메라
-        .fullScreenCover(isPresented: $showCamera) {
+        .fullScreenCover(isPresented: $showCamera, onDismiss: {
+            if cameraResult {
+                handleCameraSaved()
+                cameraResult = false
+            }
+        }) {
             if let place = pendingPlace {
                 CameraView(
                     place: place,
                     sessionId: sessionId,
                     onSaved: {
-                        isSavingClip = true
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                            handleCameraSaved()
-                            isSavingClip = false
-                        }
+                        cameraResult = true
                     },
                     onClose: {
+                        cameraResult = false
                         pendingPlace = nil
                     }
                 )
@@ -132,6 +136,11 @@ struct ImpromptuSessionView: View {
         }
         .sheet(isPresented: $showEndAlert) {
             endSheet
+        }
+        .alert("일부 영상 확인 불가", isPresented: $showIntegrityAlert) {
+            Button("확인", role: .cancel) { }
+        } message: {
+            Text("일부 장소의 영상 파일이 확인되지 않아 촬영 리스트가 자동으로 정리되었습니다. 해당 장소는 다시 촬영하실 수 있습니다.")
         }
     }
 
@@ -540,7 +549,10 @@ struct ImpromptuSessionView: View {
 
     private func deleteClip(for place: Place) {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let name = "\(place.order)_\(place.placeName.replacingOccurrences(of: " ", with: "_")).mp4"
+        let safeName = place.placeName.replacingOccurrences(of: " ", with: "_")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: ":", with: "_")
+        let name = "\(place.order)_\(safeName).mp4"
         let url = docs.appendingPathComponent("Tteona/Sessions/\(sessionId)/\(name)")
         try? FileManager.default.removeItem(at: url)
     }
@@ -593,7 +605,24 @@ struct ImpromptuSessionView: View {
     }
 
     private func resumeSession(_ session: SavedImpromptuSession) {
-        capturedPlaces = session.places
+        // 이어하기 시 무결성 검증 (파일 존재 여부 확인)
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let validatedPlaces = session.places.filter { place in
+            let safeName = place.placeName.replacingOccurrences(of: " ", with: "_")
+                .replacingOccurrences(of: "/", with: "_")
+                .replacingOccurrences(of: ":", with: "_")
+            let name = "\(place.order)_\(safeName).mp4"
+            let url = docs.appendingPathComponent("Tteona/Sessions/\(sessionId)/\(name)")
+            return FileManager.default.fileExists(atPath: url.path)
+        }
+
+        if validatedPlaces.count < session.places.count {
+            showIntegrityAlert = true
+        }
+
+        capturedPlaces = validatedPlaces
+        reorderPlaces() // 혹시 중간에 빠진게 있다면 순서 재조정
+
         if !session.roomIds.isEmpty {
             activeRoomIds = Set(session.roomIds)
         }

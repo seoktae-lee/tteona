@@ -202,11 +202,37 @@ class CameraService: NSObject {
         }
     }
 
+    func cancelRecording() {
+        guard isRecording else { return }
+        writingQueue.async { [weak self] in
+            guard let self, let writer = self.assetWriter, self.isRecording else { return }
+            self.isRecording = false
+            self.videoWriterInput?.markAsFinished()
+            self.audioWriterInput?.markAsFinished()
+            writer.cancelWriting()
+            
+            let url = self.outputURL
+            self.assetWriter = nil
+            self.videoWriterInput = nil
+            self.audioWriterInput = nil
+            self.outputURL = nil
+            self.isWritingSessionStarted = false
+            
+            if let url = url {
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
+    }
+
     // MARK: - Helpers
     private func videoOutputURL(place: Place, sessionId: String) -> URL {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let dir = docs.appendingPathComponent("Tteona/Sessions/\(sessionId)")
-        let name = "\(place.order)_\(place.placeName.replacingOccurrences(of: " ", with: "_")).mp4"
+        let safePlaceName = place.placeName
+            .replacingOccurrences(of: " ", with: "_")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: ":", with: "_")
+        let name = "\(place.order)_\(safePlaceName).mp4"
         return dir.appendingPathComponent(name)
     }
 

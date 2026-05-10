@@ -11,11 +11,11 @@ struct CameraView: View {
 
     var body: some View {
         CameraViewControllerWrapper(place: place, sessionId: sessionId) {
+            onSaved()
             dismiss()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { onSaved() }
         } onClose: {
-            dismiss()
             onClose?()
+            dismiss()
         }
         .ignoresSafeArea()
     }
@@ -56,6 +56,7 @@ final class CameraViewController: UIViewController {
     private var progressTimer: Timer?
     private var recordStart: Date?
     private var landscapeOverlay: UIView?
+    private var savingOverlay: UIView?
 
     init(place: Place, sessionId: String) {
         self.place = place
@@ -71,6 +72,16 @@ final class CameraViewController: UIViewController {
         service.configure()
         service.onRecordingFinished = { [weak self] url in
             DispatchQueue.main.async { self?.recordingDone(url: url) }
+        }
+    }
+
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        progressTimer?.invalidate()
+        progressTimer = nil
+        service.stopSession()
+        if service.isRecording {
+            service.cancelRecording()
         }
     }
 
@@ -170,6 +181,63 @@ final class CameraViewController: UIViewController {
         buildProgressRing()
         buildRecordButton()
         buildLandscapeOverlay()
+        buildSavingOverlay()
+    }
+
+    private func buildSavingOverlay() {
+        let overlay = UIView(frame: view.bounds)
+        overlay.backgroundColor = UIColor.black.withAlphaComponent(0.6)
+        overlay.isHidden = true
+        view.addSubview(overlay)
+        savingOverlay = overlay
+
+        let container = UIView()
+        container.backgroundColor = UIColor.black.withAlphaComponent(0.8)
+        container.layer.cornerRadius = 18
+        container.translatesAutoresizingMaskIntoConstraints = false
+        overlay.addSubview(container)
+
+        let stack = UIStackView()
+        stack.axis = .vertical
+        stack.spacing = 16
+        stack.alignment = .center
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(stack)
+
+        let indicator = UIActivityIndicatorView(style: .large)
+        indicator.color = .white
+        indicator.startAnimating()
+        indicator.tag = 701
+
+        let checkMark = UIImageView(image: UIImage(systemName: "checkmark.circle.fill"))
+        checkMark.tintColor = .green
+        checkMark.contentMode = .scaleAspectFit
+        checkMark.isHidden = true
+        checkMark.tag = 702
+        NSLayoutConstraint.activate([
+            checkMark.widthAnchor.constraint(equalToConstant: 48),
+            checkMark.heightAnchor.constraint(equalToConstant: 48)
+        ])
+
+        let label = UILabel()
+        label.text = "영상 저장 중..."
+        label.textColor = .white
+        label.font = .systemFont(ofSize: 16, weight: .medium)
+        label.tag = 703
+
+        stack.addArrangedSubview(indicator)
+        stack.addArrangedSubview(checkMark)
+        stack.addArrangedSubview(label)
+
+        NSLayoutConstraint.activate([
+            container.centerXAnchor.constraint(equalTo: overlay.centerXAnchor),
+            container.centerYAnchor.constraint(equalTo: overlay.centerYAnchor),
+            container.widthAnchor.constraint(equalToConstant: 200),
+            container.heightAnchor.constraint(equalToConstant: 160),
+
+            stack.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+            stack.centerYAnchor.constraint(equalTo: container.centerYAnchor)
+        ])
     }
 
     private func buildProgressRing() {
@@ -352,6 +420,12 @@ final class CameraViewController: UIViewController {
             self.progressRing.strokeEnd = CGFloat(p)
             let remaining = max(0, Int(ceil((1 - p) * 5)))
             self.countLabel.text = "\(remaining)"
+            
+            // 5초 완료 시점 UI 잠금
+            if p >= 1.0 {
+                self.savingOverlay?.isHidden = false
+                self.view.isUserInteractionEnabled = false
+            }
         }
     }
 
@@ -369,7 +443,24 @@ final class CameraViewController: UIViewController {
         view.viewWithTag(901)?.alpha = 0.3
         hintLabel.text = "버튼을 누르면 5초 고정 촬영"
         setInnerDot(recording: false)
-        if url != nil { onSaved?() }
+        
+        if url != nil {
+            // 저장 성공 UI 업데이트
+            savingOverlay?.viewWithTag(701)?.isHidden = true // indicator
+            savingOverlay?.viewWithTag(702)?.isHidden = false // checkMark
+            if let label = savingOverlay?.viewWithTag(703) as? UILabel {
+                label.text = "영상 저장 성공!"
+            }
+            
+            // 1.2초 대기 후 자동 닫기
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+                self?.onSaved?()
+            }
+        } else {
+            // 취소되거나 오류 시 오버레이 숨기기
+            savingOverlay?.isHidden = true
+            view.isUserInteractionEnabled = true
+        }
     }
 
     private func setInnerDot(recording: Bool) {

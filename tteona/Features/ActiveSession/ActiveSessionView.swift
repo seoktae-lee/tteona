@@ -25,6 +25,8 @@ struct ActiveSessionView: View {
     @State private var showPlaceEditor = false
     @State private var showResumeSheet = false
     @State private var didStartSession = false
+    @State private var cameraResult = false
+    @State private var showIntegrityAlert = false
 
     private let sessionStore = ActiveSessionStore.shared
 
@@ -58,20 +60,38 @@ struct ActiveSessionView: View {
             fitMap()
             if let saved = sessionStore.loadTodaySession(),
                saved.course.courseId == course.courseId {
+                
+                // 이어하기 시 무결성 검증 (파일 존재 여부 확인)
+                let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                let sessionId = course.courseId
+                let validatedVisitedOrders = saved.visitedPlaceOrders.filter { order in
+                    guard let place = saved.orderedPlaces.first(where: { $0.order == order }) else { return false }
+                    let safeName = place.placeName.replacingOccurrences(of: " ", with: "_")
+                        .replacingOccurrences(of: "/", with: "_")
+                        .replacingOccurrences(of: ":", with: "_")
+                    let name = "\(place.order)_\(safeName).mp4"
+                    let url = docs.appendingPathComponent("Tteona/Sessions/\(sessionId)/\(name)")
+                    return FileManager.default.fileExists(atPath: url.path)
+                }
+
+                let isCorrupted = validatedVisitedOrders.count < saved.visitedPlaceOrders.count
+
                 if isResuming {
                     // 바로 이어서 하기
                     orderedPlaces = saved.orderedPlaces
-                    visitedPlaces = Set(saved.visitedPlaceOrders)
+                    visitedPlaces = Set(validatedVisitedOrders)
                     skippedPlaces = Set(saved.skippedPlaceOrders)
                     currentPlaceIndex = saved.currentPlaceIndex
                     locationService.startTracking(places: orderedPlaces)
+                    if isCorrupted { showIntegrityAlert = true }
                 } else {
                     // 저장된 세션 → 시트로 물어보기
                     orderedPlaces = saved.orderedPlaces
-                    visitedPlaces = Set(saved.visitedPlaceOrders)
+                    visitedPlaces = Set(validatedVisitedOrders)
                     skippedPlaces = Set(saved.skippedPlaceOrders)
                     currentPlaceIndex = saved.currentPlaceIndex
                     showResumeSheet = true
+                    if isCorrupted { showIntegrityAlert = true }
                 }
             } else {
                 startNewSession()
@@ -113,10 +133,17 @@ struct ActiveSessionView: View {
             showCamera = true
             notificationManager.pendingPlaceName = nil
         }
-        .fullScreenCover(isPresented: $showCamera, onDismiss: handleCameraDismiss) {
+        .fullScreenCover(isPresented: $showCamera, onDismiss: {
+            if cameraResult {
+                handleCameraDismiss()
+                cameraResult = false
+            }
+        }) {
             if let place = currentPlace {
                 CameraView(place: place, sessionId: course.courseId) {
-                    // 코스 기반: dismiss 시 handleCameraDismiss에서 처리
+                    cameraResult = true
+                } onClose: {
+                    cameraResult = false
                 }
             }
         }
@@ -130,6 +157,11 @@ struct ActiveSessionView: View {
         }
         .sheet(isPresented: $showResumeSheet) {
             resumeSheet
+        }
+        .alert("일부 영상 확인 불가", isPresented: $showIntegrityAlert) {
+            Button("확인", role: .cancel) { }
+        } message: {
+            Text("일부 장소의 영상 파일이 확인되지 않아 촬영 리스트가 자동으로 정리되었습니다. 해당 장소는 다시 촬영하실 수 있습니다.")
         }
         .sheet(isPresented: $showPlaceEditor, onDismiss: saveSession) {
             PlaceEditorSheet(
