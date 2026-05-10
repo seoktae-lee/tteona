@@ -243,14 +243,52 @@ class RoomService: ObservableObject {
         locationsListener = nil
     }
 
-    // MARK: - 방 나가기
+    // MARK: - 방 나가기 및 자동 파기
     func leaveRoom(roomId: String, userId: String) async throws {
-        try await db.collection("rooms").document(roomId)
-            .updateData(["memberIds": FieldValue.arrayRemove([userId])])
-        try await db.collection("rooms").document(roomId)
-            .collection("members").document(userId).delete()
-        try await db.collection("rooms").document(roomId)
-            .collection("locations").document(userId).delete()
+        let roomRef = db.collection("rooms").document(roomId)
+        let roomDoc = try await roomRef.getDocument()
+        guard let room = try? roomDoc.data(as: Room.self) else { return }
+
+        if room.memberIds.count <= 1 {
+            // 마지막 멤버라면 방 전체 데이터 삭제
+            try await deleteRoomCompletely(roomId: roomId)
+        } else {
+            // 다른 멤버가 있다면 나만 멤버 리스트에서 제거
+            try await roomRef.updateData([
+                "memberIds": FieldValue.arrayRemove([userId])
+            ])
+            // members 서브컬렉션에서도 삭제
+            try await roomRef.collection("members").document(userId).delete()
+        }
+    }
+
+    private func deleteRoomCompletely(roomId: String) async throws {
+        let roomRef = db.collection("rooms").document(roomId)
+        
+        // 1. 하위 컬렉션 삭제 (locations, sharedCourses, members)
+        try await deleteCollection(ref: roomRef.collection("locations"))
+        try await deleteCollection(ref: roomRef.collection("sharedCourses"))
+        try await deleteCollection(ref: roomRef.collection("members"))
+        
+        // 2. 피드 및 댓글 삭제
+        let feedsSnapshot = try await roomRef.collection("feed").getDocuments()
+        for feedDoc in feedsSnapshot.documents {
+            // 피드 하위의 댓글 삭제
+            try await deleteCollection(ref: feedDoc.reference.collection("comments"))
+            // 피드 문서 삭제
+            try await feedDoc.reference.delete()
+        }
+        
+        // 3. 마지막으로 메인 방 문서 삭제
+        try await roomRef.delete()
+        print("[Room] Room \(roomId) and all associated data deleted successfully.")
+    }
+
+    private func deleteCollection(ref: CollectionReference) async throws {
+        let snapshot = try await ref.getDocuments()
+        for doc in snapshot.documents {
+            try await doc.reference.delete()
+        }
     }
 
     // MARK: - 피드 자동 기록
