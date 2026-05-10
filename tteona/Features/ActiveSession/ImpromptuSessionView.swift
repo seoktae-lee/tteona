@@ -73,6 +73,11 @@ struct ImpromptuSessionView: View {
                 sessionStore.clear()
                 startNewSession()
             }
+            
+            // 활동 시작 피드 즉시 생성 (댓글 작성 보장)
+            for rid in Array(selectedRoomIds) {
+                roomService.postFeed(roomId: rid, type: .freeTripStart, userId: uid, nickname: nickname, courseId: "free", courseName: "나의 오늘")
+            }
         }
         .onDisappear {
             locationService.stopContinuousUpdates()

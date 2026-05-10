@@ -57,7 +57,7 @@ class RoomService: ObservableObject {
         )
         
         // 기본 피드 생성 (댓글 작성 보장)
-        postFeed(roomId: roomId, type: .tripStart, userId: userId, nickname: nickname, courseId: "system", courseName: "그룹 참여")
+        postFeed(roomId: roomId, type: .tripStart, userId: userId, nickname: nickname, courseId: "system", courseName: "그룹 참여 여행")
         
         return room
     }
@@ -89,7 +89,7 @@ class RoomService: ObservableObject {
             .collection("members").document(userId).setData(memberData)
 
         // 기본 피드 생성 (댓글 작성 보장)
-        postFeed(roomId: room.roomId, type: .tripStart, userId: userId, nickname: nickname, courseId: "system", courseName: "그룹 참여")
+        postFeed(roomId: room.roomId, type: .tripStart, userId: userId, nickname: nickname, courseId: "system", courseName: "그룹 참여 여행")
 
         return room
     }
