@@ -55,6 +55,10 @@ class RoomService: ObservableObject {
             memberIds: [userId],
             createdAt: Date()
         )
+        
+        // 기본 피드 생성 (댓글 작성 보장)
+        postFeed(roomId: roomId, type: .tripStart, userId: userId, nickname: nickname, courseId: "system", courseName: "그룹 참여")
+        
         return room
     }
 
@@ -83,6 +87,9 @@ class RoomService: ObservableObject {
         ]
         try await db.collection("rooms").document(room.roomId)
             .collection("members").document(userId).setData(memberData)
+
+        // 기본 피드 생성 (댓글 작성 보장)
+        postFeed(roomId: room.roomId, type: .tripStart, userId: userId, nickname: nickname, courseId: "system", courseName: "그룹 참여")
 
         return room
     }

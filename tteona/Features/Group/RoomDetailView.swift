@@ -162,11 +162,11 @@ struct RoomDetailView: View {
                                 MemberChatRow(
                                     member: member,
                                     isMe: member.userId == uid,
-                                    isActive: isActive,
                                     latestFeed: latestFeed
                                 )
                             }
-                            Divider().padding(.leading, 76)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 6)
                         }
                     }
                 }
@@ -396,95 +396,40 @@ struct SharedCourseCard: View {
 struct MemberChatRow: View {
     let member: RoomMember
     let isMe: Bool
-    let isActive: Bool
     let latestFeed: FeedItem?
 
-    private var previewIcon: String? {
-        guard let feed = latestFeed else { return nil }
-        switch feed.type {
-        case .freeTripStart: return nil
-        case .freeCapture:   return "🎬"
-        case .freeTripEnd:   return "✅"
-        case .tripStart:     return "🚀"
-        case .tripEnd:       return "✅"
-        case .arrival:       return "📍"
-        case .photo:         return "📸"
-        }
-    }
-
-    private var previewLabel: String {
-        guard let feed = latestFeed else { return "아직 활동이 없어요" }
-        switch feed.type {
-        case .freeTripStart: return "나의 오늘을 시작했어요!"
-        case .freeCapture:   return "\(feed.placeName ?? "어딘가")에서 영상을 남겼어요"
-        case .freeTripEnd:   return "오늘 \(feed.courseName) 기록을 마쳤어요"
-        case .tripStart:     return "\(feed.courseName) 여행을 시작했어요!"
-        case .tripEnd:       return "\(feed.courseName) 여행을 종료했어요!"
-        case .arrival:       return "\(feed.placeName ?? "")에 도착했어요!"
-        case .photo:         return "사진을 공유했어요"
-        }
-    }
-
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 16) {
+            // 프로필 원형 이니셜
             ZStack {
                 Circle()
-                    .fill(isActive ? Color.tteOrange.opacity(0.12) : Color.tteMediumGray.opacity(0.15))
-                    .frame(width: 52, height: 52)
+                    .fill(Color.tteOrange.opacity(0.08))
+                    .frame(width: 48, height: 48)
                 Text(String(member.nickname.prefix(1)))
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundColor(isActive ? .tteOrange : .tteMediumGray)
-            }
-            .overlay(Circle().stroke(isActive ? Color.tteOrange : Color.clear, lineWidth: 2))
-            .overlay(alignment: .bottomTrailing) {
-                if isActive {
-                    Circle()
-                        .fill(Color.tteOrange)
-                        .frame(width: 12, height: 12)
-                        .overlay(Circle().stroke(Color.tteBackground, lineWidth: 2))
-                }
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(.tteOrange)
             }
 
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(isMe ? "\(member.nickname) (나)" : member.nickname)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(.tteDarkGray)
-                    if isActive {
-                        Text("활동 중")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(.tteOrange)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 2)
-                            .background(Capsule().fill(Color.tteOrange.opacity(0.12)))
-                    }
-                    Spacer()
-                    if let feed = latestFeed {
-                        Text(feed.createdAt.relativeDescription)
-                            .font(.system(size: 12))
-                            .foregroundColor(.tteMediumGray)
-                    }
-                }
-                if latestFeed != nil {
-                    HStack(spacing: 4) {
-                        if let icon = previewIcon {
-                            Text(icon).font(.system(size: 12))
-                        }
-                        Text(previewLabel)
-                            .font(.system(size: 13))
-                            .foregroundColor(.tteMediumGray)
-                            .lineLimit(1)
-                    }
-                }
-            }
+            Text(isMe ? "\(member.nickname) (나)" : member.nickname)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundColor(.tteDarkGray)
+            
+            Spacer()
 
             Image(systemName: "chevron.right")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundColor(.tteMediumGray.opacity(0.4))
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(Color.tteBackground)
+        .padding(.vertical, 18)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.tteBackground)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.tteOrange.opacity(0.4), lineWidth: 1.2)
+        )
     }
 }
 
