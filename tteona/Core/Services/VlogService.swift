@@ -7,7 +7,7 @@ class VlogService {
     // MARK: - Public
     func generateVlog(course: Course, sessionId: String,
                       onProgress: @escaping (Double) -> Void) async throws -> URL {
-        let places = course.places.sorted { $0.order < $1.order }
+        let places = course.places
 
         var segments: [(asset: AVURLAsset, placeName: String, date: Date)] = []
         for place in places {

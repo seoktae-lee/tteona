@@ -68,6 +68,7 @@ class FCMService: NSObject {
             "type": GroupNotificationType.feedComment.rawValue,
             "senderUserId": senderUserId,
             "senderNickname": senderNickname,
+            "targetUserId": feedAuthorUserId,
             "roomIds": [roomId],
             "commentText": commentText,
             "createdAt": FieldValue.serverTimestamp(),

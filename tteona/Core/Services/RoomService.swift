@@ -373,15 +373,19 @@ class RoomService: ObservableObject {
     }
 
     // MARK: - 댓글 추가
-    func addComment(roomId: String, feedId: String, userId: String, nickname: String, text: String) async throws {
+    func addComment(roomId: String, feedId: String, userId: String, nickname: String, text: String,
+                    replyToNickname: String? = nil, replyToText: String? = nil) async throws {
         let commentId = UUID().uuidString
-        let data: [String: Any] = [
+        var data: [String: Any] = [
             "commentId": commentId,
             "userId": userId,
             "nickname": nickname,
             "text": text,
             "createdAt": FieldValue.serverTimestamp()
         ]
+        if let rn = replyToNickname { data["replyToNickname"] = rn }
+        if let rt = replyToText { data["replyToText"] = rt }
+
         try await db.collection("rooms").document(roomId)
             .collection("feed").document(feedId)
             .collection("comments").document(commentId).setData(data)
@@ -457,7 +461,8 @@ class RoomService: ObservableObject {
         return result
     }
 
-    func addCommentToLatestFeed(roomId: String, userId: String, commenterId: String, commenterNickname: String, text: String) async throws {
+    func addCommentToLatestFeed(roomId: String, userId: String, commenterId: String, commenterNickname: String,
+                                text: String, replyToNickname: String? = nil, replyToText: String? = nil) async throws {
         let feeds = await fetchMemberFeedItems(roomId: roomId, userId: userId)
         print("[Comment] feeds count: \(feeds.count), userId: \(userId), roomId: \(roomId)")
         guard let latest = feeds.last else {
@@ -466,7 +471,8 @@ class RoomService: ObservableObject {
         }
         print("[Comment] posting to feedId: \(latest.feedId)")
         try await addComment(roomId: roomId, feedId: latest.feedId,
-                             userId: commenterId, nickname: commenterNickname, text: text)
+                             userId: commenterId, nickname: commenterNickname, text: text,
+                             replyToNickname: replyToNickname, replyToText: replyToText)
     }
 
     // MARK: - Helper

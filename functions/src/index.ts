@@ -104,31 +104,38 @@ export const sendGroupNotification = onDocumentCreated(
     const { type, senderUserId, senderNickname, roomIds, courseName, commentText, placeName } = data;
     const { title, body } = buildMessage(type, senderNickname, courseName, commentText, placeName);
 
-    // 각 룸의 멤버 ID 수집 (발신자 제외)
+    // 수신자 ID 수집
     const recipientUserIds = new Set<string>();
 
-    // 방 전체 멤버에게 (발신자 제외)
-    await Promise.all(
-      (roomIds ?? []).map(async (roomId) => {
-        const roomDoc = await db.collection("rooms").doc(roomId).get();
-        const memberIds: string[] = roomDoc.data()?.memberIds ?? [];
-        memberIds
-          .filter((id) => id !== senderUserId)
-          .forEach((id) => recipientUserIds.add(id));
-      })
-    );
+    if (type === "feed_comment" && data.targetUserId) {
+      // 댓글 알림: 피드 작성자에게만 (발신자가 본인 피드에 댓글 달 경우 제외)
+      if (data.targetUserId !== senderUserId) {
+        recipientUserIds.add(data.targetUserId);
+      }
+    } else {
+      // 방 전체 멤버에게 (발신자 제외)
+      await Promise.all(
+        (roomIds ?? []).map(async (roomId) => {
+          const roomDoc = await db.collection("rooms").doc(roomId).get();
+          const memberIds: string[] = roomDoc.data()?.memberIds ?? [];
+          memberIds
+            .filter((id) => id !== senderUserId)
+            .forEach((id) => recipientUserIds.add(id));
+        })
+      );
+    }
 
     if (recipientUserIds.size === 0) {
       await event.data?.ref.update({ processed: true });
       return;
     }
 
-    // 각 멤버의 FCM 토큰 조회
+    // 각 멤버의 FCM 토큰 조회 (userPrivate 컬렉션)
     const tokens: string[] = [];
     await Promise.all(
       Array.from(recipientUserIds).map(async (userId) => {
-        const userDoc = await db.collection("users").doc(userId).get();
-        const token = userDoc.data()?.fcmToken as string | undefined;
+        const privateDoc = await db.collection("userPrivate").doc(userId).get();
+        const token = privateDoc.data()?.fcmToken as string | undefined;
         if (token) tokens.push(token);
       })
     );

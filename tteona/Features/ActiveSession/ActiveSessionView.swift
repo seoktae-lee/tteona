@@ -66,10 +66,15 @@ struct ActiveSessionView: View {
                 let sessionId = course.courseId
                 let validatedVisitedOrders = saved.visitedPlaceOrders.filter { order in
                     guard let place = saved.orderedPlaces.first(where: { $0.order == order }) else { return false }
-                    let safeName = place.placeName.replacingOccurrences(of: " ", with: "_")
-                        .replacingOccurrences(of: "/", with: "_")
-                        .replacingOccurrences(of: ":", with: "_")
-                    let name = "\(place.order)_\(safeName).mp4"
+                    let name: String
+                    if let clipFileName = place.clipFileName {
+                        name = clipFileName
+                    } else {
+                        let safeName = place.placeName.replacingOccurrences(of: " ", with: "_")
+                            .replacingOccurrences(of: "/", with: "_")
+                            .replacingOccurrences(of: ":", with: "_")
+                        name = "\(place.order)_\(safeName).mp4"
+                    }
                     let url = docs.appendingPathComponent("Tteona/Sessions/\(sessionId)/\(name)")
                     return FileManager.default.fileExists(atPath: url.path)
                 }
@@ -148,7 +153,18 @@ struct ActiveSessionView: View {
             }
         }
         .fullScreenCover(isPresented: $showVlog, onDismiss: { sessionStore.clear() }) {
-            VlogGenerationView(course: course, sessionId: course.courseId) {
+            // orderedPlaces(재정렬 반영)로 course를 재구성해서 Vlog 순서 보장
+            let reorderedCourse = Course(
+                courseId: course.courseId,
+                authorId: course.authorId,
+                courseName: course.courseName,
+                tag: course.tag,
+                region: course.region,
+                likeCount: course.likeCount,
+                createdAt: course.createdAt,
+                places: orderedPlaces
+            )
+            VlogGenerationView(course: reorderedCourse, sessionId: course.courseId) {
                 showVlog = false
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     dismiss()
@@ -397,8 +413,12 @@ struct ActiveSessionView: View {
                 placeName: place.placeName
             )
         }
-        if currentPlaceIndex < orderedPlaces.count - 1 {
-            currentPlaceIndex += 1
+        // 건너뛴 장소를 포함해 다음 미완료 장소로 이동
+        if let next = orderedPlaces.indices.first(where: { idx in
+            let o = orderedPlaces[idx].order
+            return !visitedPlaces.contains(o) && !skippedPlaces.contains(o)
+        }) {
+            currentPlaceIndex = next
         }
         saveSession()
     }
@@ -717,8 +737,8 @@ struct PlaceEditorSheet: View {
                                         .background(Capsule().stroke(Color.tteOrange, lineWidth: 1))
                                 }
                                 .buttonStyle(.plain)
-                            } else if !isCurrent {
-                                // 건너뛰기
+                            } else {
+                                // 건너뛰기 (현재 목적지 포함)
                                 Button {
                                     skippedPlaces.insert(place.order)
                                     updateCurrentIndex()
@@ -738,15 +758,30 @@ struct PlaceEditorSheet: View {
                     .listRowBackground(isCurrent ? Color.tteOrange.opacity(0.06) : Color.clear)
                 }
                 .onMove { from, to in
+                    // 이동 전 현재 장소 기억
+                    let currentPlaceOrder = places.indices.contains(currentPlaceIndex)
+                        ? places[currentPlaceIndex].order : -1
+
                     places.move(fromOffsets: from, toOffset: to)
-                    if let fromIdx = from.first {
-                        if fromIdx == currentPlaceIndex {
-                            currentPlaceIndex = to > fromIdx ? to - 1 : to
-                        } else if fromIdx < currentPlaceIndex && to > currentPlaceIndex {
-                            currentPlaceIndex -= 1
-                        } else if fromIdx > currentPlaceIndex && to <= currentPlaceIndex {
-                            currentPlaceIndex += 1
-                        }
+
+                    // order를 배열 순서 기준으로 재번호 매기기 (clipFileName 유지)
+                    let oldOrders = places.map(\.order)
+                    for i in places.indices {
+                        places[i].order = i + 1
+                    }
+
+                    // visitedPlaces / skippedPlaces를 새 order로 매핑
+                    var orderMap: [Int: Int] = [:] // oldOrder -> newOrder
+                    for (i, oldOrder) in oldOrders.enumerated() {
+                        orderMap[oldOrder] = i + 1
+                    }
+                    visitedPlaces = Set(visitedPlaces.compactMap { orderMap[$0] })
+                    skippedPlaces = Set(skippedPlaces.compactMap { orderMap[$0] })
+
+                    // currentPlaceIndex를 새 order 기준으로 복원
+                    if let newOrder = orderMap[currentPlaceOrder],
+                       let newIdx = places.firstIndex(where: { $0.order == newOrder }) {
+                        currentPlaceIndex = newIdx
                     }
                 }
             }

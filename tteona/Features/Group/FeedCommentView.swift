@@ -36,6 +36,7 @@ struct MemberChatView: View {
     @State private var commentText = ""
     @State private var isLoading = true
     @State private var isPosting = false
+    @State private var replyTarget: FeedComment? = nil
     @FocusState private var isInputFocused: Bool
 
     private var uid: String { authService.currentUser?.uid ?? "" }
@@ -62,6 +63,7 @@ struct MemberChatView: View {
                 } else {
                     chatList
                 }
+                if replyTarget != nil { replyBar }
                 inputBar
             }
             .navigationTitle("\(memberNickname)님의 오늘")
@@ -95,8 +97,11 @@ struct MemberChatView: View {
                             FeedEventRow(item: item)
                                 .id(entry.id)
                         case .comment(let comment):
-                            CommentRow(comment: comment, isMe: comment.userId == uid)
-                                .id(entry.id)
+                            CommentRow(comment: comment, isMe: comment.userId == uid) {
+                                replyTarget = comment
+                                isInputFocused = true
+                            }
+                            .id(entry.id)
                         }
                     }
                 }
@@ -108,6 +113,35 @@ struct MemberChatView: View {
                 withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
             }
         }
+    }
+
+    // MARK: - 답장 인용 바
+    private var replyBar: some View {
+        HStack(spacing: 8) {
+            Rectangle()
+                .fill(Color.tteOrange)
+                .frame(width: 3)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(replyTarget?.nickname ?? "")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.tteOrange)
+                Text(replyTarget?.text ?? "")
+                    .font(.system(size: 12))
+                    .foregroundColor(.tteMediumGray)
+                    .lineLimit(1)
+            }
+            Spacer()
+            Button {
+                replyTarget = nil
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.tteMediumGray)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(Color(UIColor.secondarySystemBackground))
     }
 
     // MARK: - 입력창
@@ -137,7 +171,7 @@ struct MemberChatView: View {
         .background(Color.tteBackground.shadow(color: .black.opacity(0.06), radius: 8, y: -2))
     }
 
-    // MARK: - 엔트리 재빌드 (피드 변경 시)
+    // MARK: - 엔트리 재빌드
     private func rebuildEntries(feeds: [FeedItem]) async {
         let feedIds = feeds.map(\.feedId)
         let commentsMap = await roomService.fetchAllCommentsForFeeds(roomId: roomId, feedIds: feedIds)
@@ -156,14 +190,18 @@ struct MemberChatView: View {
         let text = commentText.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty else { return }
         isPosting = true
+        let reply = replyTarget
         commentText = ""
+        replyTarget = nil
         do {
             try await roomService.addCommentToLatestFeed(
                 roomId: roomId,
                 userId: memberUserId,
                 commenterId: uid,
                 commenterNickname: nickname,
-                text: text
+                text: text,
+                replyToNickname: reply?.nickname,
+                replyToText: reply?.text
             )
         } catch {
             print("[Comment] error: \(error)")
@@ -286,6 +324,9 @@ struct FeedEventRow: View {
 struct CommentRow: View {
     let comment: FeedComment
     let isMe: Bool
+    var onReply: (() -> Void)? = nil
+
+    @State private var showReplyAction = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -308,15 +349,56 @@ struct CommentRow: View {
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(.tteMediumGray)
                 }
-                Text(comment.text)
-                    .font(.system(size: 14))
-                    .foregroundColor(isMe ? .white : .tteDarkGray)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(
-                        RoundedRectangle(cornerRadius: 14)
-                            .fill(isMe ? Color.tteOrange : Color(UIColor.secondarySystemBackground))
-                    )
+
+                // 말풍선 (인용 + 본문을 하나로)
+                VStack(alignment: .leading, spacing: 0) {
+                    // 인용 박스
+                    if let rn = comment.replyToNickname, let rt = comment.replyToText {
+                        HStack(spacing: 8) {
+                            Rectangle()
+                                .fill(isMe ? Color.white.opacity(0.7) : Color.tteOrange)
+                                .frame(width: 3)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(rn)
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundColor(isMe ? .white : .tteOrange)
+                                Text(rt)
+                                    .font(.system(size: 11))
+                                    .foregroundColor(isMe ? .white.opacity(0.8) : .tteMediumGray)
+                                    .lineLimit(1)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.top, 8)
+                        .padding(.bottom, 6)
+                        .background(isMe ? Color.white.opacity(0.15) : Color.black.opacity(0.05))
+
+                        Divider()
+                            .background(isMe ? Color.white.opacity(0.3) : Color.black.opacity(0.08))
+                    }
+
+                    // 본문
+                    Text(comment.text)
+                        .font(.system(size: 14))
+                        .foregroundColor(isMe ? .white : .tteDarkGray)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                }
+                .background(
+                    RoundedRectangle(cornerRadius: 14)
+                        .fill(isMe ? Color.tteOrange : Color(UIColor.secondarySystemBackground))
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .onLongPressGesture {
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    showReplyAction = true
+                }
+                .confirmationDialog("", isPresented: $showReplyAction) {
+                    Button("↩ 답장") { onReply?() }
+                    Button("취소", role: .cancel) {}
+                }
+
                 Text(comment.createdAt.relativeDescription)
                     .font(.system(size: 11))
                     .foregroundColor(.tteMediumGray.opacity(0.7))

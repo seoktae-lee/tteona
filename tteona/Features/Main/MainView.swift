@@ -313,10 +313,10 @@ struct MainView: View {
 
     private func handleImpromptuTap() {
         selectedRoomIds = []
+        courseSessionInfo = nil  // courseSessionInfo가 남아있으면 fullScreenCover 충돌 방지
         let saved = ImpromptuSessionStore.shared.loadTodaySession()
         let hasSavedSession = saved.map { !$0.places.isEmpty } ?? false
         if hasSavedSession || roomService.myRooms.isEmpty {
-            // 저장된 세션이 있으면 기존 roomIds 복원, 없으면 빈 set으로 시작
             impromptuRoomIds = Set(saved?.roomIds ?? [])
         } else {
             showRoomSelect = true
@@ -430,6 +430,7 @@ struct MainView: View {
                         if impromptuSessionStore.hasTodaySession,
                            let saved = ImpromptuSessionStore.shared.loadTodaySession() {
                             Button {
+                                courseSessionInfo = nil
                                 impromptuRoomIds = Set(saved.roomIds)
                             } label: {
                                 VStack(spacing: 3) {

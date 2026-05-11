@@ -73,11 +73,6 @@ struct ImpromptuSessionView: View {
                 sessionStore.clear()
                 startNewSession()
             }
-            
-            // 활동 시작 피드 즉시 생성 (댓글 작성 보장)
-            for rid in Array(selectedRoomIds) {
-                roomService.postFeed(roomId: rid, type: .freeTripStart, userId: uid, nickname: nickname, courseId: "free", courseName: "나의 오늘")
-            }
         }
         .onDisappear {
             locationService.stopContinuousUpdates()
@@ -615,13 +610,17 @@ struct ImpromptuSessionView: View {
     }
 
     private func resumeSession(_ session: SavedImpromptuSession) {
-        // 이어하기 시 무결성 검증 (파일 존재 여부 확인)
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let validatedPlaces = session.places.filter { place in
-            let safeName = place.placeName.replacingOccurrences(of: " ", with: "_")
-                .replacingOccurrences(of: "/", with: "_")
-                .replacingOccurrences(of: ":", with: "_")
-            let name = "\(place.order)_\(safeName).mp4"
+            let name: String
+            if let clipFileName = place.clipFileName {
+                name = clipFileName
+            } else {
+                let safeName = place.placeName.replacingOccurrences(of: " ", with: "_")
+                    .replacingOccurrences(of: "/", with: "_")
+                    .replacingOccurrences(of: ":", with: "_")
+                name = "\(place.order)_\(safeName).mp4"
+            }
             let url = docs.appendingPathComponent("Tteona/Sessions/\(sessionId)/\(name)")
             return FileManager.default.fileExists(atPath: url.path)
         }
@@ -631,7 +630,7 @@ struct ImpromptuSessionView: View {
         }
 
         capturedPlaces = validatedPlaces
-        reorderPlaces() // 혹시 중간에 빠진게 있다면 순서 재조정
+        reorderPlaces()
 
         if !session.roomIds.isEmpty {
             activeRoomIds = Set(session.roomIds)

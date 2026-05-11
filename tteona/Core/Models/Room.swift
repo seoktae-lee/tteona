@@ -97,9 +97,12 @@ struct FeedComment: Identifiable, Codable {
     var userId: String
     var nickname: String
     var text: String
+    var replyToNickname: String?
+    var replyToText: String?
     var createdAt: Date
 
     enum CodingKeys: String, CodingKey {
-        case id, commentId, userId, nickname, text, createdAt
+        case id, commentId, userId, nickname, text
+        case replyToNickname, replyToText, createdAt
     }
 }
