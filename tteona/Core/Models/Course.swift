@@ -8,13 +8,14 @@ struct Place: Identifiable, Codable, Equatable {
     var placeName: String
     var latitude: Double
     var longitude: Double
+    var clipFileName: String?  // 나의 오늘 촬영 클립 파일명 — reorder와 무관하게 파일 추적
 
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }
 
     enum CodingKeys: String, CodingKey {
-        case order, placeName, latitude, longitude
+        case order, placeName, latitude, longitude, clipFileName
     }
 }
 

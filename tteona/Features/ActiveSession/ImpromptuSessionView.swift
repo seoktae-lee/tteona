@@ -100,7 +100,8 @@ struct ImpromptuSessionView: View {
                         order: capturedPlaces.count + 1,
                         placeName: name,
                         latitude: loc.coordinate.latitude,
-                        longitude: loc.coordinate.longitude
+                        longitude: loc.coordinate.longitude,
+                        clipFileName: "\(UUID().uuidString).mp4"
                     )
                     showPlacePicker = false
                 }
@@ -554,10 +555,13 @@ struct ImpromptuSessionView: View {
 
     private func deleteClip(for place: Place) {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let safeName = place.placeName.replacingOccurrences(of: " ", with: "_")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: ":", with: "_")
-        let name = "\(place.order)_\(safeName).mp4"
+        let name = place.clipFileName ?? {
+            let safeName = place.placeName
+                .replacingOccurrences(of: " ", with: "_")
+                .replacingOccurrences(of: "/", with: "_")
+                .replacingOccurrences(of: ":", with: "_")
+            return "\(place.order)_\(safeName).mp4"
+        }()
         let url = docs.appendingPathComponent("Tteona/Sessions/\(sessionId)/\(name)")
         try? FileManager.default.removeItem(at: url)
     }

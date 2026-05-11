@@ -228,11 +228,14 @@ class CameraService: NSObject {
     private func videoOutputURL(place: Place, sessionId: String) -> URL {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let dir = docs.appendingPathComponent("Tteona/Sessions/\(sessionId)")
-        let safePlaceName = place.placeName
-            .replacingOccurrences(of: " ", with: "_")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: ":", with: "_")
-        let name = "\(place.order)_\(safePlaceName).mp4"
+        // clipFileName이 있으면 사용, 없으면 order+장소명 fallback (코스 기반 세션)
+        let name = place.clipFileName ?? {
+            let safeName = place.placeName
+                .replacingOccurrences(of: " ", with: "_")
+                .replacingOccurrences(of: "/", with: "_")
+                .replacingOccurrences(of: ":", with: "_")
+            return "\(place.order)_\(safeName).mp4"
+        }()
         return dir.appendingPathComponent(name)
     }
 

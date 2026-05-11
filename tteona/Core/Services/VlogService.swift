@@ -282,10 +282,13 @@ class VlogService {
 
     private func clipURL(place: Place, sessionId: String) -> URL {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let safeName = place.placeName.replacingOccurrences(of: " ", with: "_")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: ":", with: "_")
-        let name = "\(place.order)_\(safeName).mp4"
+        let name = place.clipFileName ?? {
+            let safeName = place.placeName
+                .replacingOccurrences(of: " ", with: "_")
+                .replacingOccurrences(of: "/", with: "_")
+                .replacingOccurrences(of: ":", with: "_")
+            return "\(place.order)_\(safeName).mp4"
+        }()
         return docs.appendingPathComponent("Tteona/Sessions/\(sessionId)/\(name)")
     }
 }
