@@ -548,7 +548,8 @@ struct ImpromptuSessionView: View {
                 order: i + 1,
                 placeName: capturedPlaces[i].placeName,
                 latitude: capturedPlaces[i].latitude,
-                longitude: capturedPlaces[i].longitude
+                longitude: capturedPlaces[i].longitude,
+                clipFileName: capturedPlaces[i].clipFileName
             )
         }
     }
