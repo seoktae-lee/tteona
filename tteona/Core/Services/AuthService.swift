@@ -11,6 +11,33 @@ import KakaoSDKCommon
 import KakaoSDKAuth
 import KakaoSDKUser
 
+// GTMSessionFetcher 충돌 방지를 위해 Firebase Functions SDK 대신 URLSession으로 직접 호출
+private func fetchKakaoCustomToken(kakaoAccessToken: String) async throws -> String {
+    let url = URL(string: "https://us-central1-tteona-dev.cloudfunctions.net/createKakaoCustomToken")!
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    let body = ["data": ["kakaoAccessToken": kakaoAccessToken]]
+    request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+    let (data, response) = try await URLSession.shared.data(for: request)
+    let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+    let rawBody = String(data: data, encoding: .utf8) ?? "(empty)"
+    print("[Kakao] URLSession statusCode=\(statusCode) body=\(rawBody)")
+
+    guard statusCode == 200 else {
+        throw NSError(domain: "tteona.kakao", code: -1,
+                      userInfo: [NSLocalizedDescriptionKey: "서버 응답 오류 (\(statusCode))"])
+    }
+    guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let result = json["result"] as? [String: Any],
+          let token = result["customToken"] as? String, !token.isEmpty else {
+        throw NSError(domain: "tteona.kakao", code: -2,
+                      userInfo: [NSLocalizedDescriptionKey: "서버 응답이 올바르지 않아요.\n\(rawBody)"])
+    }
+    return token
+}
+
 @MainActor
 class AuthService: NSObject, ObservableObject {
     @Published var currentUser: AppUser?
@@ -23,6 +50,8 @@ class AuthService: NSObject, ObservableObject {
 
     private var authStateHandle: AuthStateDidChangeListenerHandle?
     private var currentNonce: String?
+    private let db = Firestore.firestore()
+    private var kakaoSignInTask: Task<Void, Never>?
 
     override init() {
         super.init()
@@ -31,11 +60,21 @@ class AuthService: NSObject, ObservableObject {
             try? Auth.auth().signOut()
             UserDefaults.standard.set(true, forKey: "app_installed")
         }
-        authStateHandle = Auth.auth().addStateDidChangeListener { [weak self] _, user in
+        authStateHandle = Auth.auth().addStateDidChangeListener { [weak self] (_: FirebaseAuth.Auth, user: FirebaseAuth.User?) in
             Task { @MainActor in
                 if let user {
+                    let providerIDs = user.providerData.map { $0.providerID }
+                    let isEmailPassword = providerIDs.allSatisfy { $0 == "password" }
+                    let needsVerification = isEmailPassword && !user.isEmailVerified
+                    print("[Auth] uid=\(user.uid) isEmailVerified=\(user.isEmailVerified) needsVerification=\(needsVerification) verificationEmailSent=\(self?.verificationEmailSent ?? false)")
+                    if needsVerification {
+                        // 미인증 이메일 계정 → currentUser 설정하지 않음
+                        self?.isInitializing = false
+                        return
+                    }
+                    self?.verificationEmailSent = false
                     self?.currentUser = AppUser(uid: user.uid, email: user.email ?? "")
-                    self?.onboardingComplete = UserDefaults.standard.bool(forKey: "onboarding_\(user.uid)")
+                    await self?.refreshOnboardingStatus(uid: user.uid)
                 } else {
                     self?.currentUser = nil
                     self?.onboardingComplete = false
@@ -63,9 +102,12 @@ class AuthService: NSObject, ObservableObject {
         do {
             let result = try await Auth.auth().signIn(withEmail: email, password: password)
             if !result.user.isEmailVerified {
-                // 미인증 계정은 "가입 진행 중"으로 취급 → 인증 화면으로 유도
                 verificationEmailSent = true
                 errorMessage = nil
+            } else {
+                verificationEmailSent = false
+                currentUser = AppUser(uid: result.user.uid, email: result.user.email ?? "")
+                await refreshOnboardingStatus(uid: result.user.uid)
             }
         } catch {
             errorMessage = firebaseErrorMessage(error)
@@ -143,7 +185,10 @@ class AuthService: NSObject, ObservableObject {
         )
 
         do {
-            try await Auth.auth().signIn(with: firebaseCredential)
+            let result = try await Auth.auth().signIn(with: firebaseCredential)
+            verificationEmailSent = false
+            currentUser = AppUser(uid: result.user.uid, email: result.user.email ?? "")
+            await refreshOnboardingStatus(uid: result.user.uid)
         } catch {
             errorMessage = firebaseErrorMessage(error)
         }
@@ -179,7 +224,10 @@ class AuthService: NSObject, ObservableObject {
                 withIDToken: idToken,
                 accessToken: result.user.accessToken.tokenString
             )
-            try await Auth.auth().signIn(with: credential)
+            let authResult = try await Auth.auth().signIn(with: credential)
+            verificationEmailSent = false
+            currentUser = AppUser(uid: authResult.user.uid, email: authResult.user.email ?? "")
+            await refreshOnboardingStatus(uid: authResult.user.uid)
         } catch {
             errorMessage = firebaseErrorMessage(error)
         }
@@ -187,6 +235,19 @@ class AuthService: NSObject, ObservableObject {
 
     // MARK: - 카카오 로그인
     func signInWithKakao() async {
+        if let existing = kakaoSignInTask {
+            await existing.value
+            return
+        }
+        let task = Task { @MainActor in
+            await self.runKakaoSignIn()
+        }
+        kakaoSignInTask = task
+        await task.value
+        kakaoSignInTask = nil
+    }
+
+    private func runKakaoSignIn() async {
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
@@ -194,36 +255,84 @@ class AuthService: NSObject, ObservableObject {
         do {
             // 카카오톡 앱 설치 여부에 따라 분기
             let oauthToken: OAuthToken = try await withCheckedThrowingContinuation { cont in
+                let finish: (OAuthToken?, Error?) -> Void = { token, error in
+                    if let error {
+                        cont.resume(throwing: error)
+                    } else if let token {
+                        cont.resume(returning: token)
+                    } else {
+                        cont.resume(throwing: NSError(
+                            domain: "tteona.kakao",
+                            code: -1,
+                            userInfo: [NSLocalizedDescriptionKey: "카카오 로그인 응답이 비어 있어요. 잠시 후 다시 시도해주세요."]
+                        ))
+                    }
+                }
                 if UserApi.isKakaoTalkLoginAvailable() {
                     UserApi.shared.loginWithKakaoTalk { token, error in
-                        if let error { cont.resume(throwing: error) }
-                        else if let token { cont.resume(returning: token) }
+                        finish(token, error)
                     }
                 } else {
                     UserApi.shared.loginWithKakaoAccount { token, error in
-                        if let error { cont.resume(throwing: error) }
-                        else if let token { cont.resume(returning: token) }
+                        finish(token, error)
                     }
                 }
             }
 
-            // Cloud Function으로 Custom Token 발급
-            let functions = Functions.functions(region: "us-central1")
-            let result = try await functions.httpsCallable("createKakaoCustomToken")
-                .call(["kakaoAccessToken": oauthToken.accessToken])
-
-            guard let data = result.data as? [String: Any],
-                  let customToken = data["customToken"] as? String else {
-                errorMessage = "카카오 로그인에 실패했습니다."
-                return
-            }
+            // Cloud Function — 브로커로 직렬화 + 재시도 (GTMSessionFetcher 동시 호출 방지)
+            let customToken = try await fetchKakaoCustomToken(kakaoAccessToken: oauthToken.accessToken)
 
             // Custom Token으로 Firebase 로그인
-            try await Auth.auth().signIn(withCustomToken: customToken)
+            print("[Kakao] signIn with customToken start")
+            let result = try await Auth.auth().signIn(withCustomToken: customToken)
+            print("[Kakao] signIn success uid=\(result.user.uid)")
+            // authStateListener가 호출 안 될 경우를 대비해 직접 설정
+            verificationEmailSent = false
+            currentUser = AppUser(uid: result.user.uid, email: result.user.email ?? "")
+            await refreshOnboardingStatus(uid: result.user.uid)
         } catch {
-            print("[Kakao] error: \(error)")
-            errorMessage = "카카오 로그인에 실패했습니다. (\(error.localizedDescription))"
+            print("[Kakao] error domain=\((error as NSError).domain) code=\((error as NSError).code) msg=\(error.localizedDescription)")
+            errorMessage = kakaoLoginFailureMessage(for: error)
         }
+    }
+
+    /// Xcode 로그의 `No network route`, TCP error 50 등 — Callable까지 못 가거나 끊긴 경우 안내
+    private func kakaoLoginFailureMessage(for error: Error) -> String {
+        var current: Error? = error
+        for _ in 0..<6 {
+            guard let e = current else { break }
+            let ns = e as NSError
+
+            if ns.domain == NSURLErrorDomain {
+                switch ns.code {
+                case URLError.notConnectedToInternet.rawValue,
+                     URLError.networkConnectionLost.rawValue,
+                     URLError.cannotConnectToHost.rawValue,
+                     URLError.cannotFindHost.rawValue,
+                     URLError.timedOut.rawValue,
+                     URLError.dnsLookupFailed.rawValue:
+                    return "카카오 로그인은 되었지만, 서버(Firebase)와 연결되지 않았어요.\nWi‑Fi·셀룰러 연결을 확인하고, VPN·iCloud 프라이베이트 릴레이를 잠시 끈 뒤 다시 시도해주세요."
+                default:
+                    break
+                }
+            }
+            if ns.domain == NSPOSIXErrorDomain, ns.code == 50 {
+                return "카카오 로그인은 되었지만, 네트워크 경로를 찾을 수 없어요.\n인터넷 연결·VPN·방화벽을 확인한 뒤 다시 시도해주세요."
+            }
+
+            current = ns.userInfo[NSUnderlyingErrorKey] as? Error
+        }
+
+        let desc = (error as NSError).localizedDescription
+        if desc.localizedCaseInsensitiveContains("network")
+            || desc.localizedCaseInsensitiveContains("internet")
+            || desc.localizedCaseInsensitiveContains("route") {
+            return "네트워크 문제로 카카오 로그인을 마무리하지 못했어요.\n연결 상태를 확인한 뒤 다시 시도해주세요."
+        }
+        if desc.localizedCaseInsensitiveContains("already running") {
+            return "로그인 요청이 겹쳐 처리되지 못했어요.\n잠시 후 카카오 버튼을 한 번만 눌러 다시 시도해주세요."
+        }
+        return "카카오 로그인에 실패했습니다.\n\(desc)"
     }
 
     // MARK: - 로그아웃
@@ -236,55 +345,29 @@ class AuthService: NSObject, ObservableObject {
 
     // MARK: - 회원탈퇴
     func deleteAccount(userId: String) async throws {
-        let db = Firestore.firestore()
+        // 서버(Cloud Function)에서 데이터 + Auth 계정을 일괄 삭제
+        let functions = Functions.functions(region: "us-central1")
+        _ = try await functions.httpsCallable("deleteMyAccount").call()
 
-        // 1. 내가 만든 코스 삭제
-        let coursesSnapshot = try await db.collection("courses")
-            .whereField("authorId", isEqualTo: userId)
-            .getDocuments()
-        for doc in coursesSnapshot.documents {
-            try await doc.reference.delete()
-        }
-
-        // 2. 내가 속한 방에서 제거 + 내가 작성한 피드 삭제
-        let roomsSnapshot = try await db.collection("rooms")
-            .whereField("memberIds", arrayContains: userId)
-            .getDocuments()
-        for doc in roomsSnapshot.documents {
-            let roomId = doc.documentID
-            try await db.collection("rooms").document(roomId)
-                .updateData(["memberIds": FieldValue.arrayRemove([userId])])
-            try await db.collection("rooms").document(roomId)
-                .collection("members").document(userId).delete()
-            try await db.collection("rooms").document(roomId)
-                .collection("locations").document(userId).delete()
-            let feedSnapshot = try? await db.collection("rooms").document(roomId)
-                .collection("feed")
-                .whereField("userId", isEqualTo: userId)
-                .getDocuments()
-            for feedDoc in feedSnapshot?.documents ?? [] {
-                try? await feedDoc.reference.delete()
-            }
-        }
-
-        // 3. users 문서 삭제 (likedCourseIds, fcmToken 등 포함)
-        try await db.collection("users").document(userId).delete()
-        // 3-1. 민감정보 문서 삭제 (FCM 토큰 등)
-        try? await db.collection("userPrivate").document(userId).delete()
-
-        // 4. 기기 로컬 데이터 정리
+        // 로컬 데이터 정리
         UserDefaults.standard.removeObject(forKey: "onboarding_\(userId)")
         ActiveSessionStore.shared.clear()
         ImpromptuSessionStore.shared.clear()
         let docsDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         try? FileManager.default.removeItem(at: docsDir.appendingPathComponent("Tteona"))
 
-        // 5. Firebase Auth 계정 삭제
-        try await Auth.auth().currentUser?.delete()
+        // 클라이언트 세션 정리
+        try? Auth.auth().signOut()
         GIDSignIn.sharedInstance.signOut()
     }
 
     // MARK: - Helpers
+    private func refreshOnboardingStatus(uid: String) async {
+        // 기존 가입 유저는 Firestore users 문서가 이미 존재하므로 온보딩을 다시 하지 않도록 처리
+        let doc = try? await db.collection("users").document(uid).getDocument()
+        onboardingComplete = doc?.exists ?? false
+    }
+
     private func isValidEmail(_ email: String) -> Bool {
         let regex = #"^[A-Z0-9a-z._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$"#
         return email.range(of: regex, options: .regularExpression) != nil

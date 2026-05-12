@@ -451,9 +451,7 @@ struct OnboardingView: View {
             let user = AppUser(uid: uid, email: authService.currentUser?.email ?? "", nickname: "")
             try? await userService.saveUser(user)
         }
-        // onboarding 완료 플래그 저장
-        UserDefaults.standard.set(true, forKey: "onboarding_\(uid)")
-        // AuthService의 currentUser를 업데이트하면 RootView가 메인으로 전환
+        // Firestore users 문서가 있으면 기존 유저로 간주되어 RootView가 메인으로 전환
         authService.onboardingComplete = true
     }
 

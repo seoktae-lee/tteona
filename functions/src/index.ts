@@ -206,3 +206,59 @@ export const deleteUnverifiedAccounts = onSchedule(
     } while (pageToken);
   }
 );
+
+// MARK: - 내 계정 삭제 (서버에서 일괄 처리)
+export const deleteMyAccount = onCall(async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "Authentication required");
+  }
+
+  try {
+    // 1) 내가 만든 코스 삭제
+    const coursesSnapshot = await db.collection("courses")
+      .where("authorId", "==", uid)
+      .get();
+    await Promise.all(coursesSnapshot.docs.map((doc) => doc.ref.delete()));
+
+    // 2) 내가 속한 방 처리: 멤버 제거 + 내 멤버 문서/locations 문서 삭제 + 내가 작성한 피드 삭제
+    const roomsSnapshot = await db.collection("rooms")
+      .where("memberIds", "array-contains", uid)
+      .get();
+
+    await Promise.all(roomsSnapshot.docs.map(async (roomDoc) => {
+      const roomId = roomDoc.id;
+      await db.collection("rooms").doc(roomId)
+        .update({ memberIds: admin.firestore.FieldValue.arrayRemove(uid) });
+
+      await Promise.all([
+        db.collection("rooms").doc(roomId).collection("members").doc(uid).delete().catch(() => undefined),
+        db.collection("rooms").doc(roomId).collection("locations").doc(uid).delete().catch(() => undefined),
+      ]);
+
+      const feedSnapshot = await db.collection("rooms").doc(roomId)
+        .collection("feed")
+        .where("userId", "==", uid)
+        .get()
+        .catch(() => undefined);
+
+      if (feedSnapshot) {
+        await Promise.all(feedSnapshot.docs.map((d) => d.ref.delete().catch(() => undefined)));
+      }
+    }));
+
+    // 3) users / userPrivate 삭제
+    await Promise.all([
+      db.collection("users").doc(uid).delete().catch(() => undefined),
+      db.collection("userPrivate").doc(uid).delete().catch(() => undefined),
+    ]);
+
+    // 4) Firebase Auth 유저 삭제 (Admin 권한이라 reauth 이슈 없음)
+    await admin.auth().deleteUser(uid);
+
+    return { ok: true };
+  } catch (e) {
+    console.error("[deleteMyAccount] failed", e);
+    throw new HttpsError("internal", "Failed to delete account");
+  }
+});

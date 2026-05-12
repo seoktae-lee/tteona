@@ -304,6 +304,7 @@ struct AuthView: View {
                             )
                         )
                 }
+                .disabled(authService.isLoading)
 
                 // Apple
                 SocialCircleButton(
@@ -316,6 +317,7 @@ struct AuthView: View {
                         .font(.system(size: 22, weight: .medium))
                         .foregroundColor(.white)
                 }
+                .disabled(authService.isLoading)
 
                 // 카카오
                 SocialCircleButton(
@@ -328,6 +330,7 @@ struct AuthView: View {
                         .font(.system(size: 20))
                         .foregroundColor(Color(hex: "#3A1D1D"))
                 }
+                .disabled(authService.isLoading)
             }
         }
     }

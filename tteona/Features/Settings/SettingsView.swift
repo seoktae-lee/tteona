@@ -6,6 +6,8 @@ struct SettingsView: View {
     @State private var showSignOutAlert = false
     @State private var showDeleteAccountAlert = false
     @State private var isDeletingAccount = false
+    @State private var showDeleteFailedAlert = false
+    @State private var deleteFailedMessage = "회원 탈퇴에 실패했어요. 잠시 후 다시 시도해주세요."
 
     var body: some View {
         NavigationStack {
@@ -28,13 +30,23 @@ struct SettingsView: View {
                 guard let uid = authService.currentUser?.uid else { return }
                 isDeletingAccount = true
                 Task {
-                    try? await authService.deleteAccount(userId: uid)
-                    isDeletingAccount = false
+                    defer { isDeletingAccount = false }
+                    do {
+                        try await authService.deleteAccount(userId: uid)
+                    } catch {
+                        deleteFailedMessage = authService.errorMessage ?? "회원 탈퇴에 실패했어요. 잠시 후 다시 시도해주세요."
+                        showDeleteFailedAlert = true
+                    }
                 }
             }
             Button("취소", role: .cancel) {}
         } message: {
             Text("탈퇴 시 코스, 그룹, 계정 정보가 모두 삭제되며 복구할 수 없어요.")
+        }
+        .alert("탈퇴 실패", isPresented: $showDeleteFailedAlert) {
+            Button("확인", role: .cancel) {}
+        } message: {
+            Text(deleteFailedMessage)
         }
         .overlay {
             if isDeletingAccount {

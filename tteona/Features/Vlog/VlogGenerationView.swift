@@ -1,5 +1,6 @@
 import SwiftUI
 import AVKit
+import Photos
 
 struct VlogGenerationView: View {
     let course: Course
@@ -79,6 +80,20 @@ struct VlogGenerationView: View {
                     }
                 )
                 print("[VlogGeneration] url=\(url.path) exists=\(FileManager.default.fileExists(atPath: url.path))")
+                // 앨범 저장 권한 확인
+                let status = PHPhotoLibrary.authorizationStatus(for: .addOnly)
+                let isAuthorized = status == .authorized || status == .limited
+                if !isAuthorized {
+                    let newStatus = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+                    let ok = newStatus == .authorized || newStatus == .limited
+                    if !ok {
+                        throw NSError(
+                            domain: "tteona.permissions",
+                            code: 1,
+                            userInfo: [NSLocalizedDescriptionKey: "앨범 저장을 위해 사진 권한이 필요해요.\n설정에서 사진 접근을 허용해주세요."]
+                        )
+                    }
+                }
                 try await vlogService.saveToPhotoLibrary(url: url)
                 vlogURL = url
                 phase = .preview

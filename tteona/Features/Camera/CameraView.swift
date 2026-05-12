@@ -57,6 +57,7 @@ final class CameraViewController: UIViewController {
     private var recordStart: Date?
     private var landscapeOverlay: UIView?
     private var savingOverlay: UIView?
+    private var permissionOverlay: UIView?
 
     init(place: Place, sessionId: String) {
         self.place = place
@@ -69,10 +70,7 @@ final class CameraViewController: UIViewController {
         super.viewDidLoad()
         view.backgroundColor = .black
         buildUI()
-        service.configure()
-        service.onRecordingFinished = { [weak self] url in
-            DispatchQueue.main.async { self?.recordingDone(url: url) }
-        }
+        checkAndStartCamera()
     }
 
     override func viewDidDisappear(_ animated: Bool) {
@@ -182,6 +180,106 @@ final class CameraViewController: UIViewController {
         buildRecordButton()
         buildLandscapeOverlay()
         buildSavingOverlay()
+        buildPermissionOverlay()
+    }
+
+    private func buildPermissionOverlay() {
+        let overlay = UIView(frame: view.bounds)
+        overlay.backgroundColor = UIColor.black.withAlphaComponent(0.75)
+        overlay.isHidden = true
+        overlay.alpha = 0
+        view.addSubview(overlay)
+        permissionOverlay = overlay
+
+        let title = UILabel()
+        title.text = "카메라 권한이 필요해요"
+        title.textColor = .white
+        title.font = .systemFont(ofSize: 18, weight: .semibold)
+        title.textAlignment = .center
+        title.translatesAutoresizingMaskIntoConstraints = false
+
+        let subtitle = UILabel()
+        subtitle.text = "설정에서 카메라 권한을 허용하면 촬영할 수 있어요."
+        subtitle.textColor = UIColor.white.withAlphaComponent(0.75)
+        subtitle.font = .systemFont(ofSize: 13)
+        subtitle.textAlignment = .center
+        subtitle.numberOfLines = 0
+        subtitle.translatesAutoresizingMaskIntoConstraints = false
+
+        let settingsBtn = UIButton(type: .system)
+        settingsBtn.setTitle("설정으로 이동", for: .normal)
+        settingsBtn.titleLabel?.font = .systemFont(ofSize: 16, weight: .semibold)
+        settingsBtn.tintColor = .white
+        settingsBtn.backgroundColor = UIColor(red: 1, green: 0.42, blue: 0.21, alpha: 1)
+        settingsBtn.layer.cornerRadius = 14
+        settingsBtn.translatesAutoresizingMaskIntoConstraints = false
+        settingsBtn.addTarget(self, action: #selector(openSettingsTapped), for: .touchUpInside)
+
+        let closeBtn = UIButton(type: .system)
+        closeBtn.setTitle("닫기", for: .normal)
+        closeBtn.titleLabel?.font = .systemFont(ofSize: 15, weight: .medium)
+        closeBtn.tintColor = UIColor.white.withAlphaComponent(0.8)
+        closeBtn.translatesAutoresizingMaskIntoConstraints = false
+        closeBtn.addTarget(self, action: #selector(closeTapped), for: .touchUpInside)
+
+        let stack = UIStackView(arrangedSubviews: [title, subtitle, settingsBtn, closeBtn])
+        stack.axis = .vertical
+        stack.spacing = 14
+        stack.alignment = .fill
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        overlay.addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            stack.centerXAnchor.constraint(equalTo: overlay.centerXAnchor),
+            stack.centerYAnchor.constraint(equalTo: overlay.centerYAnchor),
+            stack.leadingAnchor.constraint(greaterThanOrEqualTo: overlay.leadingAnchor, constant: 24),
+            stack.trailingAnchor.constraint(lessThanOrEqualTo: overlay.trailingAnchor, constant: -24),
+
+            settingsBtn.heightAnchor.constraint(equalToConstant: 54),
+        ])
+    }
+
+    private func checkAndStartCamera() {
+        let videoStatus = AVCaptureDevice.authorizationStatus(for: .video)
+
+        func startIfPossible() {
+            service.configure()
+            service.onRecordingFinished = { [weak self] url in
+                DispatchQueue.main.async { self?.recordingDone(url: url) }
+            }
+        }
+
+        switch videoStatus {
+        case .authorized:
+            startIfPossible()
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
+                DispatchQueue.main.async {
+                    if granted {
+                        startIfPossible()
+                    } else {
+                        self?.showPermissionOverlay()
+                    }
+                }
+            }
+        case .denied, .restricted:
+            showPermissionOverlay()
+        @unknown default:
+            showPermissionOverlay()
+        }
+    }
+
+    private func showPermissionOverlay() {
+        permissionOverlay?.isHidden = false
+        UIView.animate(withDuration: 0.2) { [weak self] in
+            self?.permissionOverlay?.alpha = 1
+        }
+    }
+
+    @objc private func openSettingsTapped() {
+        if let url = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(url)
+        }
     }
 
     private func buildSavingOverlay() {
