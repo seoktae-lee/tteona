@@ -1,6 +1,7 @@
 import SwiftUI
 import AuthenticationServices
 import GoogleSignIn
+import FirebaseAuth
 
 struct AuthView: View {
     @EnvironmentObject private var authService: AuthService
@@ -10,6 +11,11 @@ struct AuthView: View {
     @State private var confirmPassword = ""
     @State private var showResetAlert = false
     @State private var resetSent = false
+    @State private var resendSent = false
+    @State private var resendMessage = ""
+    @State private var resendCooldown = 0
+    @State private var cooldownTask: Task<Void, Never>? = nil
+    @State private var isCheckingVerification = false
     @FocusState private var focusedField: AuthField?
 
     enum AuthField { case email, password, confirm }
@@ -18,38 +24,42 @@ struct AuthView: View {
         ZStack {
             Color.tteBackground.ignoresSafeArea()
 
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: 0) {
-                    logoSection
-                        .padding(.top, 80)
-                        .padding(.bottom, 48)
+            if authService.verificationEmailSent {
+                verificationSentView
+            } else {
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 0) {
+                        logoSection
+                            .padding(.top, 120)
+                            .padding(.bottom, 48)
 
-                    socialLoginSection
-                        .padding(.horizontal, 24)
-                        .padding(.bottom, 28)
+                        socialLoginSection
+                            .padding(.horizontal, 24)
+                            .padding(.bottom, 28)
 
-                    inputSection
-                        .padding(.horizontal, 24)
+                        inputSection
+                            .padding(.horizontal, 24)
 
-                    actionButton
-                        .padding(.horizontal, 24)
-                        .padding(.top, 16)
+                        actionButton
+                            .padding(.horizontal, 24)
+                            .padding(.top, 16)
 
-                    if !isSignUp {
-                        Button {
-                            showResetAlert = true
-                        } label: {
-                            Text("비밀번호를 잊으셨나요?")
-                                .font(.system(size: 13))
-                                .foregroundColor(.tteMediumGray)
-                                .underline()
+                        if !isSignUp {
+                            Button {
+                                showResetAlert = true
+                            } label: {
+                                Text("비밀번호를 잊으셨나요?")
+                                    .font(.system(size: 13))
+                                    .foregroundColor(.tteMediumGray)
+                                    .underline()
+                            }
+                            .padding(.top, 12)
                         }
-                        .padding(.top, 12)
-                    }
 
-                    toggleModeButton
-                        .padding(.top, 16)
-                        .padding(.bottom, 40)
+                        toggleModeButton
+                            .padding(.top, 16)
+                            .padding(.bottom, 40)
+                    }
                 }
             }
         }
@@ -73,6 +83,184 @@ struct AuthView: View {
             Button("확인", role: .cancel) {}
         } message: {
             Text("입력하신 이메일로 비밀번호 재설정 링크를 전송했어요. 메일함을 확인해주세요.")
+        }
+        .alert("인증 메일", isPresented: $resendSent) {
+            Button("확인", role: .cancel) {}
+        } message: {
+            Text(resendMessage)
+        }
+    }
+
+    // MARK: - 인증 메일 발송 완료 화면
+    private var verificationSentView: some View {
+        VStack(spacing: 0) {
+            Spacer()
+
+            // 온보딩 스타일 아이콘
+            ZStack {
+                Circle()
+                    .fill(Color.tteOrange.opacity(0.08))
+                    .frame(width: 160, height: 160)
+                Circle()
+                    .fill(Color.tteOrange.opacity(0.14))
+                    .frame(width: 120, height: 120)
+                Image(systemName: "envelope.badge.fill")
+                    .font(.system(size: 48, weight: .medium))
+                    .foregroundColor(.tteOrange)
+            }
+            .padding(.bottom, 40)
+
+            VStack(spacing: 12) {
+                Text("이메일을 확인해주세요")
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundColor(.tteDarkGray)
+                Text("가입하신 이메일로 인증 링크를 보냈어요.\n링크를 클릭한 후 아래 버튼을 눌러주세요.")
+                    .font(.system(size: 15))
+                    .foregroundColor(.tteMediumGray)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(5)
+                Text("메일이 보이지 않으면 스팸함도 확인해주세요.")
+                    .font(.system(size: 12))
+                    .foregroundColor(Color(UIColor.tertiaryLabel))
+                    .padding(.top, 4)
+            }
+
+            Spacer()
+
+            VStack(spacing: 12) {
+                if let error = authService.errorMessage {
+                    Text(error)
+                        .font(.system(size: 13))
+                        .foregroundColor(.red)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 4)
+                }
+
+                Button {
+                    resendVerificationEmail()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 13, weight: .medium))
+                        Text(resendCooldown > 0 ? "재전송 \(resendCooldown)초 후 가능" : "인증 메일 재전송")
+                            .font(.system(size: 14, weight: .medium))
+                    }
+                    .foregroundColor(resendCooldown > 0 ? Color(UIColor.tertiaryLabel) : .tteOrange)
+                }
+                .disabled(resendCooldown > 0)
+                .padding(.top, 4)
+
+                Button {
+                    Task { await verifyAndLogin() }
+                } label: {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 14)
+                            .fill(Color.tteOrange)
+                            .frame(height: 54)
+                        if isCheckingVerification {
+                            ProgressView().tint(.white)
+                        } else {
+                            Text("인증 완료 후 시작하기")
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundColor(.white)
+                        }
+                    }
+                }
+                .disabled(isCheckingVerification)
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 48)
+        }
+        .onAppear { startResendCooldown() }
+        .onDisappear {
+            cooldownTask?.cancel()
+            cooldownTask = nil
+        }
+    }
+
+    private func verifyAndLogin() async {
+        isCheckingVerification = true
+        defer { isCheckingVerification = false }
+
+        do {
+            if let user = Auth.auth().currentUser {
+                try? await user.reload()
+                if user.isEmailVerified {
+                    cooldownTask?.cancel()
+                    cooldownTask = nil
+                    resendCooldown = 0
+                    authService.verificationEmailSent = false
+                } else {
+                    authService.errorMessage = "아직 인증이 완료되지 않았어요.\n메일함에서 링크를 클릭한 후 다시 눌러주세요."
+                }
+                return
+            }
+
+            // currentUser가 없으면 (예: 앱 재실행) 입력된 계정으로 로그인 후 확인
+            guard !email.isEmpty, !password.isEmpty else {
+                authService.errorMessage = "인증 확인을 위해 이메일/비밀번호를 다시 입력해주세요."
+                return
+            }
+
+            let result = try await Auth.auth().signIn(withEmail: email, password: password)
+            try? await result.user.reload()
+            if Auth.auth().currentUser?.isEmailVerified == true {
+                cooldownTask?.cancel()
+                cooldownTask = nil
+                resendCooldown = 0
+                authService.verificationEmailSent = false
+            } else {
+                try? Auth.auth().signOut()
+                authService.errorMessage = "아직 인증이 완료되지 않았어요.\n메일함에서 링크를 클릭한 후 다시 눌러주세요."
+            }
+        } catch {
+            authService.errorMessage = "로그인에 실패했어요. 다시 시도해주세요."
+        }
+    }
+
+    private func resendVerificationEmail() {
+        Task {
+            do {
+                if let user = Auth.auth().currentUser {
+                    try await user.sendEmailVerification()
+                    await MainActor.run {
+                        authService.errorMessage = nil
+                        resendMessage = "인증 메일을 다시 보냈어요. 메일함(스팸함 포함)을 확인해주세요."
+                        resendSent = true
+                    }
+                    startResendCooldown()
+                } else if !email.isEmpty, !password.isEmpty {
+                    let result = try await Auth.auth().signIn(withEmail: email, password: password)
+                    try await result.user.sendEmailVerification()
+                    try? Auth.auth().signOut()
+                    await MainActor.run {
+                        authService.errorMessage = nil
+                        resendMessage = "인증 메일을 다시 보냈어요. 메일함(스팸함 포함)을 확인해주세요."
+                        resendSent = true
+                    }
+                    startResendCooldown()
+                } else {
+                    await MainActor.run {
+                        authService.errorMessage = "재전송을 위해 이메일/비밀번호를 입력해주세요."
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    authService.errorMessage = "인증 메일 재전송에 실패했어요. 잠시 후 다시 시도해주세요."
+                }
+            }
+        }
+    }
+
+    private func startResendCooldown() {
+        resendCooldown = 60
+        cooldownTask?.cancel()
+        cooldownTask = Task {
+            while resendCooldown > 0 && !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                guard !Task.isCancelled else { break }
+                await MainActor.run { resendCooldown -= 1 }
+            }
         }
     }
 

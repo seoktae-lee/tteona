@@ -26,6 +26,11 @@ class AuthService: NSObject, ObservableObject {
 
     override init() {
         super.init()
+        // 앱 재설치 시 Keychain에 남은 Firebase 토큰 제거
+        if !UserDefaults.standard.bool(forKey: "app_installed") {
+            try? Auth.auth().signOut()
+            UserDefaults.standard.set(true, forKey: "app_installed")
+        }
         authStateHandle = Auth.auth().addStateDidChangeListener { [weak self] _, user in
             Task { @MainActor in
                 if let user {
@@ -56,7 +61,12 @@ class AuthService: NSObject, ObservableObject {
         guard password.count >= 6 else { errorMessage = "비밀번호는 6자 이상이어야 합니다."; return }
 
         do {
-            try await Auth.auth().signIn(withEmail: email, password: password)
+            let result = try await Auth.auth().signIn(withEmail: email, password: password)
+            if !result.user.isEmailVerified {
+                // 미인증 계정은 "가입 진행 중"으로 취급 → 인증 화면으로 유도
+                verificationEmailSent = true
+                errorMessage = nil
+            }
         } catch {
             errorMessage = firebaseErrorMessage(error)
         }
@@ -75,6 +85,8 @@ class AuthService: NSObject, ObservableObject {
     }
 
     // MARK: - 이메일 회원가입
+    @Published var verificationEmailSent = false
+
     func signUp(email: String, password: String) async {
         isLoading = true
         errorMessage = nil
@@ -84,9 +96,30 @@ class AuthService: NSObject, ObservableObject {
         guard password.count >= 6 else { errorMessage = "비밀번호는 6자 이상이어야 합니다."; return }
 
         do {
-            try await Auth.auth().createUser(withEmail: email, password: password)
-        } catch {
-            errorMessage = firebaseErrorMessage(error)
+            let result = try await Auth.auth().createUser(withEmail: email, password: password)
+            try await result.user.sendEmailVerification()
+            verificationEmailSent = true
+        } catch let error as NSError {
+            let code = AuthErrorCode(rawValue: error.code)
+            if code == .emailAlreadyInUse {
+                // 미인증 계정으로 재가입 시도 → 로그인해서 인증 여부 확인
+                if let result = try? await Auth.auth().signIn(withEmail: email, password: password) {
+                    if !result.user.isEmailVerified {
+                        try? await result.user.sendEmailVerification()
+                        verificationEmailSent = true
+                        errorMessage = nil
+                        return
+                    } else {
+                        try? Auth.auth().signOut()
+                        errorMessage = "이미 가입된 이메일입니다. 로그인해주세요."
+                        return
+                    }
+                }
+                // 비밀번호가 달라 로그인 실패한 경우
+                errorMessage = "이미 가입 진행 중인 이메일이에요.\n처음 설정한 비밀번호로 로그인해 인증을 완료하거나, 비밀번호 재설정을 진행해주세요."
+            } else {
+                errorMessage = firebaseErrorMessage(error)
+            }
         }
     }
 

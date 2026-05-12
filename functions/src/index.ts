@@ -1,6 +1,7 @@
 import * as admin from "firebase-admin";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { onSchedule } from "firebase-functions/v2/scheduler";
 
 admin.initializeApp();
 
@@ -174,5 +175,34 @@ export const sendGroupNotification = onDocumentCreated(
 
     // 처리 완료 표시
     await event.data?.ref.update({ processed: true });
+  }
+);
+
+// 매일 자정(KST) 미인증 계정 삭제 (가입 후 24시간 경과)
+export const deleteUnverifiedAccounts = onSchedule(
+  { schedule: "0 15 * * *", timeZone: "UTC" }, // UTC 15:00 = KST 자정
+  async () => {
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000; // 24시간 전
+    let pageToken: string | undefined;
+
+    do {
+      const result = await admin.auth().listUsers(1000, pageToken);
+      const toDelete = result.users
+        .filter((u) => {
+          if (u.emailVerified) return false;
+          // 소셜 로그인(Google, Apple, Kakao) 계정 제외 — providerData로 판별
+          const isEmailProvider = u.providerData.some((p) => p.providerId === "password");
+          if (!isEmailProvider) return false;
+          return new Date(u.metadata.creationTime).getTime() < cutoff;
+        })
+        .map((u) => u.uid);
+
+      if (toDelete.length > 0) {
+        await admin.auth().deleteUsers(toDelete);
+        console.log(`[Cleanup] deleted ${toDelete.length} unverified accounts`);
+      }
+
+      pageToken = result.pageToken;
+    } while (pageToken);
   }
 );

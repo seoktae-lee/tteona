@@ -105,6 +105,11 @@ class CourseService: ObservableObject {
         likedCourseIds = Set(ids)
         likedCourseIdsFetched = true
     }
+
+    func clearUserData() {
+        likedCourseIds = []
+        likedCourseIdsFetched = false
+    }
 }
 
 // MARK: - Mock Data (Preview용)

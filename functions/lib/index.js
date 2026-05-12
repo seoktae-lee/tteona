@@ -33,10 +33,11 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.sendGroupNotification = exports.createKakaoCustomToken = void 0;
+exports.deleteUnverifiedAccounts = exports.sendGroupNotification = exports.createKakaoCustomToken = void 0;
 const admin = __importStar(require("firebase-admin"));
 const firestore_1 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
+const scheduler_1 = require("firebase-functions/v2/scheduler");
 admin.initializeApp();
 const db = admin.firestore();
 const messaging = admin.messaging();
@@ -170,5 +171,30 @@ exports.sendGroupNotification = (0, firestore_1.onDocumentCreated)("fcmRequests/
     console.log(`[FCM] sent: ${response.successCount} success, ${response.failureCount} failure for requestId=${requestId}`);
     // 처리 완료 표시
     await event.data?.ref.update({ processed: true });
+});
+// 매일 자정(KST) 미인증 계정 삭제 (가입 후 24시간 경과)
+exports.deleteUnverifiedAccounts = (0, scheduler_1.onSchedule)({ schedule: "0 15 * * *", timeZone: "UTC" }, // UTC 15:00 = KST 자정
+async () => {
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000; // 24시간 전
+    let pageToken;
+    do {
+        const result = await admin.auth().listUsers(1000, pageToken);
+        const toDelete = result.users
+            .filter((u) => {
+            if (u.emailVerified)
+                return false;
+            // 소셜 로그인(Google, Apple, Kakao) 계정 제외 — providerData로 판별
+            const isEmailProvider = u.providerData.some((p) => p.providerId === "password");
+            if (!isEmailProvider)
+                return false;
+            return new Date(u.metadata.creationTime).getTime() < cutoff;
+        })
+            .map((u) => u.uid);
+        if (toDelete.length > 0) {
+            await admin.auth().deleteUsers(toDelete);
+            console.log(`[Cleanup] deleted ${toDelete.length} unverified accounts`);
+        }
+        pageToken = result.pageToken;
+    } while (pageToken);
 });
 //# sourceMappingURL=index.js.map
