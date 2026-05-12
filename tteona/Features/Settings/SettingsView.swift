@@ -122,7 +122,11 @@ struct SettingsView: View {
                 Label("이용약관", systemImage: "doc.text")
                     .foregroundColor(.tteDarkGray)
             }
-            Link(destination: URL(string: "mailto:just.tteona@gmail.com")!) {
+            Button {
+                if let url = URL(string: "mailto:just.tteona@gmail.com") {
+                    UIApplication.shared.open(url)
+                }
+            } label: {
                 Label("문의하기", systemImage: "envelope")
                     .foregroundColor(.tteDarkGray)
             }
