@@ -114,21 +114,15 @@ struct SettingsView: View {
                         .foregroundColor(Color(UIColor.tertiaryLabel))
                 }
             }
-            Button {
-                // 추후 연결
-            } label: {
+            Link(destination: URL(string: "https://tteona.kr/privacy.html")!) {
                 Label("개인정보 처리방침", systemImage: "lock.shield")
                     .foregroundColor(.tteDarkGray)
             }
-            Button {
-                // 추후 연결
-            } label: {
+            Link(destination: URL(string: "https://tteona.kr/terms.html")!) {
                 Label("이용약관", systemImage: "doc.text")
                     .foregroundColor(.tteDarkGray)
             }
-            Button {
-                // 추후 연결
-            } label: {
+            Link(destination: URL(string: "mailto:just.tteona@gmail.com")!) {
                 Label("문의하기", systemImage: "envelope")
                     .foregroundColor(.tteDarkGray)
             }
