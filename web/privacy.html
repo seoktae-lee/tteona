@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>개인정보처리방침 / Privacy Policy — 떠나</title>
+  <style>
+    :root {
+      --orange: #FF6B35;
+      --bg: #FAFAFA;
+      --text: #1A1A1A;
+      --sub: #555;
+      --border: #E5E5E5;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      padding: 0 0 60px;
+    }
+    header {
+      background: #fff;
+      border-bottom: 1px solid var(--border);
+      padding: 20px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    header .brand {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--orange);
+      text-decoration: none;
+    }
+    .lang-toggle {
+      display: flex;
+      gap: 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .lang-toggle button {
+      padding: 6px 16px;
+      border: none;
+      background: #fff;
+      color: var(--sub);
+      font-size: 13px;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .lang-toggle button.active {
+      background: var(--orange);
+      color: #fff;
+      font-weight: 600;
+    }
+    .container {
+      max-width: 720px;
+      margin: 40px auto;
+      padding: 0 24px;
+    }
+    h1 {
+      font-size: 26px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .effective-date {
+      color: var(--sub);
+      font-size: 13px;
+      margin-bottom: 36px;
+    }
+    h2 {
+      font-size: 17px;
+      font-weight: 700;
+      margin: 36px 0 10px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid var(--orange);
+    }
+    h3 {
+      font-size: 15px;
+      font-weight: 700;
+      margin: 20px 0 8px;
+    }
+    p { margin-bottom: 12px; font-size: 15px; }
+    ul { padding-left: 20px; margin-bottom: 12px; }
+    li { margin-bottom: 6px; font-size: 15px; }
+    a { color: var(--orange); }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 16px;
+      font-size: 14px;
+    }
+    th {
+      background: #f5f5f5;
+      padding: 10px 12px;
+      text-align: left;
+      border: 1px solid var(--border);
+      font-weight: 600;
+    }
+    td {
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      vertical-align: top;
+    }
+    .lang-section { display: none; }
+    .lang-section.active { display: block; }
+  </style>
+</head>
+<body>
+<header>
+  <a class="brand" href="https://tteona.kr">떠나</a>
+  <div class="lang-toggle">
+    <button id="btn-ko" class="active" onclick="setLang('ko')">한국어</button>
+    <button id="btn-en" onclick="setLang('en')">English</button>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- ===== 한국어 ===== -->
+  <div id="ko" class="lang-section active">
+    <h1>개인정보처리방침</h1>
+    <p class="effective-date">시행일: 2026년 5월 12일</p>
+
+    <h2>1. 개요</h2>
+    <p>본 개인정보처리방침은 AERON(이하 "서비스 제공자")이 운영하는 모바일 애플리케이션 "떠나"(이하 "앱")가 이용자의 개인정보를 어떻게 수집·이용·보관·파기하는지 설명합니다.</p>
+
+    <h2>2. 수집하는 개인정보 및 수집 방법</h2>
+    <p>앱은 서비스 제공을 위해 아래와 같은 정보를 수집합니다.</p>
+
+    <h3>2-1. 계정 정보</h3>
+    <ul>
+      <li><strong>이메일/비밀번호 가입</strong>: 이메일 주소, 비밀번호(암호화 저장), 닉네임</li>
+      <li><strong>Google 로그인</strong>: Google 계정 이메일, 고유 식별자</li>
+      <li><strong>Apple 로그인</strong>: Apple 제공 익명화 이메일 또는 실제 이메일, 고유 식별자</li>
+      <li><strong>카카오 로그인</strong>: 카카오 고유 ID (카카오 정책에 따라 이메일은 선택적으로 수집)</li>
+    </ul>
+
+    <h3>2-2. 서비스 이용 데이터</h3>
+    <ul>
+      <li>생성한 여행 코스(코스명, 장소 목록, 지역, 태그, 좋아요 수), 좋아요한 코스 ID 목록</li>
+      <li>그룹(방) 정보: 방 이름, 초대 코드, 멤버 ID 목록, 생성 시각</li>
+      <li>여행 세션 기록: 장소 방문 기록(장소명·위도·경도), 세션 시작/종료 시각</li>
+      <li>피드 항목: 유형(여행 시작·종료·도착·영상 등), 닉네임, 관련 위치 좌표, 이미지 URL</li>
+      <li>댓글 및 답글: 텍스트, 인용한 원문 텍스트</li>
+    </ul>
+
+    <h3>2-3. 기기 및 환경 정보</h3>
+    <ul>
+      <li>FCM 토큰 (푸시 알림 발송용)</li>
+      <li>기기 OS 버전, 앱 버전</li>
+    </ul>
+
+    <h3>2-4. 위치 정보</h3>
+    <ul>
+      <li>코스 진행 중 현재 위치 (목적지 도착 감지)</li>
+      <li>그룹 여행 중 실시간 위치 공유 (같은 방의 멤버에게만 공개)</li>
+      <li>앱이 백그라운드 상태일 때도 위치를 수집할 수 있으며, 이용자가 위치 권한을 거부하면 해당 기능이 제한됩니다.</li>
+    </ul>
+
+    <h3>2-5. 카메라·마이크·사진 라이브러리</h3>
+    <ul>
+      <li><strong>카메라·마이크</strong>: 장소에서 영상 촬영 시 사용</li>
+      <li><strong>사진 라이브러리(쓰기)</strong>: 완성된 브이로그를 기기 앨범에 저장할 때 사용</li>
+      <li>촬영된 영상 클립은 브이로그 생성 전까지 기기 내 앱 전용 폴더에 임시 저장되며, 브이로그 생성이 완료되면 자동 삭제됩니다. 영상 클립은 서버로 전송되지 않습니다.</li>
+    </ul>
+
+    <h2>3. 개인정보의 이용 목적</h2>
+    <ul>
+      <li>회원 인증 및 계정 관리</li>
+      <li>여행 코스·그룹 여행 기능 제공</li>
+      <li>목적지 도착 알림, 그룹 여행 관련 푸시 알림 발송 (로컬 알림 및 FCM 원격 알림)</li>
+      <li>라이브 액티비티(Dynamic Island·잠금화면)를 통한 여행 세션 현황 표시</li>
+      <li>장소 검색 (카카오 로컬 API, Apple MapKit 활용)</li>
+      <li>날씨 정보 제공 (현재 위치 좌표를 OpenWeatherMap 서버에 전달)</li>
+      <li>브이로그 자동 생성 기능 제공</li>
+      <li>실시간 위치 공유 (그룹 멤버 간)</li>
+      <li>서비스 개선 및 오류 분석</li>
+      <li>법적 의무 이행 및 이용약관 적용</li>
+    </ul>
+
+    <h2>4. 제3자 서비스 및 데이터 공유</h2>
+    <p>앱은 서비스 운영을 위해 아래 제3자에게 일부 데이터를 제공합니다. 각 서비스의 개인정보처리방침을 확인하시기 바랍니다.</p>
+    <table>
+      <tr>
+        <th>서비스</th>
+        <th>제공 목적</th>
+        <th>개인정보처리방침</th>
+      </tr>
+      <tr>
+        <td>Firebase (Google)</td>
+        <td>인증, 데이터베이스(Firestore), 푸시 알림(FCM)</td>
+        <td><a href="https://firebase.google.com/support/privacy" target="_blank">보기</a></td>
+      </tr>
+      <tr>
+        <td>Google</td>
+        <td>Google 로그인</td>
+        <td><a href="https://policies.google.com/privacy" target="_blank">보기</a></td>
+      </tr>
+      <tr>
+        <td>Apple</td>
+        <td>Apple 로그인, MapKit 장소 검색</td>
+        <td><a href="https://www.apple.com/kr/legal/privacy/" target="_blank">보기</a></td>
+      </tr>
+      <tr>
+        <td>카카오</td>
+        <td>카카오 로그인, 카카오 로컬 API(장소 검색 — 검색 쿼리 전달)</td>
+        <td><a href="https://www.kakao.com/policy/privacy" target="_blank">보기</a></td>
+      </tr>
+      <tr>
+        <td>OpenWeatherMap</td>
+        <td>날씨 정보 제공 (현재 위치 좌표 전달)</td>
+        <td><a href="https://openweather.co.uk/privacy-policy" target="_blank">보기</a></td>
+      </tr>
+    </table>
+    <p>서비스 제공자는 위 경우 외에는 이용자의 동의 없이 개인정보를 제3자에게 제공하지 않습니다. 다만, 법령에 의해 요구되는 경우, 또는 이용자의 생명·재산 보호를 위해 긴급히 필요한 경우에는 예외로 합니다.</p>
+
+    <h2>5. 개인정보 처리 위탁</h2>
+    <p>서비스 제공자는 서비스 운영을 위해 아래와 같이 개인정보 처리를 위탁합니다.</p>
+    <ul>
+      <li><strong>수탁자</strong>: Google (Firebase) · Google 로그인 · Apple · 카카오 · OpenWeatherMap</li>
+      <li><strong>위탁 업무</strong>: 인증, 데이터 저장, 푸시 알림 처리, 소셜 로그인, 장소 검색, 날씨 정보 조회</li>
+      <li><strong>위탁 항목</strong>: 계정 식별자, 프로필 정보, FCM 토큰, 여행·그룹 데이터, 장소 검색 쿼리, 위치 좌표 (각 업무에 필요한 범위)</li>
+    </ul>
+
+    <h2>6. 개인정보 보유 및 파기</h2>
+    <ul>
+      <li>회원 탈퇴 전까지 보관하며, 탈퇴 시 관련 법령에 따라 파기합니다.</li>
+      <li>관련 법령에 보관 의무가 있는 경우 해당 기간 동안 보관 후 파기합니다.</li>
+      <li>이메일 미인증 계정은 가입 후 24시간 경과 시 자동 삭제됩니다.</li>
+    </ul>
+
+    <h2>7. 회원 탈퇴 시 삭제되는 정보</h2>
+    <p>앱 내 「설정 → 계정 삭제」를 완료하면 아래 정보가 삭제됩니다.</p>
+    <ul>
+      <li>Firebase Authentication 계정 삭제</li>
+      <li>Firestore에 저장된 모든 개인 데이터 (프로필, 여행 코스, 피드, 댓글, fcmRequests 관련 데이터 등)</li>
+      <li>소속된 모든 그룹(방)에서 멤버 제거 및 내가 작성한 피드 삭제</li>
+      <li>기기 내 앱 저장 데이터 (앱 재설치 시 초기화)</li>
+    </ul>
+    <p><strong>참고:</strong> 내가 마지막 멤버인 그룹에서 탈퇴하거나 계정을 삭제하면, 해당 그룹의 모든 데이터(피드, 댓글, 공유 코스 등)가 함께 삭제됩니다.</p>
+    <p>제3자 서비스(Google, Apple, 카카오 등)에 이미 전달된 데이터는 각 서비스의 정책에 따라 처리됩니다.</p>
+
+    <h2>8. 이용자의 권리</h2>
+    <p>이용자는 개인정보보호법에 따라 자신의 개인정보에 대한 열람, 정정·삭제, 처리정지를 요청할 수 있습니다. 앱 내 설정 화면의 문의 기능을 이용해 주세요. 확인 후 법령이 정한 범위에서 처리하겠습니다.</p>
+
+    <h2>9. 아동 보호</h2>
+    <p>서비스 제공자는 만 14세 미만 아동의 개인정보를 의도적으로 수집하지 않습니다. 14세 미만 아동이 개인정보를 제공한 사실을 인지하는 경우 즉시 삭제합니다.</p>
+
+    <h2>10. 보안</h2>
+    <p>서비스 제공자는 이용자의 개인정보를 보호하기 위해 Firebase 보안 규칙, 전송 중 암호화(TLS), 접근 제한 등의 기술적·관리적 조치를 적용합니다.</p>
+
+    <h2>11. 방침 변경</h2>
+    <p>본 방침은 필요에 따라 변경될 수 있으며, 중요한 변경 사항은 앱 또는 본 페이지를 통해 사전 공지합니다.</p>
+
+    <h2>12. 문의</h2>
+    <p>개인정보 관련 문의는 앱 내 설정 화면의 문의 기능을 이용해 주시기 바랍니다.</p>
+    <ul>
+      <li><strong>사업자명</strong>: AERON</li>
+      <li><strong>서비스명</strong>: 떠나 (Tteona)</li>
+    </ul>
+  </div>
+
+  <!-- ===== English ===== -->
+  <div id="en" class="lang-section">
+    <h1>Privacy Policy</h1>
+    <p class="effective-date">Effective Date: May 12, 2026</p>
+
+    <h2>1. Overview</h2>
+    <p>This Privacy Policy explains how AERON (the "Service Provider") collects, uses, stores, and deletes personal information through the mobile application "떠나 (Tteona)" (the "App").</p>
+
+    <h2>2. Information We Collect</h2>
+
+    <h3>2-1. Account Information</h3>
+    <ul>
+      <li><strong>Email/Password Sign-Up</strong>: Email address, password (encrypted), nickname</li>
+      <li><strong>Google Sign-In</strong>: Google account email, unique identifier</li>
+      <li><strong>Apple Sign-In</strong>: Apple-provided anonymized or real email, unique identifier</li>
+      <li><strong>Kakao Sign-In</strong>: Kakao unique ID (email is collected optionally, per Kakao's policy)</li>
+    </ul>
+
+    <h3>2-2. Service Usage Data</h3>
+    <ul>
+      <li>Travel courses created (name, place list, region, tag, like count), liked course IDs</li>
+      <li>Group (room) info: room name, invite code, member ID list, creation timestamp</li>
+      <li>Trip session records: places visited (name, latitude, longitude), session start/end timestamps</li>
+      <li>Feed items: type (trip start/end, arrival, video, etc.), nickname, location coordinates, image URL</li>
+      <li>Comments and replies: text content, quoted original text</li>
+    </ul>
+
+    <h3>2-3. Device &amp; Environment Information</h3>
+    <ul>
+      <li>FCM token (used to send push notifications)</li>
+      <li>Device OS version, App version</li>
+    </ul>
+
+    <h3>2-4. Location Information</h3>
+    <ul>
+      <li>Current location during active travel courses (for arrival detection)</li>
+      <li>Real-time location sharing during group trips (visible only to members of the same room)</li>
+      <li>Location may be collected in the background; denying location permission will limit related features.</li>
+    </ul>
+
+    <h3>2-5. Camera, Microphone &amp; Photo Library</h3>
+    <ul>
+      <li><strong>Camera &amp; Microphone</strong>: Used to record videos at each location</li>
+      <li><strong>Photo Library (write access)</strong>: Used to save the completed vlog to the device's camera roll</li>
+      <li>Recorded video clips are stored temporarily in a private app folder on-device until vlog generation is complete, at which point they are automatically deleted. Clips are never uploaded to any server.</li>
+    </ul>
+
+    <h2>3. How We Use Your Information</h2>
+    <ul>
+      <li>User authentication and account management</li>
+      <li>Providing travel course and group trip features</li>
+      <li>Sending push notifications for arrival alerts and group activities (local notifications and FCM remote notifications)</li>
+      <li>Displaying trip session status via Live Activity (Dynamic Island / Lock Screen)</li>
+      <li>Place search (via Kakao Local API and Apple MapKit)</li>
+      <li>Weather information (current location coordinates sent to OpenWeatherMap)</li>
+      <li>Automatic vlog generation</li>
+      <li>Real-time location sharing among group members</li>
+      <li>Service improvement and error analysis</li>
+      <li>Legal compliance and enforcement of our Terms of Service</li>
+    </ul>
+
+    <h2>4. Third-Party Services &amp; Data Sharing</h2>
+    <p>The App shares data with the following third-party services to operate. Please review each service's privacy policy.</p>
+    <table>
+      <tr>
+        <th>Service</th>
+        <th>Purpose</th>
+        <th>Privacy Policy</th>
+      </tr>
+      <tr>
+        <td>Firebase (Google)</td>
+        <td>Authentication, database (Firestore), push notifications (FCM)</td>
+        <td><a href="https://firebase.google.com/support/privacy" target="_blank">View</a></td>
+      </tr>
+      <tr>
+        <td>Google</td>
+        <td>Google Sign-In</td>
+        <td><a href="https://policies.google.com/privacy" target="_blank">View</a></td>
+      </tr>
+      <tr>
+        <td>Apple</td>
+        <td>Apple Sign-In, MapKit place search</td>
+        <td><a href="https://www.apple.com/legal/privacy/" target="_blank">View</a></td>
+      </tr>
+      <tr>
+        <td>Kakao</td>
+        <td>Kakao Sign-In, Kakao Local API (place search — search query transmitted)</td>
+        <td><a href="https://www.kakao.com/policy/privacy" target="_blank">View</a></td>
+      </tr>
+      <tr>
+        <td>OpenWeatherMap</td>
+        <td>Weather information (current location coordinates transmitted)</td>
+        <td><a href="https://openweather.co.uk/privacy-policy" target="_blank">View</a></td>
+      </tr>
+    </table>
+    <p>The Service Provider will not share your information with any third party beyond those listed above without your consent, except as required by law or to protect the life or property of users.</p>
+
+    <h2>5. Data Processing Delegation</h2>
+    <p>The Service Provider delegates certain data processing activities as follows:</p>
+    <ul>
+      <li><strong>Processors</strong>: Google (Firebase) · Google Sign-In · Apple · Kakao · OpenWeatherMap</li>
+      <li><strong>Delegated tasks</strong>: Authentication, data storage, push notifications, social login, place search, weather lookup</li>
+      <li><strong>Data shared</strong>: Account identifiers, profile data, FCM token, trip and group data, place search queries, location coordinates (limited to what each task requires)</li>
+    </ul>
+
+    <h2>6. Retention &amp; Deletion</h2>
+    <ul>
+      <li>Data is retained until account deletion and destroyed in accordance with applicable law.</li>
+      <li>Data required to be retained by law is kept for the legally mandated period, then destroyed.</li>
+      <li>Unverified email accounts are automatically deleted 24 hours after registration.</li>
+    </ul>
+
+    <h2>7. Data Deleted Upon Account Deletion</h2>
+    <p>Completing "Settings → Delete Account" in the App will delete the following:</p>
+    <ul>
+      <li>Firebase Authentication account</li>
+      <li>All personal data stored in Firestore (profile, travel courses, feed posts, comments, fcmRequests data, etc.)</li>
+      <li>Removal from all groups (rooms) you belong to, and deletion of your feed posts within those groups</li>
+      <li>App data stored on-device (reset upon reinstallation)</li>
+    </ul>
+    <p><strong>Note:</strong> If you are the last member of a group when you leave or delete your account, all data in that group (feed, comments, shared courses, etc.) will also be permanently deleted.</p>
+    <p>Data already transmitted to third-party services (Google, Apple, Kakao, etc.) is handled according to their respective policies.</p>
+
+    <h2>8. Your Rights</h2>
+    <p>Under applicable law, you have the right to access, correct, delete, or restrict processing of your personal data. Please use the in-app contact feature in Settings, or refer to Section 12. We will respond in accordance with applicable law.</p>
+
+    <h2>9. Children's Privacy</h2>
+    <p>The Service Provider does not knowingly collect personal information from children under 14. If we become aware that a child under 14 has provided personal information, we will delete it immediately.</p>
+
+    <h2>10. Security</h2>
+    <p>The Service Provider applies technical and administrative safeguards — including Firebase security rules, in-transit encryption (TLS), and access controls — to protect your information.</p>
+
+    <h2>11. Changes to This Policy</h2>
+    <p>This Policy may be updated periodically. Material changes will be announced in advance through the App or this page.</p>
+
+    <h2>12. Contact</h2>
+    <p>For privacy-related inquiries, please use the in-app contact feature in the Settings screen.</p>
+    <ul>
+      <li><strong>Business name</strong>: AERON</li>
+      <li><strong>Service name</strong>: 떠나 (Tteona)</li>
+    </ul>
+  </div>
+
+</div>
+
+<script>
+  function setLang(lang) {
+    document.getElementById('ko').classList.toggle('active', lang === 'ko');
+    document.getElementById('en').classList.toggle('active', lang === 'en');
+    document.getElementById('btn-ko').classList.toggle('active', lang === 'ko');
+    document.getElementById('btn-en').classList.toggle('active', lang === 'en');
+    document.documentElement.lang = lang;
+  }
+</script>
+</body>
+</html>
