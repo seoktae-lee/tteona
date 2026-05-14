@@ -7,14 +7,12 @@ import CoreLocation
 class RoomService: ObservableObject {
     @Published var myRooms: [Room] = []
     @Published var currentRoomMembers: [RoomMember] = []
-    @Published var sharedCourses: [SharedCourse] = []
     @Published var memberLocations: [MemberLocation] = []
     @Published var feedItems: [FeedItem] = []
     @Published var isLoading = false
 
     private let db = Firestore.firestore()
     private var roomsListener: ListenerRegistration?
-    private var sharedCoursesListener: ListenerRegistration?
     private var locationsListener: ListenerRegistration?
     private var feedListener: ListenerRegistration?
     private var memberFeedListener: ListenerRegistration?
@@ -118,65 +116,6 @@ class RoomService: ObservableObject {
         currentRoomMembers = snapshot?.documents.compactMap { try? $0.data(as: RoomMember.self) } ?? []
     }
 
-    // MARK: - 코스 공유
-    func shareCourse(_ course: Course, roomId: String, userId: String, nickname: String) async throws {
-        let placesData = course.places.map { place -> [String: Any] in
-            ["order": place.order, "placeName": place.placeName,
-             "latitude": place.latitude, "longitude": place.longitude]
-        }
-        let data: [String: Any] = [
-            "courseId": course.courseId,
-            "courseName": course.courseName,
-            "region": course.region,
-            "tag": course.tag.rawValue,
-            "places": placesData,
-            "sharedBy": userId,
-            "sharedByNickname": nickname,
-            "sharedAt": FieldValue.serverTimestamp(),
-            "voteCount": 0,
-            "votedUserIds": []
-        ]
-        try await db.collection("rooms").document(roomId)
-            .collection("sharedCourses").document(course.courseId).setData(data)
-    }
-
-    // MARK: - 공유 코스 실시간 구독
-    func startListeningSharedCourses(roomId: String) {
-        sharedCoursesListener?.remove()
-        sharedCoursesListener = db.collection("rooms").document(roomId)
-            .collection("sharedCourses")
-            .order(by: "voteCount", descending: true)
-            .addSnapshotListener { [weak self] snapshot, _ in
-                guard let self, let docs = snapshot?.documents else { return }
-                self.sharedCourses = docs.compactMap { try? $0.data(as: SharedCourse.self) }
-            }
-    }
-
-    func stopListeningSharedCourses() {
-        sharedCoursesListener?.remove()
-        sharedCoursesListener = nil
-    }
-
-    // MARK: - 코스 투표
-    func voteCourse(roomId: String, courseId: String, userId: String) async throws {
-        let ref = db.collection("rooms").document(roomId)
-            .collection("sharedCourses").document(courseId)
-        let doc = try await ref.getDocument()
-        guard var shared = try? doc.data(as: SharedCourse.self) else { return }
-
-        if shared.votedUserIds.contains(userId) {
-            try await ref.updateData([
-                "voteCount": FieldValue.increment(Int64(-1)),
-                "votedUserIds": FieldValue.arrayRemove([userId])
-            ])
-        } else {
-            try await ref.updateData([
-                "voteCount": FieldValue.increment(Int64(1)),
-                "votedUserIds": FieldValue.arrayUnion([userId])
-            ])
-        }
-    }
-
     // MARK: - 동행 세션: 위치 업데이트
     func updateMyLocation(roomId: String, userId: String, nickname: String, coordinate: CLLocationCoordinate2D) {
         let data: [String: Any] = [
@@ -265,9 +204,8 @@ class RoomService: ObservableObject {
     private func deleteRoomCompletely(roomId: String) async throws {
         let roomRef = db.collection("rooms").document(roomId)
         
-        // 1. 하위 컬렉션 삭제 (locations, sharedCourses, members)
+        // 1. 하위 컬렉션 삭제 (locations, members)
         try await deleteCollection(ref: roomRef.collection("locations"))
-        try await deleteCollection(ref: roomRef.collection("sharedCourses"))
         try await deleteCollection(ref: roomRef.collection("members"))
         
         // 2. 피드 및 댓글 삭제

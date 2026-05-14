@@ -30,6 +30,10 @@ struct TteonaApp: App {
                     }
                     deepLinkHandler.handle(url: url)
                 }
+                .onReceive(NotificationCenter.default.publisher(for: .appOpenedWithURL)) { notification in
+                    guard let url = notification.object as? URL else { return }
+                    deepLinkHandler.handle(url: url)
+                }
                 .onChange(of: authService.currentUser) { _, user in
                     guard let uid = user?.uid else { return }
                     Task {
@@ -47,6 +51,10 @@ struct TteonaApp: App {
                 }
         }
     }
+}
+
+extension Notification.Name {
+    static let appOpenedWithURL = Notification.Name("appOpenedWithURL")
 }
 
 // MARK: - AppDelegate for FCM & Push
@@ -71,7 +79,8 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         if AuthApi.isKakaoTalkLoginUrl(url) {
             return AuthController.handleOpenUrl(url: url)
         }
-        return false
+        NotificationCenter.default.post(name: .appOpenedWithURL, object: url)
+        return true
     }
 
     func application(_ application: UIApplication,

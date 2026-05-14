@@ -15,25 +15,6 @@ struct Room: Identifiable, Codable, Hashable {
     }
 }
 
-struct SharedCourse: Identifiable, Codable {
-    @DocumentID var id: String?
-    var courseId: String
-    var courseName: String
-    var region: String
-    var tag: CourseTag
-    var places: [Place]
-    var sharedBy: String
-    var sharedByNickname: String
-    var sharedAt: Date
-    var voteCount: Int
-    var votedUserIds: [String]
-
-    enum CodingKeys: String, CodingKey {
-        case id, courseId, courseName, region, tag, places
-        case sharedBy, sharedByNickname, sharedAt, voteCount, votedUserIds
-    }
-}
-
 struct RoomMember: Identifiable, Codable {
     @DocumentID var id: String?
     var userId: String

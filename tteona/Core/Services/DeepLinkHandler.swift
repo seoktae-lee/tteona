@@ -15,13 +15,16 @@ class DeepLinkHandler: ObservableObject {
 
     private func handleCustomScheme(url: URL) {
         let host = url.host
-        let pathComponents = url.pathComponents.filter { $0 != "/" }
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
 
-        if host == "course", let courseId = pathComponents.first {
-            pendingCourseId = courseId
+        if host == "course" {
+            if let courseId = components?.queryItems?.first(where: { $0.name == "id" })?.value {
+                pendingCourseId = courseId
+            } else if let courseId = url.pathComponents.filter({ $0 != "/" }).first {
+                pendingCourseId = courseId
+            }
         } else if host == "room" {
-            if let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-               let code = components.queryItems?.first(where: { $0.name == "code" })?.value {
+            if let code = components?.queryItems?.first(where: { $0.name == "code" })?.value {
                 pendingRoomCode = code
             }
         }
