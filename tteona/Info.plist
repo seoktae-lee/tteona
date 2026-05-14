@@ -60,7 +60,6 @@
 	<true/>
 	<key>UIAppFonts</key>
 	<array>
-		<string>Jua-Regular.ttf</string>
 		<string>GowunBatang-Regular.ttf</string>
 	</array>
 	<key>UIBackgroundModes</key>

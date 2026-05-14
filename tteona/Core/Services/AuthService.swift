@@ -22,8 +22,6 @@ private func fetchKakaoCustomToken(kakaoAccessToken: String) async throws -> Str
 
     let (data, response) = try await URLSession.shared.data(for: request)
     let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
-    let rawBody = String(data: data, encoding: .utf8) ?? "(empty)"
-    print("[Kakao] URLSession statusCode=\(statusCode) body=\(rawBody)")
 
     guard statusCode == 200 else {
         throw NSError(domain: "tteona.kakao", code: -1,
@@ -32,8 +30,12 @@ private func fetchKakaoCustomToken(kakaoAccessToken: String) async throws -> Str
     guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
           let result = json["result"] as? [String: Any],
           let token = result["customToken"] as? String, !token.isEmpty else {
+        #if DEBUG
+        let rawBody = String(data: data, encoding: .utf8) ?? "(empty)"
+        print("[Kakao] 응답 파싱 실패: \(rawBody)")
+        #endif
         throw NSError(domain: "tteona.kakao", code: -2,
-                      userInfo: [NSLocalizedDescriptionKey: "서버 응답이 올바르지 않아요.\n\(rawBody)"])
+                      userInfo: [NSLocalizedDescriptionKey: "서버 응답이 올바르지 않아요."])
     }
     return token
 }
@@ -66,7 +68,9 @@ class AuthService: NSObject, ObservableObject {
                     let providerIDs = user.providerData.map { $0.providerID }
                     let isEmailPassword = providerIDs.allSatisfy { $0 == "password" }
                     let needsVerification = isEmailPassword && !user.isEmailVerified
+                    #if DEBUG
                     print("[Auth] uid=\(user.uid) isEmailVerified=\(user.isEmailVerified) needsVerification=\(needsVerification) verificationEmailSent=\(self?.verificationEmailSent ?? false)")
+                    #endif
                     if needsVerification {
                         // 미인증 이메일 계정 → currentUser 설정하지 않음
                         self?.isInitializing = false
@@ -283,15 +287,21 @@ class AuthService: NSObject, ObservableObject {
             let customToken = try await fetchKakaoCustomToken(kakaoAccessToken: oauthToken.accessToken)
 
             // Custom Token으로 Firebase 로그인
+            #if DEBUG
             print("[Kakao] signIn with customToken start")
+            #endif
             let result = try await Auth.auth().signIn(withCustomToken: customToken)
+            #if DEBUG
             print("[Kakao] signIn success uid=\(result.user.uid)")
+            #endif
             // authStateListener가 호출 안 될 경우를 대비해 직접 설정
             verificationEmailSent = false
             currentUser = AppUser(uid: result.user.uid, email: result.user.email ?? "")
             await refreshOnboardingStatus(uid: result.user.uid)
         } catch {
+            #if DEBUG
             print("[Kakao] error domain=\((error as NSError).domain) code=\((error as NSError).code) msg=\(error.localizedDescription)")
+            #endif
             errorMessage = kakaoLoginFailureMessage(for: error)
         }
     }

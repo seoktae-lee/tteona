@@ -13,7 +13,9 @@ class FCMService: NSObject {
     func saveFCMToken(userId: String) async {
         Messaging.messaging().token { token, error in
             guard let token, error == nil else {
+                #if DEBUG
                 print("[FCM] token fetch failed: \(error?.localizedDescription ?? "")")
+                #endif
                 return
             }
             Task {
@@ -27,7 +29,9 @@ class FCMService: NSObject {
                     .collection("users").document(userId)
                     .updateData(["fcmToken": FieldValue.delete()])
 
+                #if DEBUG
                 print("[FCM] token saved: \(token.prefix(20))...")
+                #endif
             }
         }
     }
@@ -53,7 +57,9 @@ class FCMService: NSObject {
             "processed": false
         ]
         db.collection("fcmRequests").document(UUID().uuidString).setData(data)
+        #if DEBUG
         print("[FCM] notification request written: \(type.rawValue)")
+        #endif
     }
 
     // MARK: - 댓글 알림 (피드 작성자에게만)
@@ -75,7 +81,9 @@ class FCMService: NSObject {
             "processed": false
         ]
         db.collection("fcmRequests").document(UUID().uuidString).setData(data)
+        #if DEBUG
         print("[FCM] comment notification request written")
+        #endif
     }
 }
 
@@ -83,7 +91,9 @@ class FCMService: NSObject {
 extension FCMService: MessagingDelegate {
     nonisolated func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
         guard let token = fcmToken else { return }
+        #if DEBUG
         print("[FCM] token refreshed")
+        #endif
         NotificationCenter.default.post(
             name: Notification.Name("FCMTokenRefreshed"),
             object: nil,
