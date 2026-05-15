@@ -372,7 +372,7 @@ class AuthService: NSObject, ObservableObject {
     }
 
     // MARK: - Helpers
-    private func refreshOnboardingStatus(uid: String) async {
+    func refreshOnboardingStatus(uid: String) async {
         // 기존 가입 유저는 Firestore users 문서가 이미 존재하므로 온보딩을 다시 하지 않도록 처리
         let doc = try? await db.collection("users").document(uid).getDocument()
         onboardingComplete = doc?.exists ?? false

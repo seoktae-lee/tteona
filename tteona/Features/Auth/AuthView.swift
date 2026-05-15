@@ -189,6 +189,8 @@ struct AuthView: View {
                     cooldownTask?.cancel()
                     cooldownTask = nil
                     resendCooldown = 0
+                    authService.currentUser = AppUser(uid: user.uid, email: user.email ?? "")
+                    await authService.refreshOnboardingStatus(uid: user.uid)
                     authService.verificationEmailSent = false
                 } else {
                     authService.errorMessage = "아직 인증이 완료되지 않았어요.\n메일함에서 링크를 클릭한 후 다시 눌러주세요."
@@ -204,10 +206,12 @@ struct AuthView: View {
 
             let result = try await Auth.auth().signIn(withEmail: email, password: password)
             try? await result.user.reload()
-            if Auth.auth().currentUser?.isEmailVerified == true {
+            if let verifiedUser = Auth.auth().currentUser, verifiedUser.isEmailVerified {
                 cooldownTask?.cancel()
                 cooldownTask = nil
                 resendCooldown = 0
+                authService.currentUser = AppUser(uid: verifiedUser.uid, email: verifiedUser.email ?? "")
+                await authService.refreshOnboardingStatus(uid: verifiedUser.uid)
                 authService.verificationEmailSent = false
             } else {
                 try? Auth.auth().signOut()
