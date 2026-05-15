@@ -25,3 +25,4 @@ Pods/
 # Firebase Functions
 functions/node_modules/
 functions/lib/
+functions/firebase-debug.log
