@@ -4,29 +4,34 @@ struct MainTabView: View {
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var courseService: CourseService
     @EnvironmentObject private var deepLinkHandler: DeepLinkHandler
+    @EnvironmentObject private var notificationManager: AppNotificationManager
     @StateObject private var userService = UserService()
     @StateObject private var roomService = RoomService()
     @State private var deepLinkedCourse: Course? = nil
     @State private var deepLinkedRoomCode: String? = nil
     @State private var showJoinRoomFromDeepLink = false
     @State private var courseSessionInfo: CourseSessionInfo? = nil
+    @State private var selectedTab: Int = 0
 
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             MainView()
                 .tabItem {
                     Label("홈", systemImage: "map.fill")
                 }
+                .tag(0)
 
             FeedTabView()
                 .tabItem {
                     Label("피드", systemImage: "bubble.left.and.bubble.right.fill")
                 }
+                .tag(1)
 
             SettingsView()
                 .tabItem {
                     Label("설정", systemImage: "gearshape.fill")
                 }
+                .tag(2)
         }
         .tint(.tteOrange)
         .environmentObject(userService)
@@ -72,6 +77,10 @@ struct MainTabView: View {
                 return
             }
             roomService.startListeningMyRooms(userId: uid)
+        }
+        .onChange(of: notificationManager.pendingChatRoom) { _, pending in
+            guard pending != nil else { return }
+            selectedTab = 1
         }
         .onChange(of: deepLinkHandler.pendingCourseId) { _, courseId in
             guard let courseId else { return }

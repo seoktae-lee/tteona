@@ -60,16 +60,22 @@ struct FeedTabView: View {
                     .onDisappear { pendingMemberChat = nil }
             }
         }
+        .onAppear {
+            guard let pending = notificationManager.pendingChatRoom else { return }
+            Task {
+                await openChatRoom(pending)
+            }
+        }
         .onChange(of: notificationManager.pendingChatRoom) { _, pending in
             guard let pending else { return }
-            notificationManager.pendingChatRoom = nil
-            guard let room = roomService.myRooms.first(where: { $0.roomId == pending.roomId }) else { return }
             Task {
-                await roomService.fetchMembers(roomId: pending.roomId)
-                if let member = roomService.currentRoomMembers.first(where: { $0.userId == pending.senderUserId }) {
-                    pendingMemberChat = FeedMember(userId: member.userId, nickname: member.nickname)
-                }
-                selectedRoom = room
+                await openChatRoom(pending)
+            }
+        }
+        .onChange(of: roomService.myRooms) { _, _ in
+            guard let pending = notificationManager.pendingChatRoom else { return }
+            Task {
+                await openChatRoom(pending)
             }
         }
         .sheet(isPresented: $showCreateRoom) {
@@ -84,6 +90,16 @@ struct FeedTabView: View {
                 .environmentObject(userService)
                 .environmentObject(roomService)
         }
+    }
+
+    private func openChatRoom(_ pending: PendingChatRoom) async {
+        guard let room = roomService.myRooms.first(where: { $0.roomId == pending.roomId }) else { return }
+        notificationManager.pendingChatRoom = nil
+        await roomService.fetchMembers(roomId: pending.roomId)
+        if let member = roomService.currentRoomMembers.first(where: { $0.userId == pending.targetUserId }) {
+            pendingMemberChat = FeedMember(userId: member.userId, nickname: member.nickname)
+        }
+        selectedRoom = room
     }
 
     private var emptyState: some View {

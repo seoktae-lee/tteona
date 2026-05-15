@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 
 struct SettingsView: View {
     @EnvironmentObject private var authService: AuthService
@@ -8,6 +9,7 @@ struct SettingsView: View {
     @State private var isDeletingAccount = false
     @State private var showDeleteFailedAlert = false
     @State private var deleteFailedMessage = "회원 탈퇴에 실패했어요. 잠시 후 다시 시도해주세요."
+    @State private var notificationGranted: Bool? = nil
 
     var body: some View {
         NavigationStack {
@@ -47,6 +49,12 @@ struct SettingsView: View {
             Button("확인", role: .cancel) {}
         } message: {
             Text(deleteFailedMessage)
+        }
+        .task {
+            await checkNotificationStatus()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+            Task { await checkNotificationStatus() }
         }
         .overlay {
             if isDeletingAccount {
@@ -104,6 +112,24 @@ struct SettingsView: View {
                 }
             } label: {
                 HStack {
+                    Label("푸시알림", systemImage: "bell")
+                        .foregroundColor(.tteDarkGray)
+                    Spacer()
+                    if let granted = notificationGranted {
+                        Text(granted ? "켜짐" : "꺼짐")
+                            .foregroundColor(granted ? .tteMediumGray : .red)
+                    }
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(Color(UIColor.tertiaryLabel))
+                }
+            }
+            Button {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            } label: {
+                HStack {
                     Label("언어", systemImage: "globe")
                         .foregroundColor(.tteDarkGray)
                     Spacer()
@@ -131,6 +157,11 @@ struct SettingsView: View {
                     .foregroundColor(.tteDarkGray)
             }
         }
+    }
+
+    private func checkNotificationStatus() async {
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        notificationGranted = settings.authorizationStatus == .authorized
     }
 
     private var accountSection: some View {

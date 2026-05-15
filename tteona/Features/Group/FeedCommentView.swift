@@ -76,12 +76,14 @@ struct MemberChatView: View {
             }
         }
         .onAppear {
+            AppNotificationManager.shared.activeChatRoom = PendingChatRoom(roomId: roomId, targetUserId: memberUserId)
             roomService.startListeningMemberFeed(roomId: roomId, userId: memberUserId) { items in
                 feedItems = items
                 Task { await rebuildEntries(feeds: items) }
             }
         }
         .onDisappear {
+            AppNotificationManager.shared.activeChatRoom = nil
             roomService.stopListeningMemberFeed()
         }
     }

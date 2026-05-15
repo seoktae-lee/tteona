@@ -147,13 +147,15 @@ export const sendGroupNotification = onDocumentCreated(
     }
 
     // FCM 멀티캐스트 전송
+    const firstRoomId = (roomIds && roomIds.length > 0) ? roomIds[0] : "";
     const fcmData: Record<string, string> = {
       type,
       senderUserId,
       courseName: courseName ?? "",
+      roomId: firstRoomId,
     };
-    if (type === "feed_comment" && data.roomId) {
-      fcmData.roomId = data.roomId;
+    if (data.targetUserId) {
+      fcmData.targetUserId = data.targetUserId;
     }
 
     const response = await messaging.sendEachForMulticast({

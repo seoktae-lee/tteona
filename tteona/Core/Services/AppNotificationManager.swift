@@ -12,7 +12,7 @@ import Combine
 
 struct PendingChatRoom: Equatable {
     let roomId: String
-    let senderUserId: String
+    let targetUserId: String  // 열어야 할 피드 주인 userId
 }
 
 @MainActor
@@ -22,6 +22,9 @@ class AppNotificationManager: NSObject, ObservableObject {
     @Published var shouldOpenTodaySession: Bool = false
     @Published var pendingChatRoom: PendingChatRoom? = nil
 
+    // 현재 유저가 보고 있는 채팅방 (roomId + memberUserId)
+    var activeChatRoom: PendingChatRoom? = nil
+
     override init() {
         super.init()
         UNUserNotificationCenter.current().delegate = self
@@ -29,13 +32,37 @@ class AppNotificationManager: NSObject, ObservableObject {
 }
 
 extension AppNotificationManager: UNUserNotificationCenterDelegate {
-    // 앱이 포그라운드일 때도 알림 표시
+    // 앱이 포그라운드일 때 알림 표시 여부 결정
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        completionHandler([.banner, .sound])
+        let userInfo = notification.request.content.userInfo
+        guard let type = userInfo["type"] as? String,
+              let roomId = userInfo["roomId"] as? String,
+              let senderUserId = userInfo["senderUserId"] as? String else {
+            completionHandler([.banner, .sound])
+            return
+        }
+
+        Task { @MainActor in
+            let targetUserId: String
+            if type == "feed_comment" {
+                targetUserId = (userInfo["targetUserId"] as? String) ?? senderUserId
+            } else {
+                targetUserId = senderUserId
+            }
+
+            // 현재 해당 피드창을 보고 있으면 알림 표시 안 함
+            if let active = self.activeChatRoom,
+               active.roomId == roomId,
+               active.targetUserId == targetUserId {
+                completionHandler([])
+            } else {
+                completionHandler([.banner, .sound])
+            }
+        }
     }
 
     // 알림 탭했을 때
@@ -58,11 +85,21 @@ extension AppNotificationManager: UNUserNotificationCenterDelegate {
                     break
                 }
             }
-            // FCM data payload (no "action" key)
-            if let type = userInfo["type"] as? String, type == "feed_comment",
-               let roomId = userInfo["roomId"] as? String,
-               let senderUserId = userInfo["senderUserId"] as? String {
-                self.pendingChatRoom = PendingChatRoom(roomId: roomId, senderUserId: senderUserId)
+            // FCM data payload
+            guard let type = userInfo["type"] as? String,
+                  let roomId = userInfo["roomId"] as? String, !roomId.isEmpty,
+                  let senderUserId = userInfo["senderUserId"] as? String else { return }
+
+            switch type {
+            case "feed_comment":
+                // 댓글 알림 → 내(피드 작성자) 피드창 열기
+                let openUserId = (userInfo["targetUserId"] as? String) ?? senderUserId
+                self.pendingChatRoom = PendingChatRoom(roomId: roomId, targetUserId: openUserId)
+            case "free_trip_start", "free_trip_end", "course_trip_start", "video_recorded":
+                // 영상 촬영/여행 알림 → 촬영한 사람(sender) 피드창 열기
+                self.pendingChatRoom = PendingChatRoom(roomId: roomId, targetUserId: senderUserId)
+            default:
+                break
             }
         }
         completionHandler()
