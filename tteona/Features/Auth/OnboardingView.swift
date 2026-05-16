@@ -383,8 +383,8 @@ struct OnboardingView: View {
 
                 Divider().padding(.horizontal, 8)
 
-                TermsRow(title: "서비스 이용약관 동의", isRequired: true, isChecked: $agreedTerms)
-                TermsRow(title: "개인정보 처리방침 동의", isRequired: true, isChecked: $agreedPrivacy)
+                TermsRow(title: "서비스 이용약관 동의", isRequired: true, url: URL(string: "https://tteona.kr/terms.html")!, isChecked: $agreedTerms)
+                TermsRow(title: "개인정보 처리방침 동의", isRequired: true, url: URL(string: "https://tteona.kr/privacy.html")!, isChecked: $agreedPrivacy)
             }
             .padding(.horizontal, 24)
 
@@ -542,36 +542,41 @@ struct PermissionRow: View {
 struct TermsRow: View {
     let title: String
     let isRequired: Bool
+    let url: URL
     @Binding var isChecked: Bool
 
     var body: some View {
-        Button { withAnimation { isChecked.toggle() } } label: {
-            HStack(spacing: 12) {
+        HStack(spacing: 12) {
+            Button { withAnimation { isChecked.toggle() } } label: {
                 Image(systemName: isChecked ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 20))
                     .foregroundColor(isChecked ? .tteOrange : Color(UIColor.tertiaryLabel))
+            }
 
-                Text(title)
-                    .font(.system(size: 14))
-                    .foregroundColor(.tteDarkGray)
+            Text(title)
+                .font(.system(size: 14))
+                .foregroundColor(.tteDarkGray)
 
-                if isRequired {
-                    Text("필수")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(.tteOrange)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(Capsule().fill(Color.tteOrange.opacity(0.1)))
-                }
+            if isRequired {
+                Text("필수")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.tteOrange)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(Color.tteOrange.opacity(0.1)))
+            }
 
-                Spacer()
+            Spacer()
 
+            Button {
+                UIApplication.shared.open(url)
+            } label: {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12))
                     .foregroundColor(Color(UIColor.tertiaryLabel))
             }
-            .padding(.horizontal, 4)
         }
+        .padding(.horizontal, 4)
     }
 }
 
