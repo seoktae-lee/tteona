@@ -12,6 +12,8 @@ struct FeedTabView: View {
     @State private var pendingMemberChat: FeedMember? = nil
 
     private var uid: String { authService.currentUser?.uid ?? "" }
+    @State private var roomLastReadAt: [String: Date] = [:]
+    @State private var roomLatestFeedAt: [String: Date] = [:]
 
     var body: some View {
         NavigationStack {
@@ -22,8 +24,13 @@ struct FeedTabView: View {
                     ScrollView {
                         LazyVStack(spacing: 12) {
                             ForEach(roomService.myRooms) { room in
-                                RoomCard(room: room)
-                                    .onTapGesture { selectedRoom = room }
+                                let hasNew = hasNewFeed(room: room)
+                                RoomCard(room: room, hasNewFeed: hasNew)
+                                    .onTapGesture {
+                                        roomService.markRoomAsRead(roomId: room.roomId, userId: uid)
+                                        roomLastReadAt[room.roomId] = Date()
+                                        selectedRoom = room
+                                    }
                             }
                         }
                         .padding(20)
@@ -90,6 +97,36 @@ struct FeedTabView: View {
                 .environmentObject(userService)
                 .environmentObject(roomService)
         }
+        .task { await loadReadStatus() }
+        .onChange(of: roomService.myRooms) { _, _ in
+            Task { await loadReadStatus() }
+        }
+    }
+
+    private func loadReadStatus() async {
+        await withTaskGroup(of: Void.self) { group in
+            for room in roomService.myRooms {
+                group.addTask {
+                    guard let member = await roomService.fetchMyMemberDoc(roomId: room.roomId, userId: uid) else { return }
+                    await MainActor.run {
+                        roomLastReadAt[room.roomId] = member.lastReadAt
+                    }
+                    // 해당 방의 최신 피드 createdAt 계산
+                    let memberIds = room.memberIds
+                    let latest = await roomService.fetchLatestFeedPerMember(roomId: room.roomId, memberIds: memberIds)
+                    let latestDate = latest.values.map(\.createdAt).max()
+                    await MainActor.run {
+                        roomLatestFeedAt[room.roomId] = latestDate
+                    }
+                }
+            }
+        }
+    }
+
+    private func hasNewFeed(room: Room) -> Bool {
+        guard let latestAt = roomLatestFeedAt[room.roomId] else { return false }
+        guard let readAt = roomLastReadAt[room.roomId] else { return true }
+        return latestAt > readAt
     }
 
     private func openChatRoom(_ pending: PendingChatRoom) async {

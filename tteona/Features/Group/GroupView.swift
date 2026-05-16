@@ -3,80 +3,37 @@ import SwiftUI
 // MARK: - Room Card
 struct RoomCard: View {
     let room: Room
+    var hasNewFeed: Bool = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
+        HStack {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(room.name)
-                    .font(.system(size: 20, weight: .bold))
+                    .font(.custom("GowunBatang-Regular", size: 22))
                     .foregroundColor(.tteDarkGray)
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 14))
-                    .foregroundColor(.tteMediumGray)
-            }
-
-            HStack(spacing: 8) {
-                HStack(spacing: 6) {
-                    Image(systemName: "key.horizontal")
-                        .font(.system(size: 12))
-                        .foregroundColor(.tteOrange)
-                    Text(room.inviteCode)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(.tteOrange)
-                        .kerning(2)
-                    Text("초대 코드")
-                        .font(.system(size: 12))
-                        .foregroundColor(.tteMediumGray)
-                    Rectangle()
-                        .fill(Color(UIColor.separator))
-                        .frame(width: 1, height: 12)
-                        .padding(.horizontal, 2)
+                HStack(spacing: 4) {
                     Image(systemName: "person.fill")
                         .font(.system(size: 11))
                         .foregroundColor(.tteMediumGray)
                     Text("\(room.memberIds.count)명")
-                        .font(.system(size: 12))
+                        .font(.system(size: 13))
                         .foregroundColor(.tteMediumGray)
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(RoundedRectangle(cornerRadius: 8).fill(Color.tteOrange.opacity(0.08)))
-
-                Spacer()
-
-                Button {
-                    shareRoom()
-                } label: {
-                    Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.tteOrange)
-                        .frame(width: 32, height: 32)
-                        .background(RoundedRectangle(cornerRadius: 8).fill(Color.tteOrange.opacity(0.1)))
-                }
-                .buttonStyle(.plain)
             }
+            Spacer()
+            if hasNewFeed {
+                Circle()
+                    .fill(Color.tteOrange)
+                    .frame(width: 10, height: 10)
+            }
+            Image(systemName: "chevron.right")
+                .font(.system(size: 14))
+                .foregroundColor(.tteMediumGray)
         }
         .padding(16)
         .background(RoundedRectangle(cornerRadius: 16).fill(Color(UIColor.secondarySystemBackground)))
     }
 
-    private func shareRoom() {
-        var components = URLComponents()
-        components.scheme = "https"
-        components.host = "tteona.kr"
-        components.path = "/room"
-        components.queryItems = [
-            URLQueryItem(name: "code", value: room.inviteCode),
-            URLQueryItem(name: "name", value: room.name)
-        ]
-        guard let url = components.url else { return }
-        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-              let rootVC = windowScene.windows.first?.rootViewController else { return }
-        var topVC = rootVC
-        while let presented = topVC.presentedViewController { topVC = presented }
-        topVC.present(UIActivityViewController(activityItems: [url], applicationActivities: nil), animated: true)
-    }
 }
 
 // MARK: - Create Room View

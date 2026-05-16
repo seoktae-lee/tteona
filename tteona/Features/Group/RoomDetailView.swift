@@ -12,14 +12,14 @@ struct RoomDetailView: View {
     @State private var showShareSheet = false
     @State private var activeMemberIds: Set<String> = []
     @State private var latestFeedPerMember: [String: FeedItem] = [:]
+    @State private var lastReadPerMember: [String: Date] = [:]
 
     private var uid: String { authService.currentUser?.uid ?? "" }
 
     private var sortedMembers: [RoomMember] {
         roomService.currentRoomMembers.sorted { a, b in
-            let aActive = activeMemberIds.contains(a.userId)
-            let bActive = activeMemberIds.contains(b.userId)
-            if aActive != bActive { return aActive }
+            if a.userId == uid { return true }
+            if b.userId == uid { return false }
             let aDate = latestFeedPerMember[a.userId]?.createdAt ?? .distantPast
             let bDate = latestFeedPerMember[b.userId]?.createdAt ?? .distantPast
             return aDate > bDate
@@ -49,9 +49,13 @@ struct RoomDetailView: View {
 
             memberChatList
         }
-        .navigationTitle(room.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text(room.name)
+                    .font(.custom("GowunBatang-Regular", size: 20))
+                    .foregroundColor(.tteDarkGray)
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button(role: .destructive) {
@@ -156,13 +160,18 @@ struct RoomDetailView: View {
                         ForEach(sortedMembers) { member in
                             let isActive = activeMemberIds.contains(member.userId)
                             let latestFeed = latestFeedPerMember[member.userId]
+                            let hasNew = hasNewMemberFeed(memberId: member.userId)
                             Button {
+                                roomService.markMemberFeedAsRead(roomId: room.roomId, userId: uid, memberUserId: member.userId)
+                                lastReadPerMember[member.userId] = Date()
                                 selectedFeedMember = FeedMember(userId: member.userId, nickname: member.nickname)
                             } label: {
                                 MemberChatRow(
                                     member: member,
                                     isMe: member.userId == uid,
-                                    latestFeed: latestFeed
+                                    latestFeed: latestFeed,
+                                    hasNewFeed: hasNew,
+                                    isActive: isActive
                                 )
                             }
                             .padding(.horizontal, 16)
@@ -178,6 +187,9 @@ struct RoomDetailView: View {
     private func loadRoomData() async {
         await roomService.fetchMembers(roomId: room.roomId)
         await refreshMemberStatus()
+        if let myDoc = await roomService.fetchMyMemberDoc(roomId: room.roomId, userId: uid) {
+            lastReadPerMember = myDoc.lastReadPerMember ?? [:]
+        }
     }
 
     private func refreshMemberStatus() async {
@@ -186,6 +198,12 @@ struct RoomDetailView: View {
         async let latest = roomService.fetchLatestFeedPerMember(roomId: room.roomId, memberIds: memberIds)
         activeMemberIds = await active
         latestFeedPerMember = await latest
+    }
+
+    private func hasNewMemberFeed(memberId: String) -> Bool {
+        guard let latestFeed = latestFeedPerMember[memberId] else { return false }
+        guard let readAt = lastReadPerMember[memberId] else { return true }
+        return latestFeed.createdAt > readAt
     }
 
 }
@@ -266,23 +284,65 @@ struct MemberChatRow: View {
     let member: RoomMember
     let isMe: Bool
     let latestFeed: FeedItem?
+    var hasNewFeed: Bool = false
+    var isActive: Bool = false
+
+    private var latestFeedSummary: String? {
+        guard let feed = latestFeed else { return nil }
+        let timeStr = feed.createdAt.relativeDescription
+        let action: String
+        switch feed.type {
+        case .tripStart:     action = "\(feed.courseName) 여행 시작"
+        case .tripEnd:       action = "\(feed.courseName) 여행 종료"
+        case .arrival:       action = "\(feed.placeName ?? "") 도착"
+        case .photo:         action = "사진 공유"
+        case .freeTripStart: action = "나의 오늘 시작"
+        case .freeCapture:   action = "\(feed.placeName ?? "이곳")에서 영상"
+        case .freeTripEnd:   action = "오늘 종료"
+        }
+        return "\(action) · \(timeStr)"
+    }
 
     var body: some View {
         HStack(spacing: 16) {
-            // 프로필 원형 이니셜
+            // 프로필 원형 이니셜 + dot
             ZStack {
                 Circle()
                     .fill(Color.tteOrange.opacity(0.08))
                     .frame(width: 48, height: 48)
                 Text(String(member.nickname.prefix(1)))
-                    .font(.system(size: 18, weight: .bold))
+                    .font(.custom("GowunBatang-Regular", size: 20))
                     .foregroundColor(.tteOrange)
+                // 활동 중 초록 dot (하단)
+                if isActive {
+                    Circle()
+                        .fill(Color.green)
+                        .frame(width: 11, height: 11)
+                        .overlay(Circle().stroke(Color.tteBackground, lineWidth: 2))
+                        .offset(x: 18, y: 18)
+                }
+                // 새 피드 주황 dot (상단)
+                if hasNewFeed {
+                    Circle()
+                        .fill(Color.tteOrange)
+                        .frame(width: 11, height: 11)
+                        .overlay(Circle().stroke(Color.tteBackground, lineWidth: 2))
+                        .offset(x: 18, y: -18)
+                }
             }
 
-            Text(isMe ? "\(member.nickname) (나)" : member.nickname)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundColor(.tteDarkGray)
-            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(isMe ? "\(member.nickname) (나)" : member.nickname)
+                    .font(.custom("GowunBatang-Regular", size: 19))
+                    .foregroundColor(.tteDarkGray)
+                if let summary = latestFeedSummary {
+                    Text(summary)
+                        .font(.system(size: 12))
+                        .foregroundColor(.tteMediumGray)
+                        .lineLimit(1)
+                }
+            }
+
             Spacer()
 
             Image(systemName: "chevron.right")
@@ -290,7 +350,7 @@ struct MemberChatRow: View {
                 .foregroundColor(.tteMediumGray.opacity(0.4))
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 18)
+        .padding(.vertical, 14)
         .background(
             RoundedRectangle(cornerRadius: 16)
                 .fill(Color.tteBackground)

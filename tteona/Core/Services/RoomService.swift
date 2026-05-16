@@ -413,6 +413,25 @@ class RoomService: ObservableObject {
                              replyToNickname: replyToNickname, replyToText: replyToText)
     }
 
+    // MARK: - 읽음 처리
+    func markRoomAsRead(roomId: String, userId: String) {
+        db.collection("rooms").document(roomId)
+            .collection("members").document(userId)
+            .setData(["lastReadAt": FieldValue.serverTimestamp()], merge: true)
+    }
+
+    func markMemberFeedAsRead(roomId: String, userId: String, memberUserId: String) {
+        db.collection("rooms").document(roomId)
+            .collection("members").document(userId)
+            .setData(["lastReadPerMember.\(memberUserId)": FieldValue.serverTimestamp()], merge: true)
+    }
+
+    func fetchMyMemberDoc(roomId: String, userId: String) async -> RoomMember? {
+        let doc = try? await db.collection("rooms").document(roomId)
+            .collection("members").document(userId).getDocument()
+        return try? doc?.data(as: RoomMember.self)
+    }
+
     // MARK: - Helper
     private func generateInviteCode() -> String {
         let chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"

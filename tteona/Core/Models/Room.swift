@@ -20,9 +20,11 @@ struct RoomMember: Identifiable, Codable {
     var userId: String
     var nickname: String
     var joinedAt: Date
+    var lastReadAt: Date?
+    var lastReadPerMember: [String: Date]?
 
     enum CodingKeys: String, CodingKey {
-        case id, userId, nickname, joinedAt
+        case id, userId, nickname, joinedAt, lastReadAt, lastReadPerMember
     }
 }
 
