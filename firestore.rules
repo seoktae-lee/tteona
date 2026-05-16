@@ -41,7 +41,7 @@ service cloud.firestore {
 
     // rooms 컬렉션
     match /rooms/{roomId} {
-      // 방 목록 조회: 로그인한 사용자
+      // 방 목록 조회: 로그인한 사용자 (초대코드 검색 쿼리 허용 포함)
       allow read: if isSignedIn();
 
       // 방 생성: 로그인한 사용자
@@ -56,18 +56,14 @@ service cloud.firestore {
          request.resource.data.memberIds.hasAny([request.auth.uid]))
       );
 
-      // 방 삭제: 방장(첫 번째 멤버)만
-      allow delete: if isSignedIn() && resource.data.memberIds[0] == request.auth.uid;
+      // 방 삭제: creatorId 기준으로 방장만 허용
+      allow delete: if isSignedIn() && resource.data.creatorId == request.auth.uid;
 
       // members 서브컬렉션
       match /members/{memberId} {
         allow read: if isSignedIn() && isRoomMember(roomId);
-        allow write: if isSignedIn() && (
-          // 본인 정보 쓰기
-          memberId == request.auth.uid ||
-          // 방 멤버가 다른 멤버 정보 쓰기(관리 기능이 필요할 때만)
-          isRoomMember(roomId)
-        );
+        // 본인 문서만 쓰기 가능 (lastReadAt, lastReadPerMember 포함)
+        allow write: if isSignedIn() && memberId == request.auth.uid;
       }
 
       // locations 서브컬렉션
