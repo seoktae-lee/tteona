@@ -367,6 +367,7 @@ class AuthService: NSObject, ObservableObject {
         try? FileManager.default.removeItem(at: docsDir.appendingPathComponent("Tteona"))
 
         // 클라이언트 세션 정리
+        try? await GIDSignIn.sharedInstance.disconnect()
         try? Auth.auth().signOut()
         GIDSignIn.sharedInstance.signOut()
     }

@@ -12,6 +12,7 @@ struct MainTabView: View {
     @State private var showJoinRoomFromDeepLink = false
     @State private var courseSessionInfo: CourseSessionInfo? = nil
     @State private var selectedTab: Int = 0
+    @State private var deepLinkTask: Task<Void, Never>? = nil
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -84,10 +85,15 @@ struct MainTabView: View {
         }
         .onChange(of: deepLinkHandler.pendingCourseId) { _, courseId in
             guard let courseId else { return }
-            Task {
+            deepLinkTask?.cancel()
+            deepLinkTask = Task {
                 deepLinkedCourse = try? await courseService.fetchCourse(by: courseId)
                 deepLinkHandler.clearPendingCourse()
             }
+        }
+        .onDisappear {
+            deepLinkTask?.cancel()
+            roomService.stopListeningMyRooms()
         }
         .onChange(of: deepLinkHandler.pendingRoomCode) { _, code in
             guard let code else { return }
