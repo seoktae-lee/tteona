@@ -390,11 +390,14 @@ struct OnboardingView: View {
 
             Spacer()
 
+            let allAgreed = agreedTerms && agreedPrivacy
             nextButton(title: "떠나기 시작") {
                 Task { await finishOnboarding() }
             }
-            .disabled(!agreedTerms || !agreedPrivacy)
-            .opacity(!agreedTerms || !agreedPrivacy ? 0.4 : 1)
+            .disabled(!allAgreed)
+            .opacity(allAgreed ? 1 : 0.4)
+            .scaleEffect(allAgreed ? 1 : 0.95)
+            .animation(.spring(response: 0.4, dampingFraction: 0.6), value: allAgreed)
             .padding(.horizontal, 24)
             .padding(.bottom, 48)
         }
