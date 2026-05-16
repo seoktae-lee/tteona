@@ -148,6 +148,10 @@ struct SettingsView: View {
                 Label("이용약관", systemImage: "doc.text")
                     .foregroundColor(.tteDarkGray)
             }
+            Link(destination: URL(string: "https://tteona.kr/child-safety.html")!) {
+                Label("아동 안전 기준 정책", systemImage: "checkmark.shield")
+                    .foregroundColor(.tteDarkGray)
+            }
             Button {
                 if let url = URL(string: "mailto:just.tteona@gmail.com") {
                     UIApplication.shared.open(url)
