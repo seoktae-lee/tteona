@@ -2,8 +2,26 @@ import * as admin from "firebase-admin";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { defineSecret } from "firebase-functions/params";
+import * as jwt from "jsonwebtoken";
 
 admin.initializeApp();
+
+const appleTeamId = defineSecret("APPLE_TEAM_ID");
+const appleKeyId = defineSecret("APPLE_KEY_ID");
+const applePrivateKey = defineSecret("APPLE_PRIVATE_KEY");
+
+async function generateAppleClientSecret(): Promise<string> {
+  const privateKey = applePrivateKey.value().replace(/\\n/g, "\n");
+  return jwt.sign({}, privateKey, {
+    algorithm: "ES256",
+    expiresIn: "1h",
+    audience: "https://appleid.apple.com",
+    issuer: appleTeamId.value(),
+    subject: "com.seoktae.tteona",
+    keyid: appleKeyId.value(),
+  });
+}
 
 const db = admin.firestore();
 const messaging = admin.messaging();
@@ -210,7 +228,7 @@ export const deleteUnverifiedAccounts = onSchedule(
 );
 
 // MARK: - 내 계정 삭제 (서버에서 일괄 처리)
-export const deleteMyAccount = onCall(async (request) => {
+export const deleteMyAccount = onCall({ secrets: [appleTeamId, appleKeyId, applePrivateKey] }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) {
     throw new HttpsError("unauthenticated", "Authentication required");
@@ -249,13 +267,38 @@ export const deleteMyAccount = onCall(async (request) => {
       }
     }));
 
-    // 3) users / userPrivate 삭제
+    // 3) Apple Sign In credential revoke (저장된 authorizationCode가 있을 경우)
+    const privateDoc = await db.collection("userPrivate").doc(uid).get().catch(() => undefined);
+    const appleAuthCode = privateDoc?.data()?.appleAuthCode as string | undefined;
+    if (appleAuthCode) {
+      try {
+        await admin.auth().revokeRefreshTokens(uid);
+        // Apple REST API로 token revoke
+        const appleRevokeRes = await fetch("https://appleid.apple.com/auth/revoke", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            client_id: "com.seoktae.tteona",
+            client_secret: await generateAppleClientSecret(),
+            token: appleAuthCode,
+            token_type_hint: "authorization_code",
+          }).toString(),
+        });
+        if (!appleRevokeRes.ok) {
+          console.warn("[deleteMyAccount] Apple revoke failed:", await appleRevokeRes.text());
+        }
+      } catch (e) {
+        console.warn("[deleteMyAccount] Apple revoke error:", e);
+      }
+    }
+
+    // 4) users / userPrivate 삭제
     await Promise.all([
       db.collection("users").doc(uid).delete().catch(() => undefined),
       db.collection("userPrivate").doc(uid).delete().catch(() => undefined),
     ]);
 
-    // 4) Firebase Auth 유저 삭제 (Admin 권한이라 reauth 이슈 없음)
+    // 5) Firebase Auth 유저 삭제 (Admin 권한이라 reauth 이슈 없음)
     await admin.auth().deleteUser(uid);
 
     return { ok: true };

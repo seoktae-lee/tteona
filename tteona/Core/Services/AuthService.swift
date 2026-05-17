@@ -193,6 +193,13 @@ class AuthService: NSObject, ObservableObject {
             verificationEmailSent = false
             currentUser = AppUser(uid: result.user.uid, email: result.user.email ?? "")
             await refreshOnboardingStatus(uid: result.user.uid)
+            // Apple revoke에 필요한 authorizationCode 저장
+            if let authCodeData = credential.authorizationCode,
+               let authCode = String(data: authCodeData, encoding: .utf8) {
+                try? await Firestore.firestore()
+                    .collection("userPrivate").document(result.user.uid)
+                    .setData(["appleAuthCode": authCode], merge: true)
+            }
         } catch {
             errorMessage = firebaseErrorMessage(error)
         }
@@ -366,8 +373,11 @@ class AuthService: NSObject, ObservableObject {
         let docsDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         try? FileManager.default.removeItem(at: docsDir.appendingPathComponent("Tteona"))
 
-        // 클라이언트 세션 정리
+        // 클라이언트 세션 정리 — 각 소셜 로그인 연동 완전 해제
         try? await GIDSignIn.sharedInstance.disconnect()
+        await withCheckedContinuation { continuation in
+            UserApi.shared.unlink { _ in continuation.resume() }
+        }
         try? Auth.auth().signOut()
         GIDSignIn.sharedInstance.signOut()
     }
