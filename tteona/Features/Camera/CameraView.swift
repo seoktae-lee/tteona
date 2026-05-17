@@ -12,7 +12,6 @@ struct CameraView: View {
     var body: some View {
         CameraViewControllerWrapper(place: place, sessionId: sessionId) {
             onSaved()
-            dismiss()
         } onClose: {
             onClose?()
             dismiss()
@@ -553,6 +552,7 @@ final class CameraViewController: UIViewController {
             // 1.2초 대기 후 자동 닫기
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
                 self?.onSaved?()
+                self?.dismiss(animated: true)
             }
         } else {
             // 취소되거나 오류 시 오버레이 숨기기

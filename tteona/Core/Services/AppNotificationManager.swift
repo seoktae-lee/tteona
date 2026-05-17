@@ -24,6 +24,8 @@ class AppNotificationManager: NSObject, ObservableObject {
 
     // 현재 유저가 보고 있는 채팅방 (roomId + memberUserId)
     var activeChatRoom: PendingChatRoom? = nil
+    // 본인이 보낸 알림 클라이언트 측 차단용
+    var currentUserId: String? = nil
 
     override init() {
         super.init()
@@ -47,6 +49,12 @@ extension AppNotificationManager: UNUserNotificationCenterDelegate {
         }
 
         Task { @MainActor in
+            // 본인이 발생시킨 알림은 표시 안 함
+            if let myId = self.currentUserId, senderUserId == myId {
+                completionHandler([])
+                return
+            }
+
             let targetUserId: String
             if type == "feed_comment" {
                 targetUserId = (userInfo["targetUserId"] as? String) ?? senderUserId

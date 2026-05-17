@@ -124,7 +124,7 @@ export const sendGroupNotification = onDocumentCreated(
             .forEach((id) => recipientUserIds.add(id));
         })
       );
-    }
+    };
 
     if (recipientUserIds.size === 0) {
       await event.data?.ref.update({ processed: true });

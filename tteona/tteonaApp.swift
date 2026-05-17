@@ -35,6 +35,7 @@ struct TteonaApp: App {
                     deepLinkHandler.handle(url: url)
                 }
                 .onChange(of: authService.currentUser) { _, user in
+                    notificationManager.currentUserId = user?.uid
                     guard let uid = user?.uid else { return }
                     Task {
                         await FCMService.shared.saveFCMToken(userId: uid)
