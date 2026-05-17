@@ -25,7 +25,7 @@ class LocationService: NSObject, ObservableObject {
     }
 
     func requestPermission() {
-        manager.requestWhenInUseAuthorization()
+        manager.requestAlwaysAuthorization()
     }
 
     // 나의 오늘 모드: 연속 업데이트로 currentLocation 항상 최신 유지

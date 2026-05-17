@@ -478,6 +478,7 @@ struct OnboardingView: View {
         AVCaptureDevice.requestAccess(for: .video) { granted in
             DispatchQueue.main.async { cameraGranted = granted }
         }
+        AVCaptureDevice.requestAccess(for: .audio) { _ in }
     }
 
     private func requestPhotoLibrary() {
