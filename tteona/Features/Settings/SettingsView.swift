@@ -103,7 +103,7 @@ struct SettingsView: View {
             HStack {
                 Label("버전", systemImage: "info.circle")
                 Spacer()
-                Text("1.0.0")
+                Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "-")
                     .foregroundColor(.tteMediumGray)
             }
             Button {

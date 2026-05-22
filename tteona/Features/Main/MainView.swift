@@ -24,6 +24,7 @@ struct MainView: View {
     @State private var courseFilter: CourseFilter = .all
     @State private var searchText = ""
     @State private var isSearchActive = false
+    @State private var isLoadingCourses = false
 
     enum CourseFilter { case all, liked, mine }
     @State private var mapRegion = MKCoordinateRegion(
@@ -73,23 +74,44 @@ struct MainView: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             mapLayer
-            
+
             if !searchText.isEmpty && filteredCourses.isEmpty {
                 emptySearchResultOverlay
                     .transition(.opacity.combined(with: .scale(scale: 0.9)))
                     .zIndex(1)
             }
-            
+
+            if isLoadingCourses {
+                VStack {
+                    Spacer()
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .tint(.white)
+                        Text("코스 불러오는 중...")
+                            .font(.system(size: 13))
+                            .foregroundColor(.white)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(Capsule().fill(Color.black.opacity(0.55)))
+                    .padding(.bottom, 100)
+                }
+                .zIndex(2)
+                .transition(.opacity)
+            }
+
             topBar
             locationButton
             createCourseButton
         }
         .ignoresSafeArea()
         .task {
+            isLoadingCourses = true
             await courseService.fetchCourses()
             if let uid = authService.currentUser?.uid {
                 await courseService.fetchLikedCourseIds(userId: uid)
             }
+            isLoadingCourses = false
             locationService.requestPermission()
             locationService.startTracking(places: [])
             if let coord = locationService.currentLocation?.coordinate {

@@ -14,11 +14,19 @@ struct FeedTabView: View {
     private var uid: String { authService.currentUser?.uid ?? "" }
     @State private var roomLastReadAt: [String: Date] = [:]
     @State private var roomLatestFeedAt: [String: Date] = [:]
+    @State private var isLoadingStatus = false
 
     var body: some View {
         NavigationStack {
             Group {
-                if roomService.myRooms.isEmpty {
+                if isLoadingStatus && roomService.myRooms.isEmpty {
+                    VStack {
+                        Spacer()
+                        ProgressView()
+                            .tint(.tteOrange)
+                        Spacer()
+                    }
+                } else if roomService.myRooms.isEmpty {
                     emptyState
                 } else {
                     ScrollView {
@@ -104,6 +112,8 @@ struct FeedTabView: View {
     }
 
     private func loadReadStatus() async {
+        isLoadingStatus = true
+        defer { isLoadingStatus = false }
         await withTaskGroup(of: Void.self) { group in
             for room in roomService.myRooms {
                 group.addTask {
