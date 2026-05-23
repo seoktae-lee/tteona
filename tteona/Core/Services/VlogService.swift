@@ -66,38 +66,11 @@ class VlogService {
         }
         var segInfos: [SegInfo] = []
 
-        // 출력 크기: 첫 번째 유효 클립 기준 사전 결정
-        var outputSize = CGSize(width: 1920, height: 1080)
-        for seg in segments {
-            guard let vTrack = try? await seg.asset.loadTracks(withMediaType: .video).first,
-                  let naturalSize = try? await vTrack.load(.naturalSize),
-                  naturalSize.width > 0 else { continue }
-            let transform = (try? await vTrack.load(.preferredTransform)) ?? .identity
-            let isPortrait = abs(transform.b) == 1 && abs(transform.c) == 1
-            outputSize = isPortrait
-                ? CGSize(width: naturalSize.height, height: naturalSize.width)
-                : naturalSize
-            break
-        }
-
-        // MARK: 타이틀 카드 (날짜) 맨 앞에 삽입
-        var titleURL: URL? = nil
-        var cursor = CMTime.zero
-        do {
-            let url = try await makeTitleCardVideo(date: segments.first?.date ?? Date(), size: outputSize)
-            titleURL = url
-            let titleAsset = AVURLAsset(url: url)
-            let titleDuration = try await titleAsset.load(.duration)
-            if let titleTrack = try? await titleAsset.loadTracks(withMediaType: .video).first {
-                try compVideoTrack.insertTimeRange(
-                    CMTimeRange(start: .zero, duration: titleDuration),
-                    of: titleTrack, at: .zero
-                )
-                cursor = titleDuration
-            }
-        } catch {
-            print("[Vlog] title card failed: \(error) — skipping")
-        }
+        // 타이틀 카드: composition 앞에 2초 빈 구간 삽입
+        let titleDuration = CMTime(seconds: 2, preferredTimescale: 600)
+        let titleDate = segments.first?.date ?? Date()
+        comp.insertEmptyTimeRange(CMTimeRange(start: .zero, duration: titleDuration))
+        var cursor = titleDuration
 
         // 클립 순서대로 composition에 삽입
         for (i, seg) in segments.enumerated() {
@@ -138,6 +111,7 @@ class VlogService {
 
         guard !segInfos.isEmpty else { throw VlogError.writeFailed }
 
+        let outputSize = segInfos[0].size.width > 0 ? segInfos[0].size : CGSize(width: 1920, height: 1080)
         let totalDuration = cursor
 
         // MARK: VideoComposition — 페이드 인/아웃 + 텍스트 오버레이
@@ -147,15 +121,12 @@ class VlogService {
 
         var instructions: [AVMutableVideoCompositionInstruction] = []
 
-        // 타이틀 카드 구간 instruction (페이드 없이 그대로 표시)
-        if cursor != segInfos[0].startTime {
-            let titleDuration = segInfos[0].startTime
-            let titleInstruction = AVMutableVideoCompositionInstruction()
-            titleInstruction.timeRange = CMTimeRange(start: .zero, duration: titleDuration)
-            let titleLayerInstr = AVMutableVideoCompositionLayerInstruction(assetTrack: compVideoTrack)
-            titleInstruction.layerInstructions = [titleLayerInstr]
-            instructions.append(titleInstruction)
-        }
+        // 타이틀 카드 구간 instruction (빈 트랙 + 주황 배경색)
+        let titleInstruction = AVMutableVideoCompositionInstruction()
+        titleInstruction.timeRange = CMTimeRange(start: .zero, duration: titleDuration)
+        titleInstruction.backgroundColor = UIColor(red: 1.0, green: 0.71, blue: 0.53, alpha: 1.0).cgColor
+        titleInstruction.layerInstructions = []
+        instructions.append(titleInstruction)
 
         // 각 클립에 대한 instruction 생성
         for (i, info) in segInfos.enumerated() {
@@ -191,6 +162,12 @@ class VlogService {
 
         let overlayLayer = CALayer()
         overlayLayer.frame = CGRect(origin: .zero, size: outputSize)
+
+        // 타이틀 카드 CALayer (주황 배경 위에 날짜 + tteona 텍스트)
+        overlayLayer.addSublayer(
+            makeTitleCardLayer(date: titleDate, size: outputSize,
+                               titleDuration: titleDuration, totalDuration: totalDuration)
+        )
 
         for info in segInfos {
             let startSec = CMTimeGetSeconds(info.startTime)
@@ -235,117 +212,52 @@ class VlogService {
         await MainActor.run { onProgress(0.65) }
         await exp.export()
 
-        // 타이틀 카드 임시 파일 정리
-        if let url = titleURL { try? FileManager.default.removeItem(at: url) }
-
         print("[Vlog] export status=\(exp.status.rawValue) error=\(exp.error?.localizedDescription ?? "none")")
         guard exp.status == .completed else { throw exp.error ?? VlogError.writeFailed }
         return outURL
     }
 
-    // MARK: - 타이틀 카드 영상 생성
-    private func makeTitleCardVideo(date: Date, size: CGSize) async throws -> URL {
-        let outURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("title_\(UUID().uuidString).mp4")
-        try? FileManager.default.removeItem(at: outURL)
+    // MARK: - 타이틀 카드 CALayer
+    private func makeTitleCardLayer(date: Date, size: CGSize, titleDuration: CMTime, totalDuration: CMTime) -> CALayer {
+        let container = CALayer()
+        container.frame = CGRect(origin: .zero, size: size)
+        let totalSec = CMTimeGetSeconds(totalDuration)
+        let titleSec = CMTimeGetSeconds(titleDuration)
 
-        let writer = try AVAssetWriter(outputURL: outURL, fileType: .mp4)
-        let videoSettings: [String: Any] = [
-            AVVideoCodecKey: AVVideoCodecType.h264,
-            AVVideoWidthKey: Int(size.width),
-            AVVideoHeightKey: Int(size.height)
-        ]
-        let input = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
-        input.expectsMediaDataInRealTime = false
-        let adaptor = AVAssetWriterInputPixelBufferAdaptor(
-            assetWriterInput: input,
-            sourcePixelBufferAttributes: [
-                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32ARGB,
-                kCVPixelBufferWidthKey as String: Int(size.width),
-                kCVPixelBufferHeightKey as String: Int(size.height)
-            ]
-        )
-        writer.add(input)
-        writer.startWriting()
-        writer.startSession(atSourceTime: .zero)
+        let dateLayer = CATextLayer()
+        let fontSize = size.height * 0.075
+        dateLayer.string = Self.koreanDateString(date)
+        dateLayer.font = UIFont(name: "GowunBatang-Regular", size: fontSize) ?? UIFont.systemFont(ofSize: fontSize, weight: .bold)
+        dateLayer.fontSize = fontSize
+        dateLayer.foregroundColor = UIColor.white.cgColor
+        dateLayer.alignmentMode = .center
+        dateLayer.contentsScale = UIScreen.main.scale
+        dateLayer.frame = CGRect(x: 0, y: (size.height - fontSize * 1.5) / 2, width: size.width, height: fontSize * 1.5)
+        container.addSublayer(dateLayer)
 
-        let image = makeTitleCardImage(date: date, size: size)
-        guard let cgImage = image.cgImage,
-              let pixelBuffer = makePixelBuffer(from: cgImage, size: size) else {
-            throw VlogError.writeFailed
-        }
+        let tteonaLayer = CATextLayer()
+        let tteonaSize = size.height * 0.045
+        tteonaLayer.string = "tteona"
+        tteonaLayer.font = UIFont(name: "GowunBatang-Regular", size: tteonaSize) ?? UIFont.systemFont(ofSize: tteonaSize)
+        tteonaLayer.fontSize = tteonaSize
+        tteonaLayer.foregroundColor = UIColor.white.withAlphaComponent(0.75).cgColor
+        tteonaLayer.alignmentMode = .center
+        tteonaLayer.contentsScale = UIScreen.main.scale
+        tteonaLayer.frame = CGRect(x: 0, y: size.height * 0.87, width: size.width, height: tteonaSize * 1.5)
+        container.addSublayer(tteonaLayer)
 
-        let fps: Int32 = 30
-        let totalFrames = Int(fps) * 2 // 2초
-        for i in 0..<totalFrames {
-            while !input.isReadyForMoreMediaData {
-                try await Task.sleep(nanoseconds: 1_000_000)
-            }
-            adaptor.append(pixelBuffer, withPresentationTime: CMTime(value: CMTimeValue(i), timescale: fps))
-        }
-
-        input.markAsFinished()
-        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-            writer.finishWriting { cont.resume() }
-        }
-        guard writer.status == .completed else { throw VlogError.writeFailed }
-        return outURL
-    }
-
-    private func makeTitleCardImage(date: Date, size: CGSize) -> UIImage {
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = 1.0
-        let renderer = UIGraphicsImageRenderer(size: size, format: format)
-        return renderer.image { _ in
-            // 배경: tteOrange #FF6B35
-            UIColor(red: 1.0, green: 0.42, blue: 0.21, alpha: 1.0).setFill()
-            UIRectFill(CGRect(origin: .zero, size: size))
-
-            // 날짜 텍스트 (중앙)
-            let dateStr = Self.koreanDateString(date)
-            let dateFont = UIFont(name: "GowunBatang-Regular", size: size.height * 0.1)
-                ?? UIFont.systemFont(ofSize: size.height * 0.1, weight: .bold)
-            let dateAttrs: [NSAttributedString.Key: Any] = [.font: dateFont, .foregroundColor: UIColor.white]
-            let dateSize = (dateStr as NSString).size(withAttributes: dateAttrs)
-            (dateStr as NSString).draw(
-                at: CGPoint(x: (size.width - dateSize.width) / 2, y: (size.height - dateSize.height) / 2),
-                withAttributes: dateAttrs
-            )
-
-            // tteona (중앙 하단)
-            let tteonaFont = UIFont(name: "GowunBatang-Regular", size: size.height * 0.045)
-                ?? UIFont.systemFont(ofSize: size.height * 0.045)
-            let tteonaAttrs: [NSAttributedString.Key: Any] = [
-                .font: tteonaFont,
-                .foregroundColor: UIColor.white.withAlphaComponent(0.75)
-            ]
-            let tteonaSize = ("tteona" as NSString).size(withAttributes: tteonaAttrs)
-            ("tteona" as NSString).draw(
-                at: CGPoint(x: (size.width - tteonaSize.width) / 2, y: size.height * 0.80),
-                withAttributes: tteonaAttrs
-            )
-        }
-    }
-
-    private func makePixelBuffer(from cgImage: CGImage, size: CGSize) -> CVPixelBuffer? {
-        var buffer: CVPixelBuffer?
-        let attrs: [CFString: Any] = [
-            kCVPixelBufferCGImageCompatibilityKey: true,
-            kCVPixelBufferCGBitmapContextCompatibilityKey: true
-        ]
-        guard CVPixelBufferCreate(kCFAllocatorDefault, Int(size.width), Int(size.height),
-                                  kCVPixelFormatType_32ARGB, attrs as CFDictionary, &buffer) == kCVReturnSuccess,
-              let pb = buffer else { return nil }
-        CVPixelBufferLockBaseAddress(pb, [])
-        defer { CVPixelBufferUnlockBaseAddress(pb, []) }
-        guard let ctx = CGContext(data: CVPixelBufferGetBaseAddress(pb),
-                                  width: Int(size.width), height: Int(size.height),
-                                  bitsPerComponent: 8,
-                                  bytesPerRow: CVPixelBufferGetBytesPerRow(pb),
-                                  space: CGColorSpaceCreateDeviceRGB(),
-                                  bitmapInfo: CGImageAlphaInfo.noneSkipFirst.rawValue) else { return nil }
-        ctx.draw(cgImage, in: CGRect(origin: .zero, size: size))
-        return pb
+        let opacityAnim = CAKeyframeAnimation(keyPath: "opacity")
+        opacityAnim.keyTimes = [0,
+                                NSNumber(value: max(0, (titleSec - 0.3) / totalSec)),
+                                NSNumber(value: titleSec / totalSec),
+                                1]
+        opacityAnim.values = [1, 1, 0, 0]
+        opacityAnim.duration = totalSec
+        opacityAnim.beginTime = 1e-9
+        opacityAnim.isRemovedOnCompletion = false
+        opacityAnim.fillMode = .both
+        container.add(opacityAnim, forKey: "titleOpacity")
+        return container
     }
 
     private static func koreanDateString(_ date: Date) -> String {
