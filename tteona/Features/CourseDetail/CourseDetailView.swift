@@ -30,6 +30,11 @@ struct CourseDetailView: View {
                 mapLayer
                     .frame(height: 260)
                 contentSection
+                startButton
+                    .padding(.horizontal, 20)
+                    .padding(.top, 12)
+                    .padding(.bottom, 36)
+                    .background(Color.tteBackground)
             }
             .navigationTitle(course.courseName)
             .navigationBarTitleDisplayMode(.inline)
@@ -221,10 +226,6 @@ struct CourseDetailView: View {
                 }
                 .padding(.horizontal, 20)
 
-                startButton
-                    .padding(.horizontal, 20)
-                    .padding(.top, 12)
-                    .padding(.bottom, 36)
             }
         }
         .background(Color.tteBackground)
