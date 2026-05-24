@@ -758,31 +758,24 @@ struct PlaceEditorSheet: View {
                     .listRowBackground(isCurrent ? Color.tteOrange.opacity(0.06) : Color.clear)
                 }
                 .onMove { from, to in
-                    // 이동 전 현재 장소 기억
-                    let currentPlaceOrder = places.indices.contains(currentPlaceIndex)
-                        ? places[currentPlaceIndex].order : -1
-
                     places.move(fromOffsets: from, toOffset: to)
 
-                    // order를 배열 순서 기준으로 재번호 매기기 (clipFileName 유지)
+                    // order를 배열 순서 기준으로 재번호 매기기
                     let oldOrders = places.map(\.order)
                     for i in places.indices {
                         places[i].order = i + 1
                     }
 
                     // visitedPlaces / skippedPlaces를 새 order로 매핑
-                    var orderMap: [Int: Int] = [:] // oldOrder -> newOrder
+                    var orderMap: [Int: Int] = [:]
                     for (i, oldOrder) in oldOrders.enumerated() {
                         orderMap[oldOrder] = i + 1
                     }
                     visitedPlaces = Set(visitedPlaces.compactMap { orderMap[$0] })
                     skippedPlaces = Set(skippedPlaces.compactMap { orderMap[$0] })
 
-                    // currentPlaceIndex를 새 order 기준으로 복원
-                    if let newOrder = orderMap[currentPlaceOrder],
-                       let newIdx = places.firstIndex(where: { $0.order == newOrder }) {
-                        currentPlaceIndex = newIdx
-                    }
+                    // 새 순서 기준 첫 번째 미방문·미건너뛴 장소로 이동
+                    updateCurrentIndex()
                 }
             }
             .listStyle(.plain)

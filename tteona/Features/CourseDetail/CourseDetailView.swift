@@ -136,96 +136,96 @@ struct CourseDetailView: View {
         course.places.sorted { $0.order < $1.order }
     }
 
+    private var uniqueSortedPlaces: [Place] {
+        var seen = Set<String>()
+        return sortedPlaces.filter { seen.insert($0.placeName).inserted }
+    }
+
     // MARK: - Content Section
     private var contentSection: some View {
-        VStack(spacing: 0) {
-            // 장소 사진 갤러리 (고정)
-            if !sortedPlaces.isEmpty {
-                VStack(spacing: 8) {
-                    TabView(selection: $selectedPlaceIndex) {
-                        ForEach(Array(sortedPlaces.enumerated()), id: \.offset) { index, place in
-                            PlacePagePhoto(place: place)
-                                .tag(index)
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(spacing: 0) {
+                if !sortedPlaces.isEmpty {
+                    VStack(spacing: 8) {
+                        TabView(selection: $selectedPlaceIndex) {
+                            ForEach(Array(sortedPlaces.enumerated()), id: \.offset) { index, place in
+                                PlacePagePhoto(place: place)
+                                    .tag(index)
+                            }
                         }
-                    }
-                    .tabViewStyle(.page(indexDisplayMode: .never))
-                    .frame(height: 170)
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-                    .padding(.horizontal, 20)
+                        .tabViewStyle(.page(indexDisplayMode: .never))
+                        .frame(height: 170)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .padding(.horizontal, 20)
 
-                    if sortedPlaces.count > 1 {
-                        HStack(spacing: 5) {
-                            ForEach(0..<sortedPlaces.count, id: \.self) { i in
-                                Circle()
-                                    .fill(i == selectedPlaceIndex ? Color.tteOrange : Color(UIColor.tertiaryLabel))
-                                    .frame(
-                                        width: i == selectedPlaceIndex ? 7 : 5,
-                                        height: i == selectedPlaceIndex ? 7 : 5
-                                    )
-                                    .animation(.easeInOut(duration: 0.2), value: selectedPlaceIndex)
+                        if sortedPlaces.count > 1 {
+                            HStack(spacing: 5) {
+                                ForEach(0..<sortedPlaces.count, id: \.self) { i in
+                                    Circle()
+                                        .fill(i == selectedPlaceIndex ? Color.tteOrange : Color(UIColor.tertiaryLabel))
+                                        .frame(
+                                            width: i == selectedPlaceIndex ? 7 : 5,
+                                            height: i == selectedPlaceIndex ? 7 : 5
+                                        )
+                                        .animation(.easeInOut(duration: 0.2), value: selectedPlaceIndex)
+                                }
                             }
                         }
                     }
+                    .padding(.top, 16)
+                    .padding(.bottom, 8)
                 }
-                .padding(.top, 16)
-                .padding(.bottom, 8)
-            }
 
-            // 태그 · 좋아요 (고정)
-            HStack {
-                HStack(spacing: 6) {
-                    Text(course.tag.rawValue)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.tteOrange)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(Capsule().fill(Color.tteOrange.opacity(0.12)))
+                HStack {
+                    HStack(spacing: 6) {
+                        Text(course.tag.rawValue)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.tteOrange)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(Capsule().fill(Color.tteOrange.opacity(0.12)))
 
-                    Text(course.region)
-                        .font(.system(size: 12))
-                        .foregroundColor(.tteMediumGray)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(Capsule().fill(Color(UIColor.tertiarySystemBackground)))
-                }
-                Spacer()
-                HStack(spacing: 4) {
-                    Image(systemName: "heart.fill")
-                        .foregroundColor(isLiked ? .red : .tteMediumGray)
-                        .font(.system(size: 14))
-                    Text("\(course.likeCount)")
-                        .font(.system(size: 14))
-                        .foregroundColor(.tteMediumGray)
-                }
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 10)
-
-            // 장소 목록 헤더 (고정)
-            Text("장소 목록")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(.tteDarkGray)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 20)
-                .padding(.bottom, 8)
-
-            Divider().padding(.horizontal, 20)
-
-            // 장소 목록 (스크롤)
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 0) {
-                    ForEach(sortedPlaces) { place in
-                        PlaceRow(place: place, isLast: place.order == course.places.count)
+                        Text(course.region)
+                            .font(.system(size: 12))
+                            .foregroundColor(.tteMediumGray)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(Capsule().fill(Color(UIColor.tertiarySystemBackground)))
+                    }
+                    Spacer()
+                    HStack(spacing: 4) {
+                        Image(systemName: "heart.fill")
+                            .foregroundColor(isLiked ? .red : .tteMediumGray)
+                            .font(.system(size: 14))
+                        Text("\(course.likeCount)")
+                            .font(.system(size: 14))
+                            .foregroundColor(.tteMediumGray)
                     }
                 }
                 .padding(.horizontal, 20)
-            }
+                .padding(.vertical, 10)
 
-            // 시작 버튼 (고정)
-            startButton
+                Text("장소 목록")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.tteDarkGray)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 8)
+
+                Divider().padding(.horizontal, 20)
+
+                VStack(spacing: 0) {
+                    ForEach(Array(uniqueSortedPlaces.enumerated()), id: \.offset) { index, place in
+                        PlaceRow(place: place, isLast: index == uniqueSortedPlaces.count - 1)
+                    }
+                }
                 .padding(.horizontal, 20)
-                .padding(.top, 12)
-                .padding(.bottom, 36)
+
+                startButton
+                    .padding(.horizontal, 20)
+                    .padding(.top, 12)
+                    .padding(.bottom, 36)
+            }
         }
         .background(Color.tteBackground)
     }
