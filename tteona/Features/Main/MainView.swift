@@ -25,6 +25,7 @@ struct MainView: View {
     @State private var searchText = ""
     @State private var isSearchActive = false
     @State private var isLoadingCourses = false
+    @State private var previewCourse: Course?
 
     enum CourseFilter { case all, liked, mine }
     @State private var mapRegion = MKCoordinateRegion(
@@ -102,8 +103,25 @@ struct MainView: View {
 
             topBar
             locationButton
-            createCourseButton
+            if previewCourse == nil {
+                createCourseButton
+            }
+            if let course = previewCourse {
+                CoursePreviewCard(course: course) {
+                    let c = course
+                    withAnimation(.spring(response: 0.3)) { previewCourse = nil }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                        selectedCourse = c
+                    }
+                } onDismiss: {
+                    withAnimation(.spring(response: 0.3)) { previewCourse = nil }
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .zIndex(3)
+                .padding(.bottom, 83)
+            }
         }
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: previewCourse == nil)
         .ignoresSafeArea()
         .task {
             isLoadingCourses = true
@@ -211,7 +229,9 @@ struct MainView: View {
                                     pendingNewCourse = course
                                     showCourseResumeSheet = true
                                 } else {
-                                    withAnimation { selectedCourse = course }
+                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                        previewCourse = course
+                                    }
                                 }
                             }
                     }
@@ -546,47 +566,79 @@ struct CourseMapPin: View {
 // MARK: - Course Card (나의 코스 탭용으로 유지)
 struct CourseCardView: View {
     let course: Course
+    @State private var photoURL: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(course.tag.rawValue)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.tteOrange)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .background(Capsule().fill(Color.tteOrange.opacity(0.12)))
-                Text(course.region)
-                    .font(.system(size: 12))
-                    .foregroundColor(.tteMediumGray)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .background(Capsule().fill(Color(UIColor.tertiarySystemBackground)))
-                Spacer()
+        ZStack(alignment: .bottomLeading) {
+            // 배경 사진
+            if let urlStr = photoURL, let url = URL(string: urlStr) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().aspectRatio(contentMode: .fill)
+                    default:
+                        Color.tteOrange.opacity(0.08)
+                    }
+                }
+            } else {
+                Color.tteOrange.opacity(0.08)
             }
-            Text(course.courseName)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundColor(.tteDarkGray)
-                .lineLimit(2)
-            HStack(spacing: 4) {
-                Image(systemName: "mappin.circle.fill")
-                    .foregroundColor(.tteMediumGray)
-                    .font(.system(size: 13))
-                Text("\(course.places.count)곳")
-                    .font(.system(size: 13))
-                    .foregroundColor(.tteMediumGray)
-                Spacer()
-                Image(systemName: "heart.fill")
-                    .foregroundColor(.red.opacity(0.8))
-                    .font(.system(size: 13))
-                Text("\(course.likeCount)")
-                    .font(.system(size: 13))
-                    .foregroundColor(.tteMediumGray)
+
+            // 그라디언트 오버레이 (텍스트 가독성)
+            LinearGradient(
+                colors: [.clear, .black.opacity(0.65)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            // 텍스트 콘텐츠
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Text(course.tag.rawValue)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(Color.tteOrange))
+                    Text(course.region)
+                        .font(.system(size: 11))
+                        .foregroundColor(.white.opacity(0.85))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(Color.white.opacity(0.2)))
+                }
+                Text(course.courseName)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(.white)
+                    .lineLimit(2)
+                HStack(spacing: 8) {
+                    HStack(spacing: 3) {
+                        Image(systemName: "mappin.circle.fill")
+                            .font(.system(size: 12))
+                        Text("\(course.places.count)곳")
+                            .font(.system(size: 12))
+                    }
+                    .foregroundColor(.white.opacity(0.8))
+                    Spacer()
+                    HStack(spacing: 3) {
+                        Image(systemName: "heart.fill")
+                            .font(.system(size: 12))
+                        Text("\(course.likeCount)")
+                            .font(.system(size: 12))
+                    }
+                    .foregroundColor(.white.opacity(0.8))
+                }
+            }
+            .padding(14)
+        }
+        .frame(width: 220, height: 160)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
+        .task {
+            if let placeName = course.places.first?.placeName {
+                photoURL = await PlacesPhotoService.shared.photoURL(for: placeName)
             }
         }
-        .padding(16)
-        .frame(width: 220)
-        .background(RoundedRectangle(cornerRadius: 16).fill(Color(UIColor.secondarySystemBackground)))
     }
 }
 
@@ -649,6 +701,165 @@ extension MKCoordinateRegion {
         let latOK = abs(coordinate.latitude - center.latitude) <= span.latitudeDelta / 2
         let lonOK = abs(coordinate.longitude - center.longitude) <= span.longitudeDelta / 2
         return latOK && lonOK
+    }
+}
+
+// MARK: - 지도 핀 탭 미니카드
+struct CoursePreviewCard: View {
+    let course: Course
+    let onTap: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            RoundedRectangle(cornerRadius: 2.5)
+                .fill(Color(UIColor.tertiaryLabel))
+                .frame(width: 36, height: 5)
+                .padding(.top, 10)
+                .padding(.bottom, 12)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(course.places.sorted { $0.order < $1.order }) { place in
+                        PlacePhotoThumbnail(place: place)
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+            .frame(height: 130)
+
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(course.courseName)
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.tteDarkGray)
+                        .lineLimit(1)
+                    HStack(spacing: 6) {
+                        Text(course.tag.rawValue)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(.tteOrange)
+                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .background(Capsule().fill(Color.tteOrange.opacity(0.12)))
+                        Text("장소 \(course.places.count)개")
+                            .font(.system(size: 12))
+                            .foregroundColor(.tteMediumGray)
+                        HStack(spacing: 3) {
+                            Image(systemName: "heart.fill").font(.system(size: 11))
+                            Text("\(course.likeCount)").font(.system(size: 12))
+                        }
+                        .foregroundColor(.tteMediumGray)
+                    }
+                }
+                Spacer()
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.tteMediumGray)
+                        .frame(width: 28, height: 28)
+                        .background(Circle().fill(Color(UIColor.secondarySystemBackground)))
+                }
+                .buttonStyle(.plain)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.tteOrange)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
+            .padding(.bottom, 20)
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 24)
+                .fill(Color.tteBackground)
+                .shadow(color: .black.opacity(0.12), radius: 16, y: -4)
+        )
+        .onTapGesture { onTap() }
+    }
+}
+
+struct PlacePhotoThumbnail: View {
+    let place: Place
+    @State private var photoURL: String?
+    @State private var category: String?
+    @State private var isLoading = true
+
+    var body: some View {
+        VStack(spacing: 5) {
+            ZStack(alignment: .bottomLeading) {
+                Group {
+                    if isLoading {
+                        thumbnailLoadingPlaceholder
+                    } else if let urlStr = photoURL, let url = URL(string: urlStr) {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image.resizable().aspectRatio(contentMode: .fill)
+                            case .failure:
+                                thumbnailFailurePlaceholder
+                            default:
+                                thumbnailLoadingPlaceholder
+                            }
+                        }
+                    } else {
+                        thumbnailFailurePlaceholder
+                    }
+                }
+                .frame(width: 80, height: 80)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                Text("\(place.order)")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(.white)
+                    .frame(width: 18, height: 18)
+                    .background(Circle().fill(Color.tteOrange))
+                    .offset(x: 4, y: -4)
+            }
+
+            Text(place.placeName)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(.tteDarkGray)
+                .lineLimit(1)
+                .frame(width: 80)
+
+            if let category {
+                Text(category)
+                    .font(.system(size: 10))
+                    .foregroundColor(.tteMediumGray)
+                    .lineLimit(1)
+                    .frame(width: 80)
+            } else {
+                Spacer().frame(height: 13)
+            }
+        }
+        .task {
+            async let photo = PlacesPhotoService.shared.photoURL(for: place.placeName)
+            async let cat = PlacesPhotoService.shared.placeCategory(for: place.placeName)
+            (photoURL, category) = await (photo, cat)
+            isLoading = false
+        }
+    }
+
+    private var thumbnailLoadingPlaceholder: some View {
+        ZStack {
+            Color.tteOrange.opacity(0.06)
+            Image("tteona-icon")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .padding(12)
+            ProgressView()
+                .tint(Color.white)
+                .scaleEffect(0.8)
+                .offset(y: -4)
+        }
+    }
+
+    private var thumbnailFailurePlaceholder: some View {
+        ZStack {
+            Color.tteOrange.opacity(0.06)
+            Image("tteona-no-image")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .padding(6)
+        }
     }
 }
 

@@ -77,5 +77,7 @@
 	<string>목적지 도착 및 그룹 여행 활동 알림을 받기 위해 알림 권한이 필요합니다.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>GOOGLE_PLACES_API_KEY</key>
+	<string>AIzaSyBUK5U9bBbsEStf81g0GGV79C9hHh7ySMs</string>
 </dict>
 </plist>

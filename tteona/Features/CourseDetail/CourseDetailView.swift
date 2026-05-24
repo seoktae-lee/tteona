@@ -16,6 +16,7 @@ struct CourseDetailView: View {
     @State private var showLikeErrorAlert = false
     @State private var likeErrorMessage: String = ""
     @State private var selectedRoomIds: Set<String> = []
+    @State private var selectedPlaceIndex: Int = 0
 
     private let sessionStore = ActiveSessionStore.shared
 
@@ -25,11 +26,11 @@ struct CourseDetailView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack(alignment: .bottom) {
+            VStack(spacing: 0) {
                 mapLayer
-                bottomSheet
+                    .frame(height: 260)
+                contentSection
             }
-            .ignoresSafeArea(edges: .bottom)
             .navigationTitle(course.courseName)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -114,13 +115,15 @@ struct CourseDetailView: View {
 
     // MARK: - Map
     private var mapLayer: some View {
-        Map(position: $cameraPosition) {
+        let sorted = course.places.sorted { $0.order < $1.order }
+        let selectedOrder = selectedPlaceIndex < sorted.count ? sorted[selectedPlaceIndex].order : -1
+
+        return Map(position: $cameraPosition) {
             ForEach(course.places) { place in
                 Annotation(place.placeName, coordinate: place.coordinate) {
-                    PlacePin(order: place.order)
+                    PlacePin(order: place.order, isSelected: place.order == selectedOrder)
                 }
             }
-
             if course.places.count >= 2 {
                 MapPolyline(coordinates: course.places.map(\.coordinate))
                     .stroke(Color.tteOrange, lineWidth: 2.5)
@@ -129,31 +132,61 @@ struct CourseDetailView: View {
         .mapStyle(.standard)
     }
 
-    // MARK: - Bottom Sheet
-    private var bottomSheet: some View {
+    private var sortedPlaces: [Place] {
+        course.places.sorted { $0.order < $1.order }
+    }
+
+    // MARK: - Content Section
+    private var contentSection: some View {
         VStack(spacing: 0) {
-            RoundedRectangle(cornerRadius: 2.5)
-                .fill(Color(UIColor.tertiaryLabel))
-                .frame(width: 36, height: 5)
-                .padding(.vertical, 12)
-
-            HStack {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 6) {
-                        Text(course.tag.rawValue)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.tteOrange)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
-                            .background(Capsule().fill(Color.tteOrange.opacity(0.12)))
-
-                        Text(course.region)
-                            .font(.system(size: 12))
-                            .foregroundColor(.tteMediumGray)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
-                            .background(Capsule().fill(Color(UIColor.tertiarySystemBackground)))
+            // 장소 사진 갤러리 (고정)
+            if !sortedPlaces.isEmpty {
+                VStack(spacing: 8) {
+                    TabView(selection: $selectedPlaceIndex) {
+                        ForEach(Array(sortedPlaces.enumerated()), id: \.offset) { index, place in
+                            PlacePagePhoto(place: place)
+                                .tag(index)
+                        }
                     }
+                    .tabViewStyle(.page(indexDisplayMode: .never))
+                    .frame(height: 170)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .padding(.horizontal, 20)
+
+                    if sortedPlaces.count > 1 {
+                        HStack(spacing: 5) {
+                            ForEach(0..<sortedPlaces.count, id: \.self) { i in
+                                Circle()
+                                    .fill(i == selectedPlaceIndex ? Color.tteOrange : Color(UIColor.tertiaryLabel))
+                                    .frame(
+                                        width: i == selectedPlaceIndex ? 7 : 5,
+                                        height: i == selectedPlaceIndex ? 7 : 5
+                                    )
+                                    .animation(.easeInOut(duration: 0.2), value: selectedPlaceIndex)
+                            }
+                        }
+                    }
+                }
+                .padding(.top, 16)
+                .padding(.bottom, 8)
+            }
+
+            // 태그 · 좋아요 (고정)
+            HStack {
+                HStack(spacing: 6) {
+                    Text(course.tag.rawValue)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.tteOrange)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(Color.tteOrange.opacity(0.12)))
+
+                    Text(course.region)
+                        .font(.system(size: 12))
+                        .foregroundColor(.tteMediumGray)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(Color(UIColor.tertiarySystemBackground)))
                 }
                 Spacer()
                 HStack(spacing: 4) {
@@ -166,35 +199,35 @@ struct CourseDetailView: View {
                 }
             }
             .padding(.horizontal, 20)
+            .padding(.vertical, 10)
 
+            // 장소 목록 헤더 (고정)
             Text("장소 목록")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundColor(.tteDarkGray)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 20)
-                .padding(.top, 16)
                 .padding(.bottom, 8)
 
+            Divider().padding(.horizontal, 20)
+
+            // 장소 목록 (스크롤)
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 0) {
-                    ForEach(course.places.sorted(by: { $0.order < $1.order })) { place in
+                    ForEach(sortedPlaces) { place in
                         PlaceRow(place: place, isLast: place.order == course.places.count)
                     }
                 }
                 .padding(.horizontal, 20)
             }
-            .frame(maxHeight: 200)
 
+            // 시작 버튼 (고정)
             startButton
                 .padding(.horizontal, 20)
-                .padding(.top, 16)
+                .padding(.top, 12)
                 .padding(.bottom, 36)
         }
-        .background(
-            RoundedRectangle(cornerRadius: 24)
-                .fill(Color.tteBackground)
-                .shadow(color: .black.opacity(0.1), radius: 16, y: -4)
-        )
+        .background(Color.tteBackground)
     }
 
     private var startButton: some View {
@@ -265,47 +298,120 @@ struct CourseDetailView: View {
 
     private func fitMapToCourse() {
         guard !course.places.isEmpty else { return }
-        var region = MKCoordinateRegion()
-
         if course.places.count == 1 {
-            region = MKCoordinateRegion(
-                center: course.places[0].coordinate,
-                span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
-            )
-        } else {
-            let lats = course.places.map(\.latitude)
-            let lons = course.places.map(\.longitude)
-            let minLat = lats.min()!, maxLat = lats.max()!
-            let minLon = lons.min()!, maxLon = lons.max()!
-            region = MKCoordinateRegion(
-                center: CLLocationCoordinate2D(
-                    latitude: (minLat + maxLat) / 2,
-                    longitude: (minLon + maxLon) / 2
-                ),
-                span: MKCoordinateSpan(
-                    latitudeDelta: (maxLat - minLat) * 1.6,
-                    longitudeDelta: (maxLon - minLon) * 1.6
-                )
-            )
+            cameraPosition = .region(MKCoordinateRegion(
+                center: CLLocationCoordinate2D(latitude: course.places[0].latitude + 0.004, longitude: course.places[0].longitude),
+                span: MKCoordinateSpan(latitudeDelta: 0.015, longitudeDelta: 0.015)
+            ))
+            return
         }
-        cameraPosition = .region(region)
+        let lats = course.places.map(\.latitude)
+        let lons = course.places.map(\.longitude)
+        let minLat = lats.min()!, maxLat = lats.max()!
+        let minLon = lons.min()!, maxLon = lons.max()!
+        let latDelta = max((maxLat - minLat) * 1.7, 0.01)
+        let lonDelta = max((maxLon - minLon) * 1.7, 0.01)
+        cameraPosition = .region(MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: (minLat + maxLat) / 2, longitude: (minLon + maxLon) / 2),
+            span: MKCoordinateSpan(latitudeDelta: latDelta, longitudeDelta: lonDelta)
+        ))
+    }
+}
+
+// MARK: - Place Page Photo (스와이프 갤러리용)
+struct PlacePagePhoto: View {
+    let place: Place
+    @State private var photoURL: String?
+    @State private var isLoading = true
+
+    var body: some View {
+        ZStack(alignment: .bottomLeading) {
+            Group {
+                if isLoading {
+                    loadingPlaceholder
+                } else if let urlStr = photoURL, let url = URL(string: urlStr) {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image.resizable().aspectRatio(contentMode: .fill)
+                        case .failure:
+                            failurePlaceholder
+                        default:
+                            loadingPlaceholder
+                        }
+                    }
+                } else {
+                    failurePlaceholder
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            LinearGradient(
+                colors: [.clear, .black.opacity(0.45)],
+                startPoint: .center,
+                endPoint: .bottom
+            )
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(place.order). \(place.placeName)")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+            }
+            .padding(14)
+        }
+        .task {
+            photoURL = await PlacesPhotoService.shared.photoURL(for: place.placeName)
+            isLoading = false
+        }
+    }
+
+    private var loadingPlaceholder: some View {
+        ZStack {
+            Color.tteOrange.opacity(0.06)
+            Image("tteona-icon")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 72)
+            ProgressView()
+                .tint(Color.white)
+                .scaleEffect(1.2)
+                .offset(y: -7)
+        }
+    }
+
+    private var failurePlaceholder: some View {
+        ZStack {
+            Color.tteOrange.opacity(0.06)
+            Image("tteona-no-image")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 90)
+        }
     }
 }
 
 // MARK: - Place Pin
 struct PlacePin: View {
     let order: Int
+    var isSelected: Bool = false
 
     var body: some View {
         ZStack {
+            if isSelected {
+                Circle()
+                    .fill(Color.tteOrange.opacity(0.25))
+                    .frame(width: 50, height: 50)
+            }
             Circle()
                 .fill(Color.tteOrange)
-                .frame(width: 32, height: 32)
-                .shadow(color: .tteOrange.opacity(0.4), radius: 4)
+                .frame(width: isSelected ? 40 : 32, height: isSelected ? 40 : 32)
+                .shadow(color: .tteOrange.opacity(isSelected ? 0.6 : 0.4), radius: isSelected ? 8 : 4)
             Text("\(order)")
-                .font(.system(size: 13, weight: .bold))
+                .font(.system(size: isSelected ? 16 : 13, weight: .bold))
                 .foregroundColor(.white)
         }
+        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isSelected)
     }
 }
 
@@ -313,9 +419,12 @@ struct PlacePin: View {
 struct PlaceRow: View {
     let place: Place
     let isLast: Bool
+    @State private var photoURL: String?
+    @State private var category: String?
+    @State private var isLoading = true
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 12) {
             VStack(spacing: 0) {
                 Circle()
                     .fill(Color.tteOrange)
@@ -329,17 +438,70 @@ struct PlaceRow: View {
             }
             .frame(width: 10)
 
-            VStack(alignment: .leading, spacing: 2) {
+            Group {
+                if isLoading {
+                    rowLoadingPlaceholder
+                } else if let urlStr = photoURL, let url = URL(string: urlStr) {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image.resizable().aspectRatio(contentMode: .fill)
+                        case .failure:
+                            rowFailurePlaceholder
+                        default:
+                            rowLoadingPlaceholder
+                        }
+                    }
+                } else {
+                    rowFailurePlaceholder
+                }
+            }
+            .frame(width: 52, height: 52)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+
+            VStack(alignment: .leading, spacing: 3) {
                 Text(place.placeName)
                     .font(.system(size: 15, weight: .medium))
                     .foregroundColor(.tteDarkGray)
-                Text("위도 \(String(format: "%.4f", place.latitude))  경도 \(String(format: "%.4f", place.longitude))")
-                    .font(.system(size: 12))
-                    .foregroundColor(.tteMediumGray)
+                if let category {
+                    Text(category)
+                        .font(.system(size: 12))
+                        .foregroundColor(.tteMediumGray)
+                }
             }
             .padding(.vertical, 12)
 
             Spacer()
+        }
+        .task {
+            async let photo = PlacesPhotoService.shared.photoURL(for: place.placeName)
+            async let cat = PlacesPhotoService.shared.placeCategory(for: place.placeName)
+            (photoURL, category) = await (photo, cat)
+            isLoading = false
+        }
+    }
+
+    private var rowLoadingPlaceholder: some View {
+        ZStack {
+            Color.tteOrange.opacity(0.06)
+            Image("tteona-icon")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .padding(8)
+            ProgressView()
+                .tint(Color.white)
+                .scaleEffect(0.8)
+                .offset(y: -4)
+        }
+    }
+
+    private var rowFailurePlaceholder: some View {
+        ZStack {
+            Color.tteOrange.opacity(0.06)
+            Image("tteona-no-image")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .padding(4)
         }
     }
 }

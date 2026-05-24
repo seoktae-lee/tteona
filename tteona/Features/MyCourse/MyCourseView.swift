@@ -291,65 +291,109 @@ extension Notification.Name {
 
 struct CourseListRow: View {
     let course: Course
+    @State private var photoURL: String?
+    @State private var isLoading = true
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Text(course.tag.rawValue)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.tteOrange)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .background(Capsule().fill(Color.tteOrange.opacity(0.12)))
-
-                Text(course.region)
-                    .font(.system(size: 12))
-                    .foregroundColor(.tteMediumGray)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .background(Capsule().fill(Color(UIColor.tertiarySystemBackground)))
-
-                Spacer()
-
-                HStack(spacing: 12) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "heart.fill")
-                            .foregroundColor(.red.opacity(0.8))
-                            .font(.system(size: 12))
-                        Text("\(course.likeCount)")
-                            .font(.system(size: 12))
-                            .foregroundColor(.tteMediumGray)
+        ZStack(alignment: .bottomLeading) {
+            // 배경 사진
+            if isLoading {
+                cardLoadingPlaceholder
+            } else if let urlStr = photoURL, let url = URL(string: urlStr) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().aspectRatio(contentMode: .fill)
+                    case .failure:
+                        cardFailurePlaceholder
+                    default:
+                        cardLoadingPlaceholder
                     }
+                }
+            } else {
+                cardFailurePlaceholder
+            }
 
+            // 그라디언트
+            LinearGradient(
+                colors: [.clear, .black.opacity(0.65)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            // 텍스트 콘텐츠
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Text(course.tag.rawValue)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(Capsule().fill(Color.tteOrange))
+                    Text(course.region)
+                        .font(.system(size: 11))
+                        .foregroundColor(.white.opacity(0.85))
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(Capsule().fill(Color.white.opacity(0.2)))
+                    Spacer()
+                    HStack(spacing: 4) {
+                        Image(systemName: "heart.fill").font(.system(size: 12))
+                        Text("\(course.likeCount)").font(.system(size: 12))
+                    }
+                    .foregroundColor(.white.opacity(0.85))
                     Button {
                         CourseShareHelper.share(course: course)
                     } label: {
                         Image(systemName: "square.and.arrow.up")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(.tteMediumGray)
+                            .font(.system(size: 14))
+                            .foregroundColor(.white.opacity(0.85))
                     }
                     .buttonStyle(.plain)
                 }
+                Text(course.courseName)
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(.white)
+                HStack(spacing: 4) {
+                    Image(systemName: "mappin.circle.fill").font(.system(size: 12))
+                    Text(course.places.map(\.placeName).joined(separator: " → "))
+                        .font(.system(size: 12))
+                        .lineLimit(1)
+                }
+                .foregroundColor(.white.opacity(0.75))
             }
-
-            Text(course.courseName)
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundColor(.tteDarkGray)
-
-            HStack(spacing: 4) {
-                Image(systemName: "mappin.circle.fill")
-                    .foregroundColor(.tteMediumGray)
-                    .font(.system(size: 13))
-                Text(course.places.map(\.placeName).joined(separator: " → "))
-                    .font(.system(size: 13))
-                    .foregroundColor(.tteMediumGray)
-                    .lineLimit(1)
-            }
+            .padding(16)
         }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color(UIColor.secondarySystemBackground))
-        )
+        .frame(height: 160)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .shadow(color: .black.opacity(0.1), radius: 8, y: 3)
+        .task {
+            if let placeName = course.places.first?.placeName {
+                photoURL = await PlacesPhotoService.shared.photoURL(for: placeName)
+            }
+            isLoading = false
+        }
+    }
+
+    private var cardLoadingPlaceholder: some View {
+        ZStack {
+            Color.tteOrange.opacity(0.06)
+            Image("tteona-icon")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 72)
+            ProgressView()
+                .tint(Color.white)
+                .scaleEffect(1.2)
+                .offset(y: -7)
+        }
+    }
+
+    private var cardFailurePlaceholder: some View {
+        ZStack {
+            Color.tteOrange.opacity(0.06)
+            Image("tteona-no-image")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 90)
+        }
     }
 }
