@@ -1,3 +1,11 @@
+//
+//  VerifiedBadge.swift
+//  tteona
+//
+//  Created by 이석태 on 5/24/26.
+//
+
+
 import SwiftUI
 
 struct VerifiedBadge: View {

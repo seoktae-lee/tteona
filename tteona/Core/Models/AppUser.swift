@@ -6,6 +6,8 @@ struct AppUser: Codable, Equatable {
     var email: String
     var nickname: String
     var createdAt: Date
+    var isVerified: Bool = false
+    var creatorLabel: String?
 
     init(uid: String, email: String, nickname: String = "", createdAt: Date = Date()) {
         self.uid = uid

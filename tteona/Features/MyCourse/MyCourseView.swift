@@ -293,6 +293,9 @@ struct CourseListRow: View {
     let course: Course
     @State private var photoURL: String?
     @State private var isLoading = true
+    @State private var isAuthorVerified = false
+    @State private var authorNickname: String = ""
+    @EnvironmentObject private var userService: UserService
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
@@ -334,6 +337,10 @@ struct CourseListRow: View {
                         .foregroundColor(.white.opacity(0.85))
                         .padding(.horizontal, 8).padding(.vertical, 3)
                         .background(Capsule().fill(Color.white.opacity(0.2)))
+                    if isAuthorVerified {
+                        VerifiedBadge(creatorLabel: authorNickname)
+                            .colorScheme(.dark)
+                    }
                     Spacer()
                     HStack(spacing: 4) {
                         Image(systemName: "heart.fill").font(.system(size: 12))
@@ -366,9 +373,15 @@ struct CourseListRow: View {
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .shadow(color: .black.opacity(0.1), radius: 8, y: 3)
         .task {
-            if let placeName = course.places.first?.placeName {
-                photoURL = await PlacesPhotoService.shared.photoURL(for: placeName)
-            }
+            async let photo: String? = {
+                guard let name = course.places.first?.placeName else { return nil }
+                return await PlacesPhotoService.shared.photoURL(for: name)
+            }()
+            async let author = userService.fetchAuthor(uid: course.authorId)
+            let (p, a) = await (photo, author)
+            photoURL = p
+            isAuthorVerified = a?.isVerified ?? false
+            authorNickname = a?.nickname ?? ""
             isLoading = false
         }
     }

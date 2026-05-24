@@ -7,6 +7,15 @@ class UserService: ObservableObject {
     @Published var currentUser: AppUser?
 
     private let db = Firestore.firestore()
+    private var authorCache: [String: AppUser] = [:]
+
+    func fetchAuthor(uid: String) async -> AppUser? {
+        if let cached = authorCache[uid] { return cached }
+        let doc = try? await db.collection("users").document(uid).getDocument()
+        let user = try? doc?.data(as: AppUser.self)
+        if let user { authorCache[uid] = user }
+        return user
+    }
 
     func fetchUser(uid: String) async {
         let doc = try? await db.collection("users").document(uid).getDocument()

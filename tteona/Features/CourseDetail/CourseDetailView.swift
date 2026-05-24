@@ -17,6 +17,7 @@ struct CourseDetailView: View {
     @State private var likeErrorMessage: String = ""
     @State private var selectedRoomIds: Set<String> = []
     @State private var selectedPlaceIndex: Int = 0
+    @State private var courseAuthor: AppUser?
 
     private let sessionStore = ActiveSessionStore.shared
 
@@ -77,6 +78,7 @@ struct CourseDetailView: View {
             let uid = authService.currentUser?.uid ?? ""
             await courseService.fetchLikedCourseIds(userId: uid)
             fitMapToCourse()
+            courseAuthor = await userService.fetchAuthor(uid: course.authorId)
         }
         .fullScreenCover(isPresented: $showRoomSelect) {
             RoomSelectView(selectedRoomIds: $selectedRoomIds) {
@@ -150,6 +152,22 @@ struct CourseDetailView: View {
     private var contentSection: some View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(spacing: 0) {
+                if let author = courseAuthor, author.isVerified {
+                    HStack(spacing: 5) {
+                        VerifiedBadge(creatorLabel: author.creatorLabel)
+                        Text("크리에이터 코스")
+                            .font(.system(size: 11))
+                            .foregroundColor(.tteOrange.opacity(0.8))
+                        Spacer()
+                        Text(author.nickname)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(.tteOrange.opacity(0.8))
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 8)
+                    .background(Color.tteOrange.opacity(0.06))
+                }
+
                 if !sortedPlaces.isEmpty {
                     VStack(spacing: 8) {
                         TabView(selection: $selectedPlaceIndex) {

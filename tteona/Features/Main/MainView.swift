@@ -709,6 +709,9 @@ struct CoursePreviewCard: View {
     let course: Course
     let onTap: () -> Void
     let onDismiss: () -> Void
+    @State private var isAuthorVerified = false
+    @State private var authorNickname: String = ""
+    @EnvironmentObject private var userService: UserService
 
     var body: some View {
         VStack(spacing: 0) {
@@ -730,16 +733,26 @@ struct CoursePreviewCard: View {
 
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(course.courseName)
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundColor(.tteDarkGray)
-                        .lineLimit(1)
+                    HStack(spacing: 5) {
+                        Text(course.courseName)
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(.tteDarkGray)
+                            .lineLimit(1)
+                        if isAuthorVerified {
+                            VerifiedBadge(creatorLabel: nil)
+                        }
+                    }
                     HStack(spacing: 6) {
                         Text(course.tag.rawValue)
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundColor(.tteOrange)
                             .padding(.horizontal, 8).padding(.vertical, 3)
                             .background(Capsule().fill(Color.tteOrange.opacity(0.12)))
+                        if isAuthorVerified {
+                            Text(authorNickname)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(.tteOrange.opacity(0.8))
+                        }
                         Text("장소 \(course.places.count)개")
                             .font(.system(size: 12))
                             .foregroundColor(.tteMediumGray)
@@ -773,6 +786,11 @@ struct CoursePreviewCard: View {
                 .shadow(color: .black.opacity(0.12), radius: 16, y: -4)
         )
         .onTapGesture { onTap() }
+        .task {
+            let author = await userService.fetchAuthor(uid: course.authorId)
+            isAuthorVerified = author?.isVerified ?? false
+            authorNickname = author?.nickname ?? ""
+        }
     }
 }
 
