@@ -60,6 +60,58 @@ struct PlacePickerView: View {
 
             ScrollView {
                 VStack(spacing: 0) {
+                    // 직접 입력 (상단 고정)
+                    if showCustomInput {
+                        HStack(spacing: 14) {
+                            Image(systemName: "pencil")
+                                .font(.system(size: 16))
+                                .foregroundColor(.tteOrange)
+                                .frame(width: 28)
+                            TextField("장소명 직접 입력", text: $customName)
+                                .font(.system(size: 15))
+                                .focused($customFocused)
+                                .submitLabel(.done)
+                                .onSubmit {
+                                    let name = customName.trimmingCharacters(in: .whitespaces)
+                                    guard !name.isEmpty else { return }
+                                    onSelect(name)
+                                }
+                            if !customName.isEmpty {
+                                Button {
+                                    let name = customName.trimmingCharacters(in: .whitespaces)
+                                    guard !name.isEmpty else { return }
+                                    onSelect(name)
+                                } label: {
+                                    Image(systemName: "arrow.right.circle.fill")
+                                        .font(.system(size: 22))
+                                        .foregroundColor(.tteOrange)
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 16)
+                    } else {
+                        Button {
+                            showCustomInput = true
+                            customFocused = true
+                        } label: {
+                            HStack(spacing: 14) {
+                                Image(systemName: "pencil")
+                                    .font(.system(size: 16))
+                                    .foregroundColor(.tteOrange)
+                                    .frame(width: 28)
+                                Text("직접 입력하기")
+                                    .font(.system(size: 15))
+                                    .foregroundColor(.tteOrange)
+                                Spacer()
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 16)
+                        }
+                    }
+
+                    SwiftUI.Divider()
+
                     if isLoading {
                         ProgressView()
                             .padding(40)
@@ -73,56 +125,6 @@ struct PlacePickerView: View {
                                 onSelect(place.placeName)
                             }
                             SwiftUI.Divider().padding(.leading, 56)
-                        }
-
-                        // 직접 입력
-                        if showCustomInput {
-                            HStack(spacing: 14) {
-                                Image(systemName: "pencil")
-                                    .font(.system(size: 16))
-                                    .foregroundColor(.tteOrange)
-                                    .frame(width: 28)
-                                TextField("장소명 직접 입력", text: $customName)
-                                    .font(.system(size: 15))
-                                    .focused($customFocused)
-                                    .submitLabel(.done)
-                                    .onSubmit {
-                                        let name = customName.trimmingCharacters(in: .whitespaces)
-                                        guard !name.isEmpty else { return }
-                                        onSelect(name)
-                                    }
-                                if !customName.isEmpty {
-                                    Button {
-                                        let name = customName.trimmingCharacters(in: .whitespaces)
-                                        guard !name.isEmpty else { return }
-                                        onSelect(name)
-                                    } label: {
-                                        Image(systemName: "arrow.right.circle.fill")
-                                            .font(.system(size: 22))
-                                            .foregroundColor(.tteOrange)
-                                    }
-                                }
-                            }
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 16)
-                        } else {
-                            Button {
-                                showCustomInput = true
-                                customFocused = true
-                            } label: {
-                                HStack(spacing: 14) {
-                                    Image(systemName: "pencil")
-                                        .font(.system(size: 16))
-                                        .foregroundColor(.tteOrange)
-                                        .frame(width: 28)
-                                    Text("직접 입력하기")
-                                        .font(.system(size: 15))
-                                        .foregroundColor(.tteOrange)
-                                    Spacer()
-                                }
-                                .padding(.horizontal, 20)
-                                .padding(.vertical, 16)
-                            }
                         }
                     }
                 }
