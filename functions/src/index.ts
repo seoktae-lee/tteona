@@ -267,7 +267,16 @@ export const deleteMyAccount = onCall({ secrets: [appleTeamId, appleKeyId, apple
       }
     }));
 
-    // 3) Apple Sign In credential revoke (저장된 authorizationCode가 있을 경우)
+    // 3) placeReviews UGC 삭제 (userId == 문서 ID이므로 collectionGroup으로 수집)
+    const reviewsSnapshot = await db.collectionGroup("reviews")
+      .where("userId", "==", uid)
+      .get()
+      .catch(() => undefined);
+    if (reviewsSnapshot) {
+      await Promise.all(reviewsSnapshot.docs.map((d) => d.ref.delete().catch(() => undefined)));
+    }
+
+    // 4) Apple Sign In credential revoke (저장된 authorizationCode가 있을 경우)
     const privateDoc = await db.collection("userPrivate").doc(uid).get().catch(() => undefined);
     const appleAuthCode = privateDoc?.data()?.appleAuthCode as string | undefined;
     if (appleAuthCode) {
@@ -292,13 +301,13 @@ export const deleteMyAccount = onCall({ secrets: [appleTeamId, appleKeyId, apple
       }
     }
 
-    // 4) users / userPrivate 삭제
+    // 5) users / userPrivate 삭제
     await Promise.all([
       db.collection("users").doc(uid).delete().catch(() => undefined),
       db.collection("userPrivate").doc(uid).delete().catch(() => undefined),
     ]);
 
-    // 5) Firebase Auth 유저 삭제 (Admin 권한이라 reauth 이슈 없음)
+    // 6) Firebase Auth 유저 삭제 (Admin 권한이라 reauth 이슈 없음)
     await admin.auth().deleteUser(uid);
 
     return { ok: true };

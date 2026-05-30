@@ -18,6 +18,7 @@ struct CourseDetailView: View {
     @State private var selectedRoomIds: Set<String> = []
     @State private var selectedPlaceIndex: Int = 0
     @State private var courseAuthor: AppUser?
+    @State private var selectedPlaceForDetail: Place?
 
     private let sessionStore = ActiveSessionStore.shared
 
@@ -118,6 +119,9 @@ struct CourseDetailView: View {
         } message: {
             Text(likeErrorMessage)
         }
+        .sheet(item: $selectedPlaceForDetail) { place in
+            PlaceDetailSheet(place: place)
+        }
     }
 
     // MARK: - Map
@@ -172,7 +176,7 @@ struct CourseDetailView: View {
                     VStack(spacing: 8) {
                         TabView(selection: $selectedPlaceIndex) {
                             ForEach(Array(sortedPlaces.enumerated()), id: \.offset) { index, place in
-                                PlacePagePhoto(place: place)
+                                PlacePagePhoto(place: place, onDetail: { selectedPlaceForDetail = place })
                                     .tag(index)
                             }
                         }
@@ -240,6 +244,8 @@ struct CourseDetailView: View {
                 VStack(spacing: 0) {
                     ForEach(Array(uniqueSortedPlaces.enumerated()), id: \.offset) { index, place in
                         PlaceRow(place: place, isLast: index == uniqueSortedPlaces.count - 1)
+                            .contentShape(Rectangle())
+                            .onTapGesture { selectedPlaceForDetail = place }
                     }
                 }
                 .padding(.horizontal, 20)
@@ -340,11 +346,12 @@ struct CourseDetailView: View {
 // MARK: - Place Page Photo (스와이프 갤러리용)
 struct PlacePagePhoto: View {
     let place: Place
+    var onDetail: (() -> Void)? = nil
     @State private var photoURL: String?
     @State private var isLoading = true
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
+        ZStack(alignment: .bottom) {
             Group {
                 if isLoading {
                     loadingPlaceholder
@@ -366,16 +373,31 @@ struct PlacePagePhoto: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             LinearGradient(
-                colors: [.clear, .black.opacity(0.45)],
+                colors: [.clear, .black.opacity(0.5)],
                 startPoint: .center,
                 endPoint: .bottom
             )
 
-            VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .bottom) {
                 Text("\(place.order). \(place.placeName)")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.white)
                     .lineLimit(1)
+                Spacer()
+                if let onDetail {
+                    Button(action: onDetail) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "photo.stack.fill")
+                                .font(.system(size: 10))
+                            Text("사진·리뷰")
+                                .font(.system(size: 11, weight: .semibold))
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(Capsule().fill(Color.black.opacity(0.45)))
+                    }
+                }
             }
             .padding(14)
         }
@@ -491,6 +513,19 @@ struct PlaceRow: View {
             .padding(.vertical, 12)
 
             Spacer()
+
+            HStack(spacing: 3) {
+                Image(systemName: "star.fill")
+                    .font(.system(size: 9))
+                Text("리뷰 보기")
+                    .font(.system(size: 11, weight: .medium))
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .semibold))
+            }
+            .foregroundColor(.tteOrange)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(Capsule().fill(Color.tteOrange.opacity(0.1)))
         }
         .task {
             async let photo = PlacesPhotoService.shared.photoURL(for: place.placeName)

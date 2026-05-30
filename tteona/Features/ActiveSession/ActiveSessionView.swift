@@ -27,6 +27,8 @@ struct ActiveSessionView: View {
     @State private var didStartSession = false
     @State private var cameraResult = false
     @State private var showIntegrityAlert = false
+    @State private var showRatingPrompt = false
+    @State private var ratingPlace: Place?
 
     private let sessionStore = ActiveSessionStore.shared
 
@@ -140,8 +142,13 @@ struct ActiveSessionView: View {
         }
         .fullScreenCover(isPresented: $showCamera, onDismiss: {
             if cameraResult {
+                let visitedPlace = currentPlace
                 handleCameraDismiss()
                 cameraResult = false
+                if let visitedPlace {
+                    ratingPlace = visitedPlace
+                    showRatingPrompt = true
+                }
             }
         }) {
             if let place = currentPlace {
@@ -178,6 +185,18 @@ struct ActiveSessionView: View {
             Button("확인", role: .cancel) { }
         } message: {
             Text("일부 장소의 영상 파일이 확인되지 않아 촬영 리스트가 자동으로 정리되었습니다. 해당 장소는 다시 촬영하실 수 있습니다.")
+        }
+        .sheet(isPresented: $showRatingPrompt, onDismiss: { ratingPlace = nil }) {
+            if let place = ratingPlace,
+               let uid = authService.currentUser?.uid {
+                PlaceRatingPromptView(
+                    place: place,
+                    userId: uid,
+                    nickname: userService.currentUser?.nickname ?? "멤버"
+                ) {
+                    showRatingPrompt = false
+                }
+            }
         }
         .sheet(isPresented: $showPlaceEditor, onDismiss: saveSession) {
             PlaceEditorSheet(

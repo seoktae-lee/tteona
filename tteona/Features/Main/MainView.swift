@@ -715,11 +715,25 @@ struct CoursePreviewCard: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            RoundedRectangle(cornerRadius: 2.5)
-                .fill(Color(UIColor.tertiaryLabel))
-                .frame(width: 36, height: 5)
-                .padding(.top, 10)
-                .padding(.bottom, 12)
+            ZStack {
+                RoundedRectangle(cornerRadius: 2.5)
+                    .fill(Color(UIColor.tertiaryLabel))
+                    .frame(width: 36, height: 5)
+                HStack {
+                    Spacer()
+                    Button(action: onDismiss) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.tteMediumGray)
+                            .frame(width: 28, height: 28)
+                            .background(Circle().fill(Color(UIColor.secondarySystemBackground)))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 16)
+            }
+            .padding(.top, 10)
+            .padding(.bottom, 12)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 10) {
@@ -764,14 +778,6 @@ struct CoursePreviewCard: View {
                     }
                 }
                 Spacer()
-                Button(action: onDismiss) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.tteMediumGray)
-                        .frame(width: 28, height: 28)
-                        .background(Circle().fill(Color(UIColor.secondarySystemBackground)))
-                }
-                .buttonStyle(.plain)
                 Image(systemName: "chevron.right")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.tteOrange)
