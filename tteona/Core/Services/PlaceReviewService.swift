@@ -15,7 +15,7 @@ class PlaceReviewService {
     private let db = Firestore.firestore()
     private init() {}
 
-    func fetchReviews(placeKey: String) async -> (reviews: [TteonaPlaceReview], visitCount: Int) {
+    func fetchReviews(placeKey: String, blockedUserIds: [String] = []) async -> (reviews: [TteonaPlaceReview], visitCount: Int) {
         guard let snapshot = try? await db
             .collection("placeReviews").document(placeKey)
             .collection("reviews")
@@ -24,7 +24,7 @@ class PlaceReviewService {
             .getDocuments()
         else { return ([], 0) }
 
-        let reviews = snapshot.documents.compactMap { doc -> TteonaPlaceReview? in
+        let allReviews = snapshot.documents.compactMap { doc -> TteonaPlaceReview? in
             let d = doc.data()
             guard let userId = d["userId"] as? String,
                   let nickname = d["nickname"] as? String,
@@ -40,6 +40,7 @@ class PlaceReviewService {
                 createdAt: createdAt
             )
         }
+        let reviews = allReviews.filter { !blockedUserIds.contains($0.userId) }
         return (reviews, reviews.count)
     }
 

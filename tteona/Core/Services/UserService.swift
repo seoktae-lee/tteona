@@ -44,4 +44,28 @@ class UserService: ObservableObject {
             .getDocuments()
         return !(snapshot?.documents.isEmpty ?? true)
     }
+
+    func blockUser(uid: String, blockedUid: String) async throws {
+        guard uid != blockedUid else { return }
+        try await db.collection("users").document(uid).updateData([
+            "blockedUserIds": FieldValue.arrayUnion([blockedUid])
+        ])
+        if currentUser?.uid == uid {
+            if currentUser?.blockedUserIds == nil {
+                currentUser?.blockedUserIds = []
+            }
+            if !(currentUser?.blockedUserIds?.contains(blockedUid) ?? false) {
+                currentUser?.blockedUserIds?.append(blockedUid)
+            }
+        }
+    }
+
+    func unblockUser(uid: String, blockedUid: String) async throws {
+        try await db.collection("users").document(uid).updateData([
+            "blockedUserIds": FieldValue.arrayRemove([blockedUid])
+        ])
+        if currentUser?.uid == uid {
+            currentUser?.blockedUserIds?.removeAll { $0 == blockedUid }
+        }
+    }
 }

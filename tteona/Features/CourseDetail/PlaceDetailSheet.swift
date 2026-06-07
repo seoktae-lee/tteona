@@ -3,12 +3,21 @@ import SwiftUI
 struct PlaceDetailSheet: View {
     let place: Place
 
+    @EnvironmentObject private var authService: AuthService
+    @EnvironmentObject private var userService: UserService
+
     @State private var detail: PlaceDetail?
     @State private var tteonaReviews: [TteonaPlaceReview] = []
     @State private var visitCount: Int = 0
     @State private var isLoadingDetail = true
     @State private var isLoadingReviews = true
     @State private var selectedTab: ReviewTab = .google
+
+    @State private var showReportAlert = false
+    @State private var showBlockAlert = false
+    @State private var showReportSuccessAlert = false
+    @State private var showBlockSuccessAlert = false
+    @State private var selectedReviewForAction: TteonaPlaceReview?
 
     enum ReviewTab { case google, tteona }
 
@@ -30,13 +39,72 @@ struct PlaceDetailSheet: View {
         .task {
             async let detailFetch = PlaceDetailService.shared.fetchDetail(for: place.placeName)
             let key = PlaceDetailService.cacheKey(for: place.placeName)
-            async let reviewFetch = PlaceReviewService.shared.fetchReviews(placeKey: key)
+            let blockedIds = userService.currentUser?.blockedUserIds ?? []
+            async let reviewFetch = PlaceReviewService.shared.fetchReviews(placeKey: key, blockedUserIds: blockedIds)
             let (d, r) = await (detailFetch, reviewFetch)
             detail = d
             isLoadingDetail = false
             tteonaReviews = r.reviews
             visitCount = r.visitCount
             isLoadingReviews = false
+        }
+        .confirmationDialog("신고 사유를 선택해주세요", isPresented: $showReportAlert, titleVisibility: .visible) {
+            ForEach(["영리목적/홍보", "음란성/선정성", "욕설/비하", "아동 유해 콘텐츠", "기타"], id: \.self) { reason in
+                Button(reason) {
+                    submitReviewReport(reason: reason)
+                }
+            }
+            Button("취소", role: .cancel) {}
+        }
+        .alert("리뷰 작성자 차단", isPresented: $showBlockAlert) {
+            Button("차단", role: .destructive) {
+                blockReviewer()
+            }
+            Button("취소", role: .cancel) {}
+        } message: {
+            Text("이 리뷰 작성자를 차단하시겠어요? 차단하시면 이 작성자가 등록한 모든 코스와 후기가 숨겨집니다.")
+        }
+        .alert("신고 완료", isPresented: $showReportSuccessAlert) {
+            Button("확인", role: .cancel) {}
+        } message: {
+            Text("신고가 정상 접수되었습니다. 24시간 이내에 검토 및 삭제 처리됩니다.")
+        }
+        .alert("차단 완료", isPresented: $showBlockSuccessAlert) {
+            Button("확인", role: .cancel) {}
+        } message: {
+            Text("작성자가 차단되었습니다. 목록에서 후기가 삭제되었습니다.")
+        }
+    }
+
+    private func submitReviewReport(reason: String) {
+        guard let currentUid = authService.currentUser?.uid,
+              let review = selectedReviewForAction else { return }
+        let key = PlaceDetailService.cacheKey(for: place.placeName)
+        Task {
+            do {
+                try await ReportService.shared.reportContent(
+                    reporterId: currentUid,
+                    targetType: "review",
+                    targetId: "\(key)/\(review.userId)",
+                    targetAuthorId: review.userId,
+                    reason: reason
+                )
+                showReportSuccessAlert = true
+            } catch {}
+        }
+    }
+
+    private func blockReviewer() {
+        guard let currentUid = authService.currentUser?.uid,
+              let review = selectedReviewForAction else { return }
+        Task {
+            do {
+                try await userService.blockUser(uid: currentUid, blockedUid: review.userId)
+                withAnimation {
+                    tteonaReviews.removeAll { $0.userId == review.userId }
+                }
+                showBlockSuccessAlert = true
+            } catch {}
         }
     }
 
@@ -175,7 +243,18 @@ struct PlaceDetailSheet: View {
                 ProgressView().padding(40)
             } else if !tteonaReviews.isEmpty {
                 ForEach(tteonaReviews) { review in
-                    TteonaReviewRow(review: review)
+                    TteonaReviewRow(
+                        review: review,
+                        currentUserId: authService.currentUser?.uid,
+                        onReport: {
+                            selectedReviewForAction = review
+                            showReportAlert = true
+                        },
+                        onBlock: {
+                            selectedReviewForAction = review
+                            showBlockAlert = true
+                        }
+                    )
                     Divider().padding(.horizontal, 20)
                 }
             } else {
@@ -264,6 +343,9 @@ struct GoogleReviewRow: View {
 // MARK: - tteona Review Row
 struct TteonaReviewRow: View {
     let review: TteonaPlaceReview
+    let currentUserId: String?
+    var onReport: (() -> Void)? = nil
+    var onBlock: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -289,9 +371,29 @@ struct TteonaReviewRow: View {
                     }
                 }
                 Spacer()
-                Text(review.createdAt, style: .relative)
-                    .font(.system(size: 11))
-                    .foregroundColor(.tteMediumGray)
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text(review.createdAt, style: .relative)
+                        .font(.system(size: 11))
+                        .foregroundColor(.tteMediumGray)
+                    if let currentUserId, review.userId != currentUserId {
+                        Menu {
+                            Button(role: .destructive) {
+                                onReport?()
+                            } label: {
+                                Label("신고하기", systemImage: "exclamationmark.bubble")
+                            }
+                            Button {
+                                onBlock?()
+                            } label: {
+                                Label("작성자 차단하기", systemImage: "person.crop.circle.badge.xmark")
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis")
+                                .font(.system(size: 14))
+                                .foregroundColor(.tteMediumGray)
+                        }
+                    }
+                }
             }
             if let comment = review.comment {
                 Text(comment)

@@ -12,7 +12,7 @@ class CourseService: ObservableObject {
     private let db = Firestore.firestore()
     private var likedCourseIdsFetched = false
 
-    func fetchCourses() async {
+    func fetchCourses(blockedUserIds: [String] = []) async {
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
@@ -21,9 +21,10 @@ class CourseService: ObservableObject {
             let snapshot = try await db.collection("courses")
                 .order(by: "likeCount", descending: true)
                 .getDocuments()
-            self.courses = snapshot.documents.compactMap { doc in
+            let fetched = snapshot.documents.compactMap { doc in
                 try? doc.data(as: Course.self)
             }
+            self.courses = fetched.filter { !blockedUserIds.contains($0.authorId) }
         } catch {
             self.errorMessage = error.localizedDescription
         }

@@ -170,6 +170,14 @@ struct SettingsView: View {
 
     private var accountSection: some View {
         Section("계정") {
+            NavigationLink {
+                BlockedUsersView()
+                    .environmentObject(userService)
+                    .environmentObject(authService)
+            } label: {
+                Label("차단된 사용자 관리", systemImage: "person.crop.circle.badge.xmark")
+                    .foregroundColor(.tteDarkGray)
+            }
             Button {
                 showSignOutAlert = true
             } label: {

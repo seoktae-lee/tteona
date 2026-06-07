@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>아동 안전 기준 정책 / Child Safety Policy — 떠나</title>
+  <style>
+    :root {
+      --orange: #FF6B35;
+      --bg: #FAFAFA;
+      --text: #1A1A1A;
+      --sub: #555;
+      --border: #E5E5E5;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      padding: 0 0 60px;
+    }
+    header {
+      background: #fff;
+      border-bottom: 1px solid var(--border);
+      padding: 20px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    header .brand {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--orange);
+      text-decoration: none;
+    }
+    .lang-toggle {
+      display: flex;
+      gap: 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .lang-toggle button {
+      padding: 6px 16px;
+      border: none;
+      background: #fff;
+      color: var(--sub);
+      font-size: 13px;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .lang-toggle button.active {
+      background: var(--orange);
+      color: #fff;
+      font-weight: 600;
+    }
+    .container {
+      max-width: 720px;
+      margin: 40px auto;
+      padding: 0 24px;
+    }
+    h1 {
+      font-size: 26px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .effective-date {
+      color: var(--sub);
+      font-size: 13px;
+      margin-bottom: 36px;
+    }
+    h2 {
+      font-size: 17px;
+      font-weight: 700;
+      margin: 36px 0 10px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid var(--orange);
+    }
+    p { margin-bottom: 12px; font-size: 15px; }
+    ul { padding-left: 20px; margin-bottom: 12px; }
+    li { margin-bottom: 6px; font-size: 15px; }
+    a { color: var(--orange); }
+    .lang-section { display: none; }
+    .lang-section.active { display: block; }
+  </style>
+</head>
+<body>
+<header>
+  <a class="brand" href="https://tteona.kr">떠나</a>
+  <div class="lang-toggle">
+    <button id="btn-ko" class="active" onclick="setLang('ko')">한국어</button>
+    <button id="btn-en" onclick="setLang('en')">English</button>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- ===== 한국어 ===== -->
+  <div id="ko" class="lang-section active">
+    <h1>아동 안전 기준 정책</h1>
+    <p class="effective-date">시행일: 2026년 5월 12일</p>
+
+    <h2>1. 목적</h2>
+    <p>"떠나" 서비스 제공자(이하 "서비스 제공자")는 아동 및 청소년이 안전하게 모바일 애플리케이션 "떠나"(이하 "앱")를 이용하고, 아동 청소년에 대한 유해 콘텐츠 및 성착취, 괴롭힘 등의 유해 행위로부터 보호받을 수 있도록 엄격한 아동 안전 기준을 시행합니다.</p>
+
+    <h2>2. 만 14세 미만 이용자 보호</h2>
+    <ul>
+      <li>이용약관 제4조에 의거하여, "떠나" 서비스는 만 14세 이상부터 가입 및 이용이 가능합니다.</li>
+      <li>만 14세 미만 아동의 개인정보가 고의적 혹은 실수로 수집되었음을 확인하는 경우, 해당 계정과 관련 데이터를 즉시 파기합니다.</li>
+    </ul>
+
+    <h2>3. 금지 행위 및 콘텐츠 기준</h2>
+    <p>아동 및 청소년에게 위협이 되거나 유해한 다음의 행위 및 콘텐츠의 생성을 전면 금지합니다.</p>
+    <ul>
+      <li>아동 성학대 및 착취물(CSAE/CSAM)과 관련된 일체의 텍스트, 이미지, 링크 게재 및 공유</li>
+      <li>아동·청소년을 대상으로 하는 그루밍(길들이기), 성희롱, 성적 유혹 행위</li>
+      <li>아동·청소년에게 정신적 또는 육체적 위해를 가하는 언어폭력, 괴롭힘, 학대 및 따돌림 행위</li>
+      <li>주류, 담배, 도박 등 아동·청소년에게 유해한 약물 및 사행성 매체 조장 콘텐츠</li>
+    </ul>
+
+    <h2>4. 유해 콘텐츠 모니터링 및 즉각적 조치</h2>
+    <ul>
+      <li>서비스 제공자는 주기적으로 데이터베이스와 코스 상세 정보, 공유 장소 리뷰 등을 검토하여 아동 유해 콘텐츠 존재 여부를 모니터링합니다.</li>
+      <li>발견된 아동 유해 콘텐츠는 즉각 삭제 또는 비공개 처리하며, 해당 콘텐츠를 생산하거나 유포한 계정은 경고 없이 즉시 영구 정지 처리합니다.</li>
+    </ul>
+
+    <h2>5. 신고 및 제재 체계</h2>
+    <ul>
+      <li>앱 내부의 신고 채널 또는 공식 문의 이메일(<a href="mailto:just.tteona@gmail.com">just.tteona@gmail.com</a>)을 통해 아동 유해 콘텐츠 및 이용자를 신고할 수 있습니다.</li>
+      <li>접수된 신고 건은 최대 24시간 이내에 처리되며, 검토 결과에 따라 대상 콘텐츠의 영구 삭제 및 유포자의 서비스 이용 제한 조치가 신속히 집행됩니다.</li>
+    </ul>
+
+    <h2>6. 문의 및 접수처</h2>
+    <p>아동 안전과 관련된 건의 사항이나 침해 신고는 아래로 문의해 주시기 바랍니다.</p>
+    <ul>
+      <li><strong>이메일</strong>: <a href="mailto:just.tteona@gmail.com">just.tteona@gmail.com</a></li>
+      <li><strong>서비스명</strong>: 떠나 (Tteona)</li>
+    </ul>
+  </div>
+
+  <!-- ===== English ===== -->
+  <div id="en" class="lang-section">
+    <h1>Child Safety Policy</h1>
+    <p class="effective-date">Effective Date: May 12, 2026</p>
+
+    <h2>1. Purpose</h2>
+    <p>The Service Provider of "떠나 (Tteona)" (the "Service Provider") enforces this Child Safety Policy to ensure children and adolescents can safely interact with our mobile application and are protected from child sexual abuse, exploitation, harassment, and other harmful behaviors.</p>
+
+    <h2>2. Protection of Children Under 14</h2>
+    <ul>
+      <li>Pursuant to Section 4 of the Terms of Service, the "Tteona" service is restricted to users who are at least 14 years old.</li>
+      <li>If it is discovered that personal information of a child under 14 has been collected, the account and all associated data will be deleted immediately.</li>
+    </ul>
+
+    <h2>3. Prohibited Content and Behaviors</h2>
+    <p>We strictly prohibit any behaviors and content that threaten or harm children and adolescents, including:</p>
+    <ul>
+      <li>Creating, sharing, or linking to Child Sexual Abuse Material (CSAM) or Child Sexual Exploitation and Abuse (CSAE) in any form.</li>
+      <li>Grooming, sexual harassment, or solicitation targeting minors.</li>
+      <li>Bullying, physical or psychological abuse, harassment, or threats targeting minors.</li>
+      <li>Promoting substances or activities harmful to minors, such as alcohol, tobacco, gambling, or illegal drugs.</li>
+    </ul>
+
+    <h2>4. Monitoring and Enforcement</h2>
+    <ul>
+      <li>The Service Provider periodically monitors user-generated content, including shared course descriptions, place ratings, and comments.</li>
+      <li>Any child-harming content will be removed immediately. Accounts violating these standards will be permanently banned without prior warning.</li>
+    </ul>
+
+    <h2>5. Reporting and Penalties</h2>
+    <ul>
+      <li>Users can report child-harming content or abusive behavior through our official email channel (<a href="mailto:just.tteona@gmail.com">just.tteona@gmail.com</a>).</li>
+      <li>All reports will be reviewed and acted upon within 24 hours, including content deletion and permanent termination of the violating accounts.</li>
+    </ul>
+
+    <h2>6. Contact Us</h2>
+    <p>For questions or reports regarding child safety, please contact us at:</p>
+    <ul>
+      <li><strong>Email</strong>: <a href="mailto:just.tteona@gmail.com">just.tteona@gmail.com</a></li>
+      <li><strong>Service Name</strong>: 떠나 (Tteona)</li>
+    </ul>
+  </div>
+
+</div>
+
+<script>
+  function setLang(lang) {
+    document.getElementById('ko').classList.toggle('active', lang === 'ko');
+    document.getElementById('en').classList.toggle('active', lang === 'en');
+    document.getElementById('btn-ko').classList.toggle('active', lang === 'ko');
+    document.getElementById('btn-en').classList.toggle('active', lang === 'en');
+    document.documentElement.lang = lang;
+  }
+</script>
+</body>
+</html>

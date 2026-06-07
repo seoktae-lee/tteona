@@ -103,5 +103,25 @@ service cloud.firestore {
       allow read, update, delete: if false;
     }
 
+    // placeCache 컬렉션 (Google Places API 데이터 캐시)
+    match /placeCache/{key} {
+      allow read, write: if isSignedIn();
+    }
+
+    // placeReviews 컬렉션 (방문 장소 리뷰 및 평점)
+    match /placeReviews/{placeKey} {
+      allow read: if isSignedIn();
+      match /reviews/{userId} {
+        allow read: if isSignedIn();
+        allow write: if isSignedIn() && userId == request.auth.uid;
+      }
+    }
+
+    // reports 컬렉션 (콘텐츠 신고)
+    match /reports/{reportId} {
+      allow create: if isSignedIn() && request.resource.data.reporterId == request.auth.uid;
+      allow read, update, delete: if false;
+    }
+
   }
 }

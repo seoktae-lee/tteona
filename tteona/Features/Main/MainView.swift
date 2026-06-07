@@ -125,7 +125,7 @@ struct MainView: View {
         .ignoresSafeArea()
         .task {
             isLoadingCourses = true
-            await courseService.fetchCourses()
+            await courseService.fetchCourses(blockedUserIds: userService.currentUser?.blockedUserIds ?? [])
             if let uid = authService.currentUser?.uid {
                 await courseService.fetchLikedCourseIds(userId: uid)
             }

@@ -19,6 +19,10 @@ struct CourseDetailView: View {
     @State private var selectedPlaceIndex: Int = 0
     @State private var courseAuthor: AppUser?
     @State private var selectedPlaceForDetail: Place?
+    @State private var showReportAlert = false
+    @State private var showBlockAlert = false
+    @State private var showReportSuccessAlert = false
+    @State private var showBlockSuccessAlert = false
 
     private let sessionStore = ActiveSessionStore.shared
 
@@ -64,6 +68,23 @@ struct CourseDetailView: View {
                                     }
                                 } label: {
                                     Label("코스 삭제", systemImage: "trash")
+                                }
+                            } label: {
+                                Image(systemName: "ellipsis")
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(.tteDarkGray)
+                            }
+                        } else {
+                            Menu {
+                                Button(role: .destructive) {
+                                    showReportAlert = true
+                                } label: {
+                                    Label("코스 신고하기", systemImage: "exclamationmark.bubble")
+                                }
+                                Button {
+                                    showBlockAlert = true
+                                } label: {
+                                    Label("작성자 차단하기", systemImage: "person.crop.circle.badge.xmark")
                                 }
                             } label: {
                                 Image(systemName: "ellipsis")
@@ -121,6 +142,60 @@ struct CourseDetailView: View {
         }
         .sheet(item: $selectedPlaceForDetail) { place in
             PlaceDetailSheet(place: place)
+        }
+        .confirmationDialog("신고 사유를 선택해주세요", isPresented: $showReportAlert, titleVisibility: .visible) {
+            ForEach(["영리목적/홍보", "음란성/선정성", "욕설/비하", "아동 유해 콘텐츠", "기타"], id: \.self) { reason in
+                Button(reason) {
+                    submitCourseReport(reason: reason)
+                }
+            }
+            Button("취소", role: .cancel) {}
+        }
+        .alert("작성자 차단", isPresented: $showBlockAlert) {
+            Button("차단", role: .destructive) {
+                blockAuthor()
+            }
+            Button("취소", role: .cancel) {}
+        } message: {
+            Text("이 작성자를 차단하시겠어요? 차단하시면 이 작성자가 등록한 모든 코스와 후기가 숨겨집니다.")
+        }
+        .alert("신고 완료", isPresented: $showReportSuccessAlert) {
+            Button("확인", role: .cancel) {}
+        } message: {
+            Text("신고가 정상 접수되었습니다. 24시간 이내에 검토 및 삭제 처리됩니다.")
+        }
+        .alert("차단 완료", isPresented: $showBlockSuccessAlert) {
+            Button("확인", role: .cancel) {
+                dismiss()
+            }
+        } message: {
+            Text("작성자가 차단되었습니다. 목록에서 제외하기 위해 화면을 닫습니다.")
+        }
+    }
+
+    private func submitCourseReport(reason: String) {
+        guard let currentUid = authService.currentUser?.uid else { return }
+        Task {
+            do {
+                try await ReportService.shared.reportContent(
+                    reporterId: currentUid,
+                    targetType: "course",
+                    targetId: course.courseId,
+                    targetAuthorId: course.authorId,
+                    reason: reason
+                )
+                showReportSuccessAlert = true
+            } catch {}
+        }
+    }
+
+    private func blockAuthor() {
+        guard let currentUid = authService.currentUser?.uid else { return }
+        Task {
+            do {
+                try await userService.blockUser(uid: currentUid, blockedUid: course.authorId)
+                showBlockSuccessAlert = true
+            } catch {}
         }
     }
 

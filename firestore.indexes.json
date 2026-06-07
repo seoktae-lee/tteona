@@ -8,6 +8,7 @@
         { "fieldPath": "createdAt", "order": "ASCENDING" }
       ]
     }
+
   ],
   "fieldOverrides": []
 }
