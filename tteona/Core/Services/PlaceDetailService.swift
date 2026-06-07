@@ -100,6 +100,7 @@ actor PlaceDetailService {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(apiKey, forHTTPHeaderField: "X-Goog-Api-Key")
+        request.setValue("com.seoktaedev.tteona", forHTTPHeaderField: "X-Ios-Bundle-Identifier")
         request.setValue(
             "places.photos,places.types,places.rating,places.userRatingCount,places.reviews",
             forHTTPHeaderField: "X-Goog-FieldMask"
@@ -146,9 +147,14 @@ actor PlaceDetailService {
     }
 
     private func fetchPhotoURL(name: String) async -> String? {
-        let str = "https://places.googleapis.com/v1/\(name)/media?maxHeightPx=800&skipHttpRedirect=true&key=\(apiKey)"
-        guard let url = URL(string: str),
-              let (data, _) = try? await URLSession.shared.data(from: url),
+        let str = "https://places.googleapis.com/v1/\(name)/media?maxHeightPx=800&skipHttpRedirect=true"
+        guard let url = URL(string: str) else { return nil }
+
+        var request = URLRequest(url: url)
+        request.setValue(apiKey, forHTTPHeaderField: "X-Goog-Api-Key")
+        request.setValue("com.seoktaedev.tteona", forHTTPHeaderField: "X-Ios-Bundle-Identifier")
+
+        guard let (data, _) = try? await URLSession.shared.data(for: request),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return nil }
         return json["photoUri"] as? String

@@ -40,6 +40,7 @@ actor PlacesPhotoService {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(apiKey, forHTTPHeaderField: "X-Goog-Api-Key")
+        request.setValue("com.seoktaedev.tteona", forHTTPHeaderField: "X-Ios-Bundle-Identifier")
         request.setValue("places.photos,places.types", forHTTPHeaderField: "X-Goog-FieldMask")
         request.httpBody = try? JSONSerialization.data(withJSONObject: ["textQuery": placeName])
 
@@ -53,12 +54,16 @@ actor PlacesPhotoService {
         var photoURL: String?
         if let photos = firstPlace["photos"] as? [[String: Any]],
            let photoName = photos.first?["name"] as? String {
-            let mediaStr = "https://places.googleapis.com/v1/\(photoName)/media?maxHeightPx=800&skipHttpRedirect=true&key=\(apiKey)"
-            if let mediaURL = URL(string: mediaStr),
-               let (mediaData, _) = try? await URLSession.shared.data(from: mediaURL),
-               let mediaJson = try? JSONSerialization.jsonObject(with: mediaData) as? [String: Any],
-               let photoUri = mediaJson["photoUri"] as? String {
-                photoURL = photoUri
+            let mediaStr = "https://places.googleapis.com/v1/\(photoName)/media?maxHeightPx=800&skipHttpRedirect=true"
+            if let mediaURL = URL(string: mediaStr) {
+                var mediaRequest = URLRequest(url: mediaURL)
+                mediaRequest.setValue(apiKey, forHTTPHeaderField: "X-Goog-Api-Key")
+                mediaRequest.setValue("com.seoktaedev.tteona", forHTTPHeaderField: "X-Ios-Bundle-Identifier")
+                if let (mediaData, _) = try? await URLSession.shared.data(for: mediaRequest),
+                   let mediaJson = try? JSONSerialization.jsonObject(with: mediaData) as? [String: Any],
+                   let photoUri = mediaJson["photoUri"] as? String {
+                    photoURL = photoUri
+                }
             }
         }
 
