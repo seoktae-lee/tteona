@@ -300,7 +300,7 @@ struct OnboardingView: View {
                     description: "장소 도착을 감지하고 지도에 현재 위치를 표시해요",
                     isGranted: locationGranted
                 ) {
-                    requestLocation()
+                    Task { await requestLocation() }
                 }
 
                 PermissionRow(
@@ -309,7 +309,7 @@ struct OnboardingView: View {
                     description: "장소에 도착하면 촬영 알림을 보내드려요",
                     isGranted: notificationGranted
                 ) {
-                    requestNotification()
+                    Task { await requestNotification() }
                 }
 
                 PermissionRow(
@@ -318,7 +318,7 @@ struct OnboardingView: View {
                     description: "각 장소에서 5초 영상을 촬영해요",
                     isGranted: cameraGranted
                 ) {
-                    requestCamera()
+                    Task { await requestCamera() }
                 }
 
                 PermissionRow(
@@ -327,14 +327,16 @@ struct OnboardingView: View {
                     description: "촬영한 영상을 앨범에 저장해요",
                     isGranted: photoLibraryGranted
                 ) {
-                    requestPhotoLibrary()
+                    Task { await requestPhotoLibrary() }
                 }
             }
             .padding(.horizontal, 24)
 
             Spacer()
 
-            nextButton(title: "다음") { step = 4 }
+            nextButton(title: "다음") {
+                Task { await requestAllPermissionsThenContinue() }
+            }
                 .padding(.horizontal, 24)
                 .padding(.bottom, 48)
         }
@@ -436,56 +438,80 @@ struct OnboardingView: View {
     }
 
     private func saveNickname() async {
-        guard let uid = authService.currentUser?.uid,
-              nicknameState == .available else { return }
+        guard nicknameState == .available else { return }
+        withAnimation { step = 3 }
+    }
+
+    private func finishOnboarding() async {
+        guard let uid = authService.currentUser?.uid else { return }
         let user = AppUser(
             uid: uid,
             email: authService.currentUser?.email ?? "",
             nickname: nickname.trimmingCharacters(in: .whitespaces)
         )
         try? await userService.saveUser(user)
-        withAnimation { step = 3 }
-    }
-
-    private func finishOnboarding() async {
-        guard let uid = authService.currentUser?.uid else { return }
-        // 닉네임만 설정하고 약관은 건너뛴 경우 users 문서 생성
-        if userService.currentUser == nil {
-            let user = AppUser(uid: uid, email: authService.currentUser?.email ?? "", nickname: "")
-            try? await userService.saveUser(user)
-        }
         // Firestore users 문서가 있으면 기존 유저로 간주되어 RootView가 메인으로 전환
         authService.onboardingComplete = true
     }
 
     // MARK: - Permission Requests
-    private func requestLocation() {
-        let manager = CLLocationManager()
-        manager.requestAlwaysAuthorization()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            let status = manager.authorizationStatus
-            locationGranted = status == .authorizedAlways || status == .authorizedWhenInUse
-        }
-    }
-
-    private func requestNotification() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
-            DispatchQueue.main.async { notificationGranted = granted }
-        }
-    }
-
-    private func requestCamera() {
-        AVCaptureDevice.requestAccess(for: .video) { granted in
-            DispatchQueue.main.async { cameraGranted = granted }
-        }
-        AVCaptureDevice.requestAccess(for: .audio) { _ in }
-    }
-
-    private func requestPhotoLibrary() {
-        PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
-            DispatchQueue.main.async {
-                photoLibraryGranted = status == .authorized || status == .limited
+    private func requestLocation() async {
+        await withCheckedContinuation { continuation in
+            let manager = CLLocationManager()
+            manager.requestAlwaysAuthorization()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                let status = manager.authorizationStatus
+                locationGranted = status == .authorizedAlways || status == .authorizedWhenInUse
+                continuation.resume()
             }
+        }
+    }
+
+    private func requestNotification() async {
+        await withCheckedContinuation { continuation in
+            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+                DispatchQueue.main.async {
+                    notificationGranted = granted
+                    continuation.resume()
+                }
+            }
+        }
+    }
+
+    private func requestCamera() async {
+        await withCheckedContinuation { continuation in
+            AVCaptureDevice.requestAccess(for: .video) { granted in
+                DispatchQueue.main.async {
+                    cameraGranted = granted
+                    continuation.resume()
+                }
+            }
+        }
+        await withCheckedContinuation { continuation in
+            AVCaptureDevice.requestAccess(for: .audio) { _ in
+                continuation.resume()
+            }
+        }
+    }
+
+    private func requestPhotoLibrary() async {
+        await withCheckedContinuation { continuation in
+            PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
+                DispatchQueue.main.async {
+                    photoLibraryGranted = status == .authorized || status == .limited
+                    continuation.resume()
+                }
+            }
+        }
+    }
+
+    private func requestAllPermissionsThenContinue() async {
+        await requestLocation()
+        await requestNotification()
+        await requestCamera()
+        await requestPhotoLibrary()
+        await MainActor.run {
+            withAnimation { step = 4 }
         }
     }
 }
@@ -522,7 +548,7 @@ struct PermissionRow: View {
             Spacer()
 
             Button(action: onTap) {
-                Text(isGranted ? "허용됨" : "허용")
+                Text(isGranted ? "허용됨" : "계속")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(isGranted ? .green : .white)
                     .padding(.horizontal, 14)

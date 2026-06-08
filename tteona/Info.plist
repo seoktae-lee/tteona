@@ -53,7 +53,7 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>코스 진행 중 현재 위치를 확인하고 목적지 도착을 감지하기 위해 위치 정보를 사용합니다. 그룹 여행 중에는 함께하는 멤버들과 실시간으로 위치를 공유합니다.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>영상 촬영 시 소리를 함께 녹음하기 위해 마이크를 사용합니다.</string>
+	<string>여행지 도착 시 자동으로 촬영되는 5초 영상에 현장의 소리를 함께 녹음하여, 여행이 끝난 후 추억을 담은 나만의 여행 브이로그를 만드는 데 마이크를 사용합니다.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>완성된 Vlog를 카메라 앨범에 저장하기 위해 접근 권한이 필요합니다.</string>
 	<key>NSSupportsLiveActivities</key>
