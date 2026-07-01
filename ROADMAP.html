@@ -1,0 +1,1242 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>tteona 클라우드 확장 로드맵</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #22263a;
+      --border: #2e3347;
+      --accent: #ff6b35;
+      --accent2: #ff9a6c;
+      --blue: #4e8ef7;
+      --green: #3ecf8e;
+      --yellow: #f5c842;
+      --purple: #9b6dff;
+      --red: #ff5c72;
+      --text: #e8eaf0;
+      --muted: #7c829a;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, 'Pretendard', 'Apple SD Gothic Neo', sans-serif;
+      line-height: 1.6;
+    }
+
+    /* 헤더 */
+    .hero {
+      background: linear-gradient(135deg, #1a1d27 0%, #0f1117 50%, #1a1220 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 60px 40px 50px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: -60px; left: 50%;
+      transform: translateX(-50%);
+      width: 600px; height: 300px;
+      background: radial-gradient(ellipse, rgba(255,107,53,0.12) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero-badge {
+      display: inline-block;
+      background: rgba(255,107,53,0.15);
+      border: 1px solid rgba(255,107,53,0.4);
+      color: var(--accent2);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      padding: 5px 14px;
+      border-radius: 20px;
+      margin-bottom: 20px;
+    }
+    .hero h1 {
+      font-size: 38px;
+      font-weight: 800;
+      letter-spacing: -1px;
+      margin-bottom: 12px;
+    }
+    .hero h1 span { color: var(--accent); }
+    .hero p {
+      color: var(--muted);
+      font-size: 16px;
+      max-width: 560px;
+      margin: 0 auto 30px;
+    }
+
+    /* 서버 카드 */
+    .server-strip {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+    .server-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 20px;
+      text-align: left;
+      min-width: 180px;
+    }
+    .server-card .label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      margin-bottom: 6px;
+    }
+    .server-card .label.web { color: var(--blue); }
+    .server-card .label.was { color: var(--green); }
+    .server-card .label.db  { color: var(--purple); }
+    .server-card .ip { font-size: 13px; font-family: monospace; color: var(--text); margin-bottom: 4px; }
+    .server-card .spec { font-size: 12px; color: var(--muted); }
+
+    /* 레이아웃 */
+    .container { max-width: 900px; margin: 0 auto; padding: 50px 24px 80px; }
+
+    /* 전체 흐름 */
+    .overview {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 30px;
+      margin-bottom: 50px;
+    }
+    .overview h2 { font-size: 18px; font-weight: 700; margin-bottom: 20px; }
+    .flow {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .flow-item {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .flow-arrow { color: var(--muted); font-size: 18px; }
+
+    /* 페이즈 */
+    .phase { margin-bottom: 36px; }
+    .phase-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 18px;
+      margin-bottom: 16px;
+    }
+    .phase-num {
+      width: 48px; height: 48px;
+      border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; font-weight: 900;
+      flex-shrink: 0;
+    }
+    .phase-meta { flex: 1; }
+    .phase-meta h3 { font-size: 20px; font-weight: 800; margin-bottom: 4px; }
+    .phase-tags {
+      display: flex; gap: 8px; flex-wrap: wrap;
+    }
+    .tag {
+      font-size: 11px; font-weight: 600;
+      padding: 3px 10px; border-radius: 20px;
+    }
+    .tag.time { background: rgba(245,200,66,0.12); color: var(--yellow); border: 1px solid rgba(245,200,66,0.25); }
+    .tag.server { background: rgba(78,142,247,0.12); color: var(--blue); border: 1px solid rgba(78,142,247,0.25); }
+    .tag.money { background: rgba(62,207,142,0.12); color: var(--green); border: 1px solid rgba(62,207,142,0.25); }
+    .tag.hot { background: rgba(255,92,114,0.12); color: var(--red); border: 1px solid rgba(255,92,114,0.25); }
+
+    .phase-body {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    .analogy {
+      background: var(--surface2);
+      border-left: 3px solid;
+      padding: 14px 20px;
+      font-size: 14px;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+    .analogy strong { color: var(--text); }
+
+    .tasks { padding: 20px 24px; }
+    .task-group-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin: 16px 0 10px;
+    }
+    .task-group-title:first-child { margin-top: 0; }
+
+    .task {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 14px;
+    }
+    .task:last-child { border-bottom: none; }
+    .task-check {
+      width: 20px; height: 20px;
+      border: 2px solid var(--border);
+      border-radius: 6px;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .task-content { flex: 1; }
+    .task-title { font-weight: 500; color: var(--text); }
+    .task-desc { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .task-code {
+      font-family: monospace;
+      font-size: 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 12px;
+      margin-top: 8px;
+      color: var(--accent2);
+      overflow-x: auto;
+      white-space: pre;
+    }
+
+    /* 색상 테마 */
+    .p0 .phase-num { background: rgba(124,130,154,0.15); color: var(--muted); }
+    .p0 .analogy { border-color: var(--muted); }
+
+    .p1 .phase-num { background: rgba(78,142,247,0.15); color: var(--blue); }
+    .p1 .analogy { border-color: var(--blue); }
+
+    .p2 .phase-num { background: rgba(155,109,255,0.15); color: var(--purple); }
+    .p2 .analogy { border-color: var(--purple); }
+
+    .p3 .phase-num { background: rgba(62,207,142,0.15); color: var(--green); }
+    .p3 .analogy { border-color: var(--green); }
+
+    .p4 .phase-num { background: rgba(255,107,53,0.15); color: var(--accent); }
+    .p4 .analogy { border-color: var(--accent); }
+
+    .p5 .phase-num { background: rgba(245,200,66,0.15); color: var(--yellow); }
+    .p5 .analogy { border-color: var(--yellow); }
+
+    .p6 .phase-num { background: rgba(255,92,114,0.15); color: var(--red); }
+    .p6 .analogy { border-color: var(--red); }
+
+    .p7 .phase-num { background: rgba(78,142,247,0.15); color: var(--blue); }
+    .p7 .analogy { border-color: var(--blue); }
+
+    .p8 .phase-num { background: rgba(62,207,142,0.15); color: var(--green); }
+    .p8 .analogy { border-color: var(--green); }
+
+    .p9 .phase-num { background: rgba(155,109,255,0.15); color: var(--purple); }
+    .p9 .analogy { border-color: var(--purple); }
+
+    /* 구분선 */
+    .section-title {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin: 50px 0 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .section-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* 주의사항 */
+    .notice {
+      background: rgba(245,200,66,0.07);
+      border: 1px solid rgba(245,200,66,0.2);
+      border-radius: 12px;
+      padding: 18px 20px;
+      font-size: 14px;
+      color: #c9a93a;
+      margin-bottom: 20px;
+      line-height: 1.7;
+    }
+    .notice strong { color: var(--yellow); }
+
+    /* 푸터 */
+    footer {
+      text-align: center;
+      color: var(--muted);
+      font-size: 13px;
+      padding: 30px;
+      border-top: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+
+<!-- 헤더 -->
+<div class="hero">
+  <div class="hero-badge">KISA 2026 클라우드 지원사업</div>
+  <h1>tteona <span>클라우드 확장</span> 로드맵</h1>
+  <p>Firebase 단독 구조에서 자체 서버 인프라로 단계별 전환 가이드.<br>처음부터 끝까지 순서대로 따라가면 됩니다.</p>
+  <div class="server-strip">
+    <div class="server-card">
+      <div class="label web">WEB 서버</div>
+      <div class="ip">114.110.182.45</div>
+      <div class="spec">2Core / 4GB / 30GB · Nginx</div>
+    </div>
+    <div class="server-card">
+      <div class="label was">WAS 서버</div>
+      <div class="ip">114.110.181.49</div>
+      <div class="spec">8Core / 16GB / 50GB · Node.js + FFmpeg</div>
+    </div>
+    <div class="server-card">
+      <div class="label db">DB 서버</div>
+      <div class="ip">114.110.183.183</div>
+      <div class="spec">2Core / 4GB / 70GB · PostgreSQL 16</div>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- 전체 흐름 -->
+  <div class="overview">
+    <h2>전체 흐름 한눈에 보기</h2>
+    <div class="flow">
+      <div class="flow-item">0. SSH 접속</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-item">1. 서버 초기 세팅</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-item">2. DB 구축</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-item">3. WEB 서버 이전</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-item">4. WAS API 서버</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-item">5. 푸시 알림</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-item">6. Vlog 서버화</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-item">7. 추천 엔진</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-item">8. 실시간 채팅</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-item">9. 고도화</div>
+    </div>
+  </div>
+
+  <div class="notice">
+    <strong>읽는 방법</strong> — 위에서 아래로 순서대로 진행하면 됩니다. 각 단계는 이전 단계가 완료되어야 진행 가능합니다. 체크박스는 실제로 클릭해서 완료 체크하면서 사용하세요.
+  </div>
+
+  <!-- ───────────────── 기반 구축 ───────────────── -->
+  <div class="section-title">기반 구축</div>
+
+  <!-- Phase 0 -->
+  <div class="phase p0">
+    <div class="phase-header">
+      <div class="phase-num">0</div>
+      <div class="phase-meta">
+        <h3>SSH 접속 확인</h3>
+        <div class="phase-tags">
+          <span class="tag time">⏱ 30분</span>
+          <span class="tag server">전체 서버</span>
+        </div>
+      </div>
+    </div>
+    <div class="phase-body">
+      <div class="analogy">
+        🔑 <strong>비유: 새 사무실 열쇠 받기</strong><br>
+        공사가 끝난 사무실(서버)에 처음 들어가는 것. 열쇠(PEM 키)로 문을 열고 불이 켜지는지, 수도가 나오는지 기본 확인하는 단계입니다.
+      </div>
+      <div class="tasks">
+        <div class="task-group-title">PEM 키 권한 설정</div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">PEM 키 파일 권한 설정 (최초 1회)</div>
+            <div class="task-desc">권한이 너무 열려있으면 SSH가 거부함. 반드시 먼저 실행.</div>
+            <div class="task-code">chmod 400 ~/Downloads/에어론\ 펨키/aeron-web-key.pem
+chmod 400 ~/Downloads/에어론\ 펨키/aeron-was-key.pem
+chmod 400 ~/Downloads/에어론\ 펨키/aeron-db-key.pem</div>
+          </div>
+        </div>
+
+        <div class="task-group-title">서버 접속 테스트</div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">WEB 서버 접속</div>
+            <div class="task-code">ssh -i ~/Downloads/에어론\ 펨키/aeron-web-key.pem -p 30022 ubuntu@114.110.182.45</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">WAS 서버 접속</div>
+            <div class="task-code">ssh -i ~/Downloads/에어론\ 펨키/aeron-was-key.pem -p 30022 ubuntu@114.110.181.49</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">DB 서버 접속</div>
+            <div class="task-code">ssh -i ~/Downloads/에어론\ 펨키/aeron-db-key.pem -p 30022 ubuntu@114.110.183.183</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">접속 후 root 권한 상승 확인</div>
+            <div class="task-code">sudo -i</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 1 -->
+  <div class="phase p1">
+    <div class="phase-header">
+      <div class="phase-num">1</div>
+      <div class="phase-meta">
+        <h3>서버 초기 세팅</h3>
+        <div class="phase-tags">
+          <span class="tag time">⏱ 1~2시간</span>
+          <span class="tag server">전체 서버</span>
+        </div>
+      </div>
+    </div>
+    <div class="phase-body">
+      <div class="analogy">
+        🏠 <strong>비유: 새 집 입주 청소</strong><br>
+        집 열쇠를 받았으니, 이제 실제로 살기 위한 기본 준비. 청소기 돌리고(업데이트), 시계 맞추고(타임존), 기본 가구 배치(소프트웨어 확인)하는 단계입니다.
+      </div>
+      <div class="tasks">
+        <div class="task-group-title">모든 서버 공통 (3대 모두 동일하게 실행)</div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">시스템 업데이트 (WEB, WAS 완료 / DB 대기)</div>
+            <div class="task-code">sudo apt update && sudo apt upgrade -y</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">타임존 한국으로 설정</div>
+            <div class="task-desc">안 하면 로그 시간이 UTC 기준 → 9시간 차이로 혼란 발생</div>
+            <div class="task-code">sudo timedatectl set-timezone Asia/Seoul
+date  # 확인: 한국 시간이 나와야 함</div>
+          </div>
+        </div>
+
+        <div class="task-group-title">WEB 서버 — Nginx 확인</div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">Nginx 설치 여부 확인</div>
+            <div class="task-code">nginx -v
+# 없으면: sudo apt install nginx -y</div>
+          </div>
+        </div>
+
+        <div class="task-group-title">WAS 서버 — Node.js, PM2, FFmpeg 확인</div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">Node.js, PM2, FFmpeg 버전 확인</div>
+            <div class="task-code">node -v       # 22.x 여야 함
+pm2 -v        # 없으면 설치 필요
+ffmpeg -version  # 없으면 설치 필요</div>
+          </div>
+        </div>
+
+        <div class="task-group-title">DB 서버 — PostgreSQL 확인</div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">PostgreSQL 버전 확인 및 접속 테스트</div>
+            <div class="task-code">psql --version  # 16.x 여야 함
+sudo -u postgres psql  # 접속 테스트</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 2 -->
+  <div class="phase p2">
+    <div class="phase-header">
+      <div class="phase-num">2</div>
+      <div class="phase-meta">
+        <h3>PostgreSQL DB 구축</h3>
+        <div class="phase-tags">
+          <span class="tag time">⏱ 2~3시간</span>
+          <span class="tag server">DB 서버</span>
+          <span class="tag money">💰 비용 절감</span>
+        </div>
+      </div>
+    </div>
+    <div class="phase-body">
+      <div class="analogy">
+        🗄️ <strong>비유: 사무실 서류 캐비닛 설치</strong><br>
+        사무실(서버)에 서류를 보관할 캐비닛(DB)을 설치하는 단계. 어떤 서류(데이터)를 어느 서랍(테이블)에 넣을지 구조를 잡습니다. 이후 모든 기능의 데이터가 여기에 저장됩니다.
+      </div>
+      <div class="tasks">
+        <div class="task-group-title">DB 사용자 및 데이터베이스 생성</div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">tteona 전용 DB 사용자 및 DB 생성</div>
+            <div class="task-code">sudo -u postgres psql
+CREATE USER tteona WITH PASSWORD '강한비밀번호';
+CREATE DATABASE tteona_db OWNER tteona;
+\q</div>
+          </div>
+        </div>
+
+        <div class="task-group-title">외부 접근 차단 (보안)</div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">WAS 내부 IP에서만 접근 허용</div>
+            <div class="task-desc">DB는 인터넷에서 직접 접근 불가해야 함. WAS(10.20.10.170)에서만 연결. pg_hba.conf에 10.20.10.0/24 허용 추가 완료.</div>
+          </div>
+        </div>
+
+        <div class="task-group-title">테이블 스키마 설계 및 생성</div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">Google Places 캐시 테이블</div>
+            <div class="task-desc">places_cache (place_id, name, address, lat/lng, rating, photo_ref, types, payload, expires_at) + course_og_cache 생성 완료</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">사용자 통계, Vlog 작업 큐, 추천 데이터 테이블</div>
+            <div class="task-desc">user_stats, daily_stats (관리자 대시보드용), vlog_jobs (FFmpeg 작업 큐, status ENUM), course_recommendations (추천 엔진용) 생성 완료</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────────────── WEB 서버 ───────────────── -->
+  <div class="section-title">WEB 서버 구축</div>
+
+  <!-- Phase 3 -->
+  <div class="phase p3">
+    <div class="phase-header">
+      <div class="phase-num">3</div>
+      <div class="phase-meta">
+        <h3>tteona.kr 웹서버 이전 + DNS 연결</h3>
+        <div class="phase-tags">
+          <span class="tag time">⏱ 1~2일</span>
+          <span class="tag server">WEB 서버</span>
+        </div>
+      </div>
+    </div>
+    <div class="phase-body">
+      <div class="analogy">
+        🏪 <strong>비유: 가게 주소 변경</strong><br>
+        기존에 임시 창고(GitHub Pages 또는 Firebase Hosting)에 두었던 간판을 새 건물(WEB 서버)으로 옮기는 것. 고객(사용자)이 tteona.kr을 치면 이제 새 건물로 오게 됩니다.
+      </div>
+      <div class="tasks">
+        <div class="task-group-title">DNS 변경</div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">tteona.kr A레코드 → 114.110.182.45 로 변경</div>
+            <div class="task-desc">도메인 관리 사이트(가비아, 후이즈 등)에서 수정. 반영까지 최대 48시간 소요.</div>
+          </div>
+        </div>
+
+        <div class="task-group-title">Nginx 설정</div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">tteona.kr 용 Nginx 가상호스트 설정</div>
+            <div class="task-desc">현재 tteona-web 폴더의 HTML 파일들을 서버에 업로드 후 Nginx가 서빙하도록 설정</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">HTTPS (SSL 인증서) 설정</div>
+            <div class="task-desc">Let's Encrypt 무료 인증서 발급. HTTPS 없으면 브라우저가 "안전하지 않음" 경고.</div>
+            <div class="task-code">sudo apt install certbot python3-certbot-nginx -y
+sudo certbot --nginx -d tteona.kr -d www.tteona.kr</div>
+          </div>
+        </div>
+
+        <div class="task-group-title">기존 파일 이전</div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">tteona-web 폴더 내 HTML 파일들 서버에 업로드</div>
+            <div class="task-desc">index.html, privacy.html, terms.html, course.html 등</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">브라우저에서 tteona.kr 정상 접속 확인</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 4 -->
+  <div class="phase p4">
+    <div class="phase-header">
+      <div class="phase-num">4</div>
+      <div class="phase-meta">
+        <h3>코스 공유 OG 링크</h3>
+        <div class="phase-tags">
+          <span class="tag time">⏱ 3~5일</span>
+          <span class="tag server">WEB 서버</span>
+          <span class="tag hot">🔥 홍보 효과</span>
+        </div>
+      </div>
+    </div>
+    <div class="phase-body">
+      <div class="analogy">
+        📸 <strong>비유: 카카오톡 링크 미리보기</strong><br>
+        지금 tteona 코스를 카카오톡으로 보내면 그냥 텍스트 URL만 뜹니다. 이 단계를 완료하면 유튜브 링크처럼 코스 사진 + 제목 + 장소 수가 예쁜 카드로 표시됩니다. 바이럴 확산에 가장 효과적인 기능입니다.
+      </div>
+      <div class="tasks">
+        <div class="task-group-title">동적 OG 태그 페이지 구현</div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">tteona.kr/course/{id} 라우트 구현</div>
+            <div class="task-desc">Node.js에서 Firestore의 코스 데이터를 읽어 OG 태그 포함한 HTML 동적 생성. /course?id=UUID, /course/UUID 두 형식 모두 지원.</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">OG 태그 설정</div>
+            <div class="task-desc">og:title (코스명), og:image (tteona OG 이미지), og:description (장소 수 + 장소명 최대 3개)</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">딥링크 연동 — 앱 설치 유무에 따라 분기</div>
+            <div class="task-desc">앱 있으면 → tteona://course?id=UUID 열기 / 앱 없으면 2.5초 후 앱스토어로 이동. 콜드 스타트 딥링크 버그도 수정 (MainTabView onAppear).</div>
+          </div>
+        </div>
+
+        <div class="task-group-title">iOS 앱 연동</div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">코스 상세 화면에 "공유" 버튼 → tteona.kr/course?id={id} URL 생성</div>
+            <div class="task-desc">CourseShareHelper 이미 구현되어 있음. UIActivityViewController로 시스템 공유 시트 표시.</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">카카오톡 실제 공유 테스트</div>
+            <div class="task-desc">코스명 + 장소 목록 + tteona 캐릭터 이미지 미리보기 카드 동작 확인 완료.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────────────── WAS 서버 ───────────────── -->
+  <div class="section-title">WAS 서버 구축</div>
+
+  <!-- Phase 5 -->
+  <div class="phase p5">
+    <div class="phase-header">
+      <div class="phase-num">5</div>
+      <div class="phase-meta">
+        <h3>WAS API 서버 구축 + Places 캐시 이전</h3>
+        <div class="phase-tags">
+          <span class="tag time">⏱ 1주</span>
+          <span class="tag server">WAS + DB 서버</span>
+          <span class="tag money">💰 즉각 비용 절감</span>
+        </div>
+      </div>
+    </div>
+    <div class="phase-body">
+      <div class="analogy">
+        🏭 <strong>비유: 공장 가동 시작</strong><br>
+        지금까지는 사무실(WEB)과 창고(DB)만 세팅했습니다. 이제 실제로 일을 처리하는 공장(WAS)을 가동하는 단계. iOS 앱이 이 공장에 주문을 넣으면 공장이 DB에서 재료를 꺼내 처리해서 돌려줍니다.<br><br>
+        Google Places 캐시 이전은 이 단계에서 함께: "매번 편의점에 사서오던 재료를 이제 대형 냉장고에 사다 놓는 것" → 재료비(API 비용) 80% 절감.
+      </div>
+      <div class="tasks">
+        <div class="task-group-title">Node.js API 서버 초기 구성</div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">Express.js 기반 API 서버 프로젝트 생성</div>
+            <div class="task-desc">라우터, 미들웨어, Firebase Admin SDK 연동 설정</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">PM2로 서버 상시 실행 + 자동 재시작 설정</div>
+            <div class="task-desc">서버 재부팅되어도 자동으로 앱이 다시 켜짐</div>
+            <div class="task-code">pm2 start app.js --name tteona-api
+pm2 startup  # 재부팅 시 자동 실행 등록
+pm2 save</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">Nginx → WAS 프록시 설정</div>
+            <div class="task-desc">api.tteona.kr 또는 tteona.kr/api 요청을 WAS로 전달</div>
+          </div>
+        </div>
+
+        <div class="task-group-title">Google Places 캐시 PostgreSQL 이전</div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">Places 캐시 API 엔드포인트 구현</div>
+            <div class="task-desc">GET /api/places/cache?key=xxx (PostgreSQL 조회) + POST /api/places/cache (저장). write-through 패턴으로 iOS가 Google API 결과를 WAS에 저장.</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">iOS 앱에서 Firestore 직접 캐시 대신 WAS API 호출로 변경</div>
+            <div class="task-desc">PlaceDetailService.swift 캐시 순서: 메모리 → PostgreSQL(WAS) → Firestore → Google Places API. 결과는 WAS + Firestore 둘 다 저장.</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">Google Places API 호출 횟수 감소 확인 (Google Cloud Console)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 6 -->
+  <div class="phase p6">
+    <div class="phase-header">
+      <div class="phase-num">6</div>
+      <div class="phase-meta">
+        <h3>원격 푸시 알림 고도화</h3>
+        <div class="phase-tags">
+          <span class="tag time">⏱ 3~5일</span>
+          <span class="tag server">WAS 서버</span>
+          <span class="tag hot">🔥 사용자 체감</span>
+        </div>
+      </div>
+    </div>
+    <div class="phase-body">
+      <div class="analogy">
+        📬 <strong>비유: 우편배달부 고용</strong><br>
+        지금은 Firebase(Google)가 대신 편지를 배달해줍니다. 이 단계에서는 우리가 직접 Apple 우체국(APNs)에 편지를 가져다 줍니다. 더 빠르고, Firebase 없어도 되고, 더 다양한 편지(알림)를 보낼 수 있게 됩니다.
+      </div>
+      <div class="tasks">
+        <div class="task-group-title">APNs 직접 연동</div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">Apple Developer에서 APNs 인증키 발급</div>
+            <div class="task-desc">Apple Developer 콘솔 → Certificates → Keys → APNs 키 생성</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">WAS에서 APNs HTTP/2 API 연동</div>
+            <div class="task-desc">node-apn 또는 @parse/node-apn 패키지 사용</div>
+          </div>
+        </div>
+
+        <div class="task-group-title">새로운 알림 추가</div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">"내 코스를 누군가 따라가고 있어요" 알림</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">"주간 활동 리포트" 알림 (매주 월요일 자동 발송)</div>
+            <div class="task-desc">Cron Job: "이번 주 3개 코스, 총 12곳 방문했어요"</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">"내 코스에 좋아요가 달렸어요" 알림</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 7 -->
+  <div class="phase p7">
+    <div class="phase-header">
+      <div class="phase-num">7</div>
+      <div class="phase-meta">
+        <h3>서버 사이드 Vlog 생성 (FFmpeg)</h3>
+        <div class="phase-tags">
+          <span class="tag time">⏱ 2~3주</span>
+          <span class="tag server">WAS 서버</span>
+          <span class="tag hot">🔥 핵심 차별화</span>
+        </div>
+      </div>
+    </div>
+    <div class="phase-body">
+      <div class="analogy">
+        🎬 <strong>비유: 편집실 외주 → 자체 편집실 운영</strong><br>
+        지금은 사용자 폰(편집실 없는 일반인)이 직접 영상을 합치느라 버벅거립니다. 이 단계에서는 WAS 서버(8코어 전문 편집실)에서 처리합니다. 사용자는 클립만 보내면 완성 영상을 받을 수 있고, BGM·자막·트랜지션·멀티 포맷까지 추가됩니다.
+      </div>
+      <div class="tasks">
+        <div class="task-group-title">서버 파이프라인 구축</div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">클립 업로드 API 엔드포인트 구현</div>
+            <div class="task-desc">iOS 앱에서 녹화된 .mp4 클립들을 WAS로 업로드</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">DB에 Vlog 작업 큐 테이블 구현</div>
+            <div class="task-desc">업로드 완료 → 큐에 작업 추가 → FFmpeg 처리 → 완료 알림</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">FFmpeg 합성 로직 구현</div>
+            <div class="task-desc">타이틀 카드 + 장소별 클립 + 자막 오버레이 + 페이드 인/아웃</div>
+          </div>
+        </div>
+
+        <div class="task-group-title">추가 기능</div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">BGM 자동 삽입</div>
+            <div class="task-desc">여행 태그(커플/친구/가족/혼자)별 배경음악 자동 선택 및 길이에 맞게 컷</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">멀티 포맷 출력 (릴스 9:16 / 유튜브 16:9)</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">완성 후 APNs로 "Vlog 완성됐어요" 푸시 알림</div>
+          </div>
+        </div>
+
+        <div class="task-group-title">iOS 앱 수정</div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">로컬 AVFoundation 합성 → 서버 업로드 방식으로 변경</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">처리 중 대기 UI 추가 (진행률 표시)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────────────── 고도화 ───────────────── -->
+  <div class="section-title">고도화</div>
+
+  <!-- Phase 8 -->
+  <div class="phase p8">
+    <div class="phase-header">
+      <div class="phase-num">8</div>
+      <div class="phase-meta">
+        <h3>코스 추천 엔진</h3>
+        <div class="phase-tags">
+          <span class="tag time">⏱ 1~2주</span>
+          <span class="tag server">WAS + DB 서버</span>
+        </div>
+      </div>
+    </div>
+    <div class="phase-body">
+      <div class="analogy">
+        🎯 <strong>비유: 넷플릭스 추천 알고리즘</strong><br>
+        지금은 좋아요 많은 순서로 나열하는 "베스트셀러 진열대"입니다. 이 단계에서는 사용자가 어디 있는지, 어떤 코스를 좋아했는지, 지금 계절이 무엇인지를 보고 "이 사람에게 딱 맞는 코스"를 추천하는 개인화 엔진을 만듭니다.
+      </div>
+      <div class="tasks">
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">현재 위치 기반 주변 코스 추천 API</div>
+            <div class="task-desc">반경 5~10km 내 코스 중 인기순 + 최신순 조합</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">협업 필터링 추천</div>
+            <div class="task-desc">"이 코스 좋아한 사람들이 좋아한 다른 코스"</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">시즌 추천 (봄 벚꽃, 여름 해변, 가을 단풍, 겨울 야경)</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">이번 주 TOP 10 코스 (매일 자정 Cron으로 재계산)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 9 -->
+  <div class="phase p9">
+    <div class="phase-header">
+      <div class="phase-num">9</div>
+      <div class="phase-meta">
+        <h3>WebSocket 실시간 위치 공유 + 채팅</h3>
+        <div class="phase-tags">
+          <span class="tag time">⏱ 1~2주</span>
+          <span class="tag server">WAS 서버</span>
+        </div>
+      </div>
+    </div>
+    <div class="phase-body">
+      <div class="analogy">
+        📡 <strong>비유: 전화 vs 편지</strong><br>
+        지금 Firestore 방식은 "편지를 보내고 상대방이 읽기를 기다리는 것" (3~5초 지연). WebSocket은 "전화처럼 연결이 항상 열려있어서" 위치 변화가 즉각 전달됩니다. 이 연결을 이용해 채팅도 함께 구현할 수 있습니다.
+      </div>
+      <div class="tasks">
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">Socket.io 기반 WebSocket 서버 구현</div>
+            <div class="task-desc">WAS에 Socket.io 추가, 방(room) 기반 연결 관리</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">실시간 위치 공유 Firestore → WebSocket 전환</div>
+            <div class="task-desc">iOS 앱의 LocationService에서 Firestore 업데이트 대신 Socket 이벤트 전송</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">그룹 실시간 채팅 구현</div>
+            <div class="task-desc">같은 방 멤버끼리 지도 화면에서 실시간 텍스트 채팅</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 관리자 대시보드 -->
+  <div class="phase p1">
+    <div class="phase-header">
+      <div class="phase-num" style="font-size:14px;">+</div>
+      <div class="phase-meta">
+        <h3>관리자 대시보드 (tteona.kr/admin)</h3>
+        <div class="phase-tags">
+          <span class="tag time">⏱ 1~2주</span>
+          <span class="tag server">WEB + WAS 서버</span>
+        </div>
+      </div>
+    </div>
+    <div class="phase-body">
+      <div class="analogy">
+        🎛️ <strong>비유: 매장 관리자 전용 백오피스</strong><br>
+        지금은 Firebase 콘솔에서 데이터를 직접 보면서 신고된 코스를 삭제하거나 사용자를 관리합니다. 이 단계에서는 전용 관리자 화면을 만들어서 클릭 몇 번으로 처리할 수 있게 합니다.
+      </div>
+      <div class="tasks">
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">신고된 코스/리뷰 목록 + 삭제/경고 처리</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">사용자 관리 (검색, 차단, 인증 배지 부여)</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">실시간 통계 대시보드 (일별 가입자, 코스 생성 수, 활성 사용자)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ───────────────── 추가 업그레이드 아이디어 ───────────────── -->
+  <div class="section-title">추가 업그레이드 아이디어</div>
+
+  <div class="notice">
+    <strong>이 섹션은 이전 완료 이후의 선택적 고도화 항목입니다.</strong> Phase 0~9 + Admin 완료가 KISA 클라우드 이전 기준이며, 아래 14가지는 그 위에 올리는 추가 기능입니다.
+  </div>
+
+  <!-- AI / 미디어 -->
+  <div class="phase p7">
+    <div class="phase-header">
+      <div class="phase-num" style="font-size:13px;">A</div>
+      <div class="phase-meta">
+        <h3>AI / 미디어 고도화</h3>
+        <div class="phase-tags">
+          <span class="tag server">WAS 서버</span>
+          <span class="tag hot">🔥 핵심 차별화</span>
+        </div>
+      </div>
+    </div>
+    <div class="phase-body">
+      <div class="analogy">
+        🤖 <strong>서버 AI 파이프라인</strong><br>
+        FFmpeg + 영상 분석을 결합해 사용자가 찍은 클립에서 좋은 장면만 골라 자동으로 완성도 높은 Vlog를 만들어줍니다.
+      </div>
+      <div class="tasks">
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">AI 하이라이트 자동 편집</div>
+            <div class="task-desc">흔들림 적고 밝은 클립만 자동 선별 — 영상 품질 점수 계산 후 상위 클립만 합성에 사용</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">BGM 자동 삽입</div>
+            <div class="task-desc">여행 태그(커플/친구/가족/혼자)별 분위기 음악 자동 선택, 영상 길이에 맞게 컷</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">멀티 포맷 Vlog 동시 출력</div>
+            <div class="task-desc">릴스(9:16) / 유튜브(16:9) / 정사각형(1:1) 세 가지 포맷을 한 번의 업로드로 생성</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">서버 사이드 이미지 처리</div>
+            <div class="task-desc">코스 썸네일 자동 생성, WebP 변환 및 압축, 용량 절감</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 콘텐츠 / 통계 -->
+  <div class="phase p5">
+    <div class="phase-header">
+      <div class="phase-num" style="font-size:13px;">B</div>
+      <div class="phase-meta">
+        <h3>콘텐츠 / 통계 강화</h3>
+        <div class="phase-tags">
+          <span class="tag server">WAS + DB 서버</span>
+          <span class="tag money">💰 사용자 유지</span>
+        </div>
+      </div>
+    </div>
+    <div class="phase-body">
+      <div class="analogy">
+        📊 <strong>데이터 기반 사용자 경험</strong><br>
+        서버에 쌓인 데이터를 활용해 사용자에게 개인화된 통계와 콘텐츠를 제공합니다.
+      </div>
+      <div class="tasks">
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">개인 여행 통계</div>
+            <div class="task-desc">총 방문 장소 수, 이동 거리, Vlog 수, 함께한 사람 수 등 누적 통계 제공</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">코스 웹 미리보기 지도</div>
+            <div class="task-desc">tteona.kr/course/{id} 페이지에 Google Maps로 코스 동선 시각화, 앱 설치 유도 강화</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">날씨 연동 + 날씨 기반 코스 추천</div>
+            <div class="task-desc">장소별 현재 날씨 표시, "오늘 날씨에 맞는 코스" 추천 기능</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">코스 소요시간 / 거리 자동 계산</div>
+            <div class="task-desc">Google Directions API 연동 — 코스 공유 페이지에 총 이동 거리, 예상 소요 시간 표시</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">크리에이터 랭킹 + 팔로우 기능 확장</div>
+            <div class="task-desc">이번 주 인기 크리에이터, 팔로우한 사람의 최신 코스 피드</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">콘텐츠 자동 모더레이션</div>
+            <div class="task-desc">욕설·부적절 내용 업로드 시 사전 필터링 (WAS에서 텍스트 검사)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 인프라 / 플랫폼 -->
+  <div class="phase p2">
+    <div class="phase-header">
+      <div class="phase-num" style="font-size:13px;">C</div>
+      <div class="phase-meta">
+        <h3>인프라 / 플랫폼 확장</h3>
+        <div class="phase-tags">
+          <span class="tag server">전체 서버</span>
+          <span class="tag money">💰 장기 비용 절감</span>
+        </div>
+      </div>
+    </div>
+    <div class="phase-body">
+      <div class="analogy">
+        🌐 <strong>Firebase 완전 독립 + 플랫폼 확장</strong><br>
+        Firebase에 남아 있는 데이터를 자체 서버로 완전히 이전하고, iOS 외 플랫폼으로 서비스를 확장합니다.
+      </div>
+      <div class="tasks">
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">Firestore → PostgreSQL 전체 데이터 이전</div>
+            <div class="task-desc">users, courses, rooms, feed 컬렉션을 PostgreSQL로 이전. 장기적 Firebase 비용 제거.</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">Android 앱 지원</div>
+            <div class="task-desc">공통 WAS API 서버를 그대로 활용. iOS와 동일한 기능을 Android에서도 제공.</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">웹앱 (PWA)</div>
+            <div class="task-desc">tteona.kr에서 앱 설치 없이 코스 탐색·공유 가능. 앱 설치 전환율 향상.</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">실시간 그룹 채팅</div>
+            <div class="task-desc">Phase 9 WebSocket 기반 위치 공유와 동일 화면에서 텍스트 채팅 추가</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  tteona · KISA 2026 위치정보 클라우드 지원사업 · 작성일 2026-07-01
+</footer>
+
+<script>
+  const CHECK_SVG = '<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6L5 9L10 3" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+  function markDone(box) {
+    box.dataset.done = 'true';
+    box.style.background = '#3ecf8e';
+    box.style.borderColor = '#3ecf8e';
+    box.style.display = 'flex';
+    box.style.alignItems = 'center';
+    box.style.justifyContent = 'center';
+    box.innerHTML = CHECK_SVG;
+    const title = box.closest('.task').querySelector('.task-title');
+    title.style.textDecoration = 'line-through';
+    title.style.opacity = '0.4';
+  }
+
+  function markUndone(box) {
+    box.dataset.done = 'false';
+    box.style.background = '';
+    box.style.borderColor = '';
+    box.innerHTML = '';
+    const title = box.closest('.task').querySelector('.task-title');
+    title.style.textDecoration = '';
+    title.style.opacity = '';
+  }
+
+  document.querySelectorAll('.task-check').forEach(box => {
+    box.style.cursor = 'pointer';
+    box.style.transition = 'all 0.2s';
+
+    // 미리 완료된 항목 자동 체크
+    if (box.classList.contains('done')) markDone(box);
+
+    box.addEventListener('click', function() {
+      if (this.dataset.done === 'true') markUndone(this);
+      else markDone(this);
+    });
+  });
+</script>
+
+</body>
+</html>

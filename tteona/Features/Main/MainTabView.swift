@@ -83,6 +83,15 @@ struct MainTabView: View {
             guard pending != nil else { return }
             selectedTab = 1
         }
+        .onAppear {
+            // 콜드 스타트 딥링크: MainTabView 진입 전 이미 pendingCourseId가 설정된 경우
+            guard let courseId = deepLinkHandler.pendingCourseId else { return }
+            deepLinkTask?.cancel()
+            deepLinkTask = Task {
+                deepLinkedCourse = try? await courseService.fetchCourse(by: courseId)
+                deepLinkHandler.clearPendingCourse()
+            }
+        }
         .onChange(of: deepLinkHandler.pendingCourseId) { _, courseId in
             guard let courseId else { return }
             deepLinkTask?.cancel()
