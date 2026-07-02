@@ -41,7 +41,7 @@ class CourseService: ObservableObject {
         likedCourseIds.remove(course.courseId)
     }
 
-    func toggleLike(courseId: String, userId: String) async throws {
+    func toggleLike(courseId: String, userId: String, likerNickname: String = "") async throws {
         errorMessage = nil
 
         let alreadyLiked = likedCourseIds.contains(courseId)
@@ -82,6 +82,19 @@ class CourseService: ObservableObject {
                 batch.updateData(["likeCount": FieldValue.increment(Int64(1))], forDocument: courseRef)
             }
             try await batch.commit()
+
+            // 좋아요 시 코스 작성자에게 APNs 알림 (본인 제외)
+            if !alreadyLiked,
+               let course = courses.first(where: { $0.courseId == courseId }),
+               course.authorId != userId {
+                Task {
+                    await PushService.shared.notifyCourseLiked(
+                        courseOwnerId: course.authorId,
+                        likerNickname: likerNickname,
+                        courseName: course.courseName
+                    )
+                }
+            }
         } catch {
             // Rollback local state on failure
             likedCourseIds = previousLiked

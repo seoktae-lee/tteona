@@ -66,7 +66,11 @@ class AuthService: NSObject, ObservableObject {
             Task { @MainActor in
                 if let user {
                     let providerIDs = user.providerData.map { $0.providerID }
-                    let isEmailPassword = providerIDs.allSatisfy { $0 == "password" }
+                    // 순수 이메일/비밀번호 계정만 이메일 인증 필요.
+                    // 카카오(커스텀 토큰)는 providerData가 비어있어 allSatisfy가 true를 반환하는 함정을
+                    // 피하기 위해 password provider가 실제로 존재하는지 먼저 확인한다.
+                    let isEmailPassword = providerIDs.contains("password")
+                        && providerIDs.allSatisfy { $0 == "password" }
                     let needsVerification = isEmailPassword && !user.isEmailVerified
                     #if DEBUG
                     print("[Auth] uid=\(user.uid) isEmailVerified=\(user.isEmailVerified) needsVerification=\(needsVerification) verificationEmailSent=\(self?.verificationEmailSent ?? false)")

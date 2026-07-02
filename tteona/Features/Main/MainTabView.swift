@@ -22,9 +22,9 @@ struct MainTabView: View {
                 }
                 .tag(0)
 
-            FeedTabView()
+            ExploreGridView()
                 .tabItem {
-                    Label("피드", systemImage: "bubble.left.and.bubble.right.fill")
+                    Label("탐색", systemImage: "square.grid.2x2.fill")
                 }
                 .tag(1)
 

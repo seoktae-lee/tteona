@@ -768,38 +768,40 @@ pm2 save</div>
       <div class="tasks">
         <div class="task-group-title">APNs 직접 연동</div>
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
             <div class="task-title">Apple Developer에서 APNs 인증키 발급</div>
-            <div class="task-desc">Apple Developer 콘솔 → Certificates → Keys → APNs 키 생성</div>
+            <div class="task-desc">Key ID: Z255DQRVA2 / Team ID: M576JMA5A7 — 이미 발급되어 있던 키 사용</div>
           </div>
         </div>
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
             <div class="task-title">WAS에서 APNs HTTP/2 API 연동</div>
-            <div class="task-desc">node-apn 또는 @parse/node-apn 패키지 사용</div>
+            <div class="task-desc">@parse/node-apn + node-cron 설치. AuthKey_Z255DQRVA2.p8 WAS 서버 업로드. sendPush() 헬퍼 구현.</div>
           </div>
         </div>
 
         <div class="task-group-title">새로운 알림 추가</div>
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
             <div class="task-title">"내 코스를 누군가 따라가고 있어요" 알림</div>
+            <div class="task-desc">POST /api/push/course-followed 구현. iOS PushService.notifyCourseFollowed() 연동.</div>
           </div>
         </div>
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
             <div class="task-title">"주간 활동 리포트" 알림 (매주 월요일 자동 발송)</div>
-            <div class="task-desc">Cron Job: "이번 주 3개 코스, 총 12곳 방문했어요"</div>
+            <div class="task-desc">node-cron: 매주 월요일 09:00 KST. user_stats 집계 후 활동 있는 유저에게 APNs 발송.</div>
           </div>
         </div>
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
             <div class="task-title">"내 코스에 좋아요가 달렸어요" 알림</div>
+            <div class="task-desc">POST /api/push/course-liked 구현. iOS PushService.notifyCourseLiked() 연동. 앱스토어 업데이트 후 반영.</div>
           </div>
         </div>
       </div>
@@ -908,10 +910,10 @@ pm2 save</div>
       </div>
       <div class="tasks">
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
-            <div class="task-title">현재 위치 기반 주변 코스 추천 API</div>
-            <div class="task-desc">반경 5~10km 내 코스 중 인기순 + 최신순 조합</div>
+            <div class="task-title">스코어링 기반 추천 API 구현 (GET /api/courses/recommend)</div>
+            <div class="task-desc">인기도(40) + 신선도(25) + 현재위치 근접(25) + 태그선호(10) 가중합 점수 계산. PostgreSQL recommendation_cache 5분 TTL 캐싱. iOS MainView에 ⚡(나루) 추천 필터 버튼 추가.</div>
           </div>
         </div>
         <div class="task">
@@ -956,17 +958,17 @@ pm2 save</div>
       </div>
       <div class="tasks">
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
-            <div class="task-title">Socket.io 기반 WebSocket 서버 구현</div>
-            <div class="task-desc">WAS에 Socket.io 추가, 방(room) 기반 연결 관리</div>
+            <div class="task-title">ws 기반 WebSocket 서버 구현 (/ws/location)</div>
+            <div class="task-desc">WAS에 ws npm 패키지 추가. roomId 기반 브로드캐스트, 30초 heartbeat, 연결 해제 시 자동 정리. Nginx /ws/ 프록시 블록 추가 (Upgrade 헤더).</div>
           </div>
         </div>
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
-            <div class="task-title">실시간 위치 공유 Firestore → WebSocket 전환</div>
-            <div class="task-desc">iOS 앱의 LocationService에서 Firestore 업데이트 대신 Socket 이벤트 전송</div>
+            <div class="task-title">실시간 위치 공유 Firestore → WebSocket 전환 완료</div>
+            <div class="task-desc">LocationSocketService.swift 신규 생성. ActiveSessionView에서 Firestore 위치 리스너 제거, WebSocket connect/sendLocation/disconnect로 교체. 지연 3~5초 → 50~200ms.</div>
           </div>
         </div>
         <div class="task">
@@ -999,27 +1001,139 @@ pm2 save</div>
       </div>
       <div class="tasks">
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
             <div class="task-title">신고된 코스/리뷰 목록 + 삭제/경고 처리</div>
+            <div class="task-desc">reports 컬렉션 조회, 코스 삭제 + 신고 해결 처리. tteona.kr/admin 에서 확인 가능.</div>
           </div>
         </div>
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
             <div class="task-title">사용자 관리 (검색, 차단, 인증 배지 부여)</div>
+            <div class="task-desc">닉네임/이메일 검색, 차단/차단 해제. isBlocked 필드 Firestore 업데이트.</div>
           </div>
         </div>
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
             <div class="task-title">실시간 통계 대시보드 (일별 가입자, 코스 생성 수, 활성 사용자)</div>
+            <div class="task-desc">Firestore (전체 유저/코스 수) + PostgreSQL (7일 신규/활성/코스 집계) + Places 캐시 히트율 표시.</div>
           </div>
         </div>
       </div>
     </div>
   </div>
 
+
+  <!-- ───────────────── 다음 iOS 작업 ───────────────── -->
+  <div class="section-title">다음 iOS 작업</div>
+
+  <!-- App Store 업데이트 -->
+  <div class="phase p4">
+    <div class="phase-header">
+      <div class="phase-num" style="font-size:13px;">📦</div>
+      <div class="phase-meta">
+        <h3>App Store 업데이트</h3>
+        <div class="phase-tags">
+          <span class="tag hot">🔥 즉시 필요</span>
+          <span class="tag server">iOS 앱</span>
+        </div>
+      </div>
+    </div>
+    <div class="phase-body">
+      <div class="analogy">
+        🚀 <strong>이번 세션 iOS 변경사항 — 서버는 완료, 앱 미반영 상태</strong><br>
+        서버 기능은 모두 배포되어 있지만 iOS 코드가 App Store에 올라가지 않으면 실제 유저에게 전달되지 않음.
+      </div>
+      <div class="tasks">
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">APNs 좋아요 / 팔로우 푸시 알림</div>
+            <div class="task-desc">PushService.swift · CourseService · CourseDetailView · ActiveSessionView 수정</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">Places 캐시 WAS 연동</div>
+            <div class="task-desc">PlaceDetailService.swift — 메모리 → PostgreSQL(WAS) → Firestore → Google 순서</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">나루 추천 버튼 (⚡ → 나루 캐릭터)</div>
+            <div class="task-desc">RecommendationService.swift · MainView.swift — 필터바 4번째 버튼</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">WebSocket 실시간 위치 공유</div>
+            <div class="task-desc">LocationSocketService.swift · ActiveSessionView.swift — Firestore 리스너 제거, 지연 3~5초 → 50~200ms</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">Xcode 빌드 → TestFlight → App Store 제출</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 탐색 탭 -->
+  <div class="phase p8">
+    <div class="phase-header">
+      <div class="phase-num" style="font-size:13px;">🔍</div>
+      <div class="phase-meta">
+        <h3>그룹 탭 → 탐색 탭 개편</h3>
+        <div class="phase-tags">
+          <span class="tag hot">🔥 사용자 체감</span>
+          <span class="tag server">iOS 앱</span>
+        </div>
+      </div>
+    </div>
+    <div class="phase-body">
+      <div class="analogy">
+        🔍 <strong>비유: 인스타그램 탐색 탭</strong><br>
+        현재 그룹 탭은 동행 기능 전용이라 일반 유저가 자주 사용하지 않음. 이를 코스 발견 중심의 탐색 탭으로 개편해 다른 유저가 올린 코스를 그리드 형태로 탐색할 수 있게 함. 그룹 기능은 동행 세션 진입 시 접근하도록 유지.
+      </div>
+      <div class="tasks">
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">코스 카드 그리드 뷰 구현 (ExploreGridView)</div>
+            <div class="task-desc">3열 그리드 + 추천/최신/인기 정렬 칩. 추천순은 위치 기반 추천 엔진 연동(현재 위치→근처 코스 상위). 우상단 그룹 접근 버튼으로 기존 방 채팅 유지.</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">썸네일 업로드/표시 + 기본 썸네일</div>
+            <div class="task-desc">코스 생성 시 PHPicker로 대표 이미지 선택 → WAS 저장(uploads/thumbnails) + PostgreSQL(course_thumbnails), Nginx 서빙. 미등록 시 떠나 기본 썸네일(틸 그라데이션 + 굽은 길 + TRAVEL/MOVE/EXPLORE + 나루) 네이티브 렌더.</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">탐색 전용 상세 화면 (ExploreDetailView)</div>
+            <div class="task-desc">썸네일 헤더 + 작성자 + 날씨(Open-Meteo) + 이동 정보(자동차/도보 MKDirections, 대중교통 ODsay) + 코스 동선 + 따라가기 CTA.</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">탭 구조 개편 — 그룹 탭 → 탐색 탭으로 교체</div>
+            <div class="task-desc">MainTabView 수정 완료. 그룹 진입은 탐색 탭 그룹 버튼(시트) + 동행 세션 시작 시 RoomSelectView로 유지.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- ───────────────── 추가 업그레이드 아이디어 ───────────────── -->
   <div class="section-title">추가 업그레이드 아이디어</div>
@@ -1111,17 +1225,17 @@ pm2 save</div>
           </div>
         </div>
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
-            <div class="task-title">날씨 연동 + 날씨 기반 코스 추천</div>
-            <div class="task-desc">장소별 현재 날씨 표시, "오늘 날씨에 맞는 코스" 추천 기능</div>
+            <div class="task-title">날씨 연동</div>
+            <div class="task-desc">탐색 상세 화면에 첫 장소 기준 현재 날씨 표시 (Open-Meteo, 무료·무키). "날씨 기반 코스 추천"은 추후.</div>
           </div>
         </div>
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
-            <div class="task-title">코스 소요시간 / 거리 자동 계산</div>
-            <div class="task-desc">Google Directions API 연동 — 코스 공유 페이지에 총 이동 거리, 예상 소요 시간 표시</div>
+            <div class="task-title">코스 소요시간 / 거리 자동 계산 (3수단)</div>
+            <div class="task-desc">탐색 상세에 자동차·도보(MKDirections, 무키) + 대중교통(ODsay, WAS 경유 + 1일 캐싱) 총 이동거리·시간 표시.</div>
           </div>
         </div>
         <div class="task">

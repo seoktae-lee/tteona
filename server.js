@@ -1,8 +1,15 @@
+const http    = require('http');
 const express = require('express');
-const cors = require('cors');
-const helmet = require('helmet');
-const morgan = require('morgan');
+const cors    = require('cors');
+const helmet  = require('helmet');
+const morgan  = require('morgan');
 const { Pool } = require('pg');
+const apn  = require('@parse/node-apn');
+const cron = require('node-cron');
+const WebSocket = require('ws');
+const multer = require('multer');
+const sharp  = require('sharp');
+const path   = require('path');
 const { initializeApp, cert } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
 
@@ -22,6 +29,48 @@ const pgPool = new Pool({
 });
 pgPool.on('error', (err) => console.error('PostgreSQL pool error:', err));
 
+// ─── APNs Provider ────────────────────────────────────────────────────────────
+
+const apnProvider = new apn.Provider({
+  token: {
+    key:    '/home/ubuntu/tteona-api/keys/AuthKey_Z255DQRVA2.p8',
+    keyId:  'Z255DQRVA2',
+    teamId: 'M576JMA5A7',
+  },
+  production: true,
+});
+
+const BUNDLE_ID = 'com.seoktaedev.tteona';
+
+async function sendPush({ userId, title, body, data = {} }) {
+  try {
+    const result = await pgPool.query(
+      'SELECT token FROM device_tokens WHERE user_id = $1',
+      [userId]
+    );
+    if (result.rows.length === 0) return { skipped: true, reason: 'no token' };
+
+    const token = result.rows[0].token;
+    const note = new apn.Notification();
+    note.expiry = Math.floor(Date.now() / 1000) + 3600;
+    note.badge  = 1;
+    note.sound  = 'default';
+    note.alert  = { title, body };
+    note.payload = data;
+    note.topic   = BUNDLE_ID;
+
+    const res = await apnProvider.send(note, token);
+    if (res.failed.length > 0) {
+      console.error('[APNs] failed:', JSON.stringify(res.failed));
+      return { ok: false, error: res.failed[0].response };
+    }
+    return { ok: true };
+  } catch (err) {
+    console.error('[APNs] sendPush error:', err.message);
+    return { ok: false, error: err.message };
+  }
+}
+
 const app = express();
 const PORT = 3000;
 
@@ -29,6 +78,22 @@ app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({ origin: ['https://tteona.kr', 'https://www.tteona.kr'] }));
 app.use(morgan('combined'));
 app.use(express.json());
+
+// ─── 썸네일 업로드 설정 ────────────────────────────────────────────────────────
+
+const THUMB_DIR = path.join(__dirname, 'uploads', 'thumbnails');
+app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
+  maxAge: '30d',
+  immutable: false,
+}));
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) cb(null, true);
+    else cb(new Error('이미지 파일만 업로드 가능합니다.'));
+  },
+});
 
 // ─── Health / API root ───────────────────────────────────────────────────────
 
@@ -42,6 +107,201 @@ app.get('/api', (req, res) => {
 
 // ─── JSON API ────────────────────────────────────────────────────────────────
 
+// GET /api/courses/recommend — 동적 라우트(:courseId)보다 먼저 등록해야 함
+app.get('/api/courses/recommend', async (req, res) => {
+  const { userId, lat, lng, tag, limit = 20 } = req.query;
+  const userLat = parseFloat(lat);
+  const userLng = parseFloat(lng);
+
+  const latR = isNaN(userLat) ? 'x' : (Math.round(userLat * 10) / 10).toFixed(1);
+  const lngR = isNaN(userLng) ? 'x' : (Math.round(userLng * 10) / 10).toFixed(1);
+  const cacheKey = `rec:${userId || 'anon'}:${latR}:${lngR}:${tag || 'any'}:${limit}`;
+
+  try {
+    const cached = await pgPool.query(
+      'SELECT result FROM recommendation_cache WHERE cache_key = $1 AND expires_at > NOW()',
+      [cacheKey]
+    );
+    if (cached.rows.length > 0) {
+      return res.json(JSON.parse(cached.rows[0].result));
+    }
+
+    const coursesSnap = await db.collection('courses').limit(500).get();
+    let courses = coursesSnap.docs.map(d => ({ courseId: d.id, ...d.data() }));
+
+    if (userId) {
+      courses = courses.filter(c => c.authorId !== userId);
+    }
+
+    const now = Date.now();
+
+    const scored = courses.map(c => {
+      let score = 0;
+
+      // 인기도 (0–40점)
+      score += Math.min((c.likeCount || 0) * 4, 40);
+
+      // 신선도 (0–25점): 50일 선형 감쇠
+      const createdMs = c.createdAt?._seconds ? c.createdAt._seconds * 1000 : now;
+      const ageDays = (now - createdMs) / 86400000;
+      score += Math.max(0, 25 - ageDays * 0.5);
+
+      // 지역 인접 (0–25점): 첫 장소 기준
+      if (!isNaN(userLat) && !isNaN(userLng) && c.places?.length > 0) {
+        const p = c.places[0];
+        if (p.latitude && p.longitude) {
+          const dist = haversineKm(userLat, userLng, p.latitude, p.longitude);
+          if (dist < 10)       score += 25;
+          else if (dist < 50)  score += 15;
+          else if (dist < 200) score += 5;
+        }
+      }
+
+      // 태그 선호 (0–10점)
+      if (tag && c.tag === tag) score += 10;
+
+      return { courseId: c.courseId, score };
+    });
+
+    scored.sort((a, b) => b.score - a.score);
+    const result = { courseIds: scored.slice(0, parseInt(limit)).map(s => s.courseId) };
+
+    await pgPool.query(
+      `INSERT INTO recommendation_cache (cache_key, result, expires_at)
+       VALUES ($1, $2, NOW() + INTERVAL '5 minutes')
+       ON CONFLICT (cache_key) DO UPDATE SET result = $2, expires_at = NOW() + INTERVAL '5 minutes'`,
+      [cacheKey, JSON.stringify(result)]
+    );
+
+    res.json(result);
+  } catch (err) {
+    console.error('[Recommend] error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── 코스 썸네일 (WAS 로컬 저장 + PostgreSQL) ─────────────────────────────────
+
+// 전체 썸네일 맵 조회 — 탐색 그리드가 코스 목록에 병합해서 사용
+// (동적 :courseId 라우트보다 먼저 등록)
+app.get('/api/courses/thumbnails', async (req, res) => {
+  try {
+    const result = await pgPool.query('SELECT course_id, url FROM course_thumbnails');
+    const map = {};
+    result.rows.forEach(r => { map[r.course_id] = r.url; });
+    res.json(map);
+  } catch (err) {
+    console.error('[Thumbnails] fetch error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 단일 코스 썸네일 조회
+app.get('/api/courses/:courseId/thumbnail', async (req, res) => {
+  try {
+    const result = await pgPool.query(
+      'SELECT url FROM course_thumbnails WHERE course_id = $1',
+      [req.params.courseId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'no thumbnail' });
+    res.json({ url: result.rows[0].url });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 썸네일 업로드 — multipart/form-data, 필드명 "image"
+app.post('/api/courses/:courseId/thumbnail', upload.single('image'), async (req, res) => {
+  const { courseId } = req.params;
+  if (!req.file) return res.status(400).json({ error: 'image file required' });
+
+  try {
+    const filename = `${courseId}.jpg`;
+    const filepath = path.join(THUMB_DIR, filename);
+
+    // 정사각형 크롭 + 최대 1080px, JPEG 품질 82
+    await sharp(req.file.buffer)
+      .rotate()
+      .resize(1080, 1080, { fit: 'cover', position: 'centre' })
+      .jpeg({ quality: 82 })
+      .toFile(filepath);
+
+    const url = `https://tteona.kr/uploads/thumbnails/${filename}`;
+    await pgPool.query(
+      `INSERT INTO course_thumbnails (course_id, url, uploaded_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (course_id) DO UPDATE SET url = EXCLUDED.url, uploaded_at = NOW()`,
+      [courseId, url]
+    );
+
+    res.json({ ok: true, url });
+  } catch (err) {
+    console.error('[Thumbnails] upload error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── 대중교통 경로 (ODsay) ─────────────────────────────────────────────────────
+
+const ODSAY_KEY = process.env.ODSAY_KEY || 'R7vAt5tF3lN95klpZbaWvSXMA7g+TtjbHT+4shfEgQ4';
+
+// 두 지점 간 대중교통 소요시간/거리 (실패 시 도보 추정 폴백)
+async function odsayLeg(sLat, sLng, eLat, eLng) {
+  const url = `https://api.odsay.com/v1/api/searchPubTransPathT`
+    + `?SX=${sLng}&SY=${sLat}&EX=${eLng}&EY=${eLat}`
+    + `&apiKey=${encodeURIComponent(ODSAY_KEY)}&output=json`;
+  try {
+    const r = await fetch(url);
+    const j = await r.json();
+    const info = j?.result?.path?.[0]?.info;
+    if (info) {
+      return { distanceMeters: (info.totalDistance || 0), travelTimeSec: (info.totalTime || 0) * 60 };
+    }
+  } catch (e) {
+    console.error('[ODsay] leg error:', e.message);
+  }
+  // 폴백: 직선거리 + 도보 4.5km/h
+  const d = haversineKm(sLat, sLng, eLat, eLng) * 1000;
+  return { distanceMeters: d, travelTimeSec: d / (4500 / 3600) };
+}
+
+// POST /api/courses/transit-route  body: { places: [{lat,lng}, ...] }
+app.post('/api/courses/transit-route', async (req, res) => {
+  const places = Array.isArray(req.body?.places) ? req.body.places : [];
+  if (places.length < 2) return res.status(400).json({ error: 'need >= 2 places' });
+
+  const cacheKey = 'transit:' + places
+    .map(p => `${(+p.lat).toFixed(3)},${(+p.lng).toFixed(3)}`).join('|');
+
+  try {
+    const cached = await pgPool.query(
+      'SELECT result FROM recommendation_cache WHERE cache_key = $1 AND expires_at > NOW()',
+      [cacheKey]
+    );
+    if (cached.rows.length > 0) return res.json(JSON.parse(cached.rows[0].result));
+
+    let totalDistance = 0, totalTime = 0;
+    for (let i = 0; i < places.length - 1; i++) {
+      const a = places[i], b = places[i + 1];
+      const leg = await odsayLeg(+a.lat, +a.lng, +b.lat, +b.lng);
+      totalDistance += leg.distanceMeters;
+      totalTime += leg.travelTimeSec;
+    }
+
+    const result = { distanceMeters: totalDistance, travelTimeSec: totalTime };
+    await pgPool.query(
+      `INSERT INTO recommendation_cache (cache_key, result, expires_at)
+       VALUES ($1, $2, NOW() + INTERVAL '1 day')
+       ON CONFLICT (cache_key) DO UPDATE SET result = $2, expires_at = NOW() + INTERVAL '1 day'`,
+      [cacheKey, JSON.stringify(result)]
+    );
+    res.json(result);
+  } catch (err) {
+    console.error('[Transit] error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/courses/:courseId', async (req, res) => {
   try {
     const doc = await db.collection('courses').doc(req.params.courseId).get();
@@ -52,6 +312,94 @@ app.get('/api/courses/:courseId', async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
+// ─── Push 알림 API ───────────────────────────────────────────────────────────
+
+// iOS 앱이 로그인 시 APNs device token 등록
+app.post('/api/push/register', async (req, res) => {
+  const { userId, token } = req.body;
+  if (!userId || !token) return res.status(400).json({ error: 'userId and token required' });
+
+  try {
+    await pgPool.query(`
+      INSERT INTO device_tokens (user_id, token, updated_at)
+      VALUES ($1, $2, NOW())
+      ON CONFLICT (user_id) DO UPDATE SET token = EXCLUDED.token, updated_at = NOW()
+    `, [userId, token]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('push register error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// 코스 좋아요 알림 — 코스 작성자에게 발송
+app.post('/api/push/course-liked', async (req, res) => {
+  const { courseOwnerId, likerNickname, courseName } = req.body;
+  if (!courseOwnerId || !likerNickname) return res.status(400).json({ error: 'missing fields' });
+
+  const result = await sendPush({
+    userId: courseOwnerId,
+    title:  '코스에 좋아요가 달렸어요 ❤️',
+    body:   `${likerNickname}님이 "${courseName}" 코스를 좋아합니다`,
+    data:   { type: 'course_liked', courseName },
+  });
+  res.json(result);
+});
+
+// 코스 따라가기 알림 — 코스 작성자에게 발송
+app.post('/api/push/course-followed', async (req, res) => {
+  const { courseOwnerId, followerNickname, courseName } = req.body;
+  if (!courseOwnerId || !followerNickname) return res.status(400).json({ error: 'missing fields' });
+
+  const result = await sendPush({
+    userId: courseOwnerId,
+    title:  '누군가 내 코스를 따라가고 있어요 🗺️',
+    body:   `${followerNickname}님이 "${courseName}" 코스 여행을 시작했어요`,
+    data:   { type: 'course_followed', courseName },
+  });
+  res.json(result);
+});
+
+// ─── 주간 활동 리포트 Cron (매주 월요일 오전 9시) ──────────────────────────
+
+cron.schedule('0 9 * * 1', async () => {
+  console.log('[Cron] 주간 활동 리포트 발송 시작');
+  try {
+    const lastMonday = new Date();
+    lastMonday.setDate(lastMonday.getDate() - 7);
+    const dateStr = lastMonday.toISOString().split('T')[0];
+
+    const users = await pgPool.query(`
+      SELECT user_id,
+             SUM(courses_created) AS courses,
+             SUM(places_visited)  AS places
+      FROM user_stats
+      WHERE stat_date >= $1
+      GROUP BY user_id
+      HAVING SUM(courses_created) > 0 OR SUM(places_visited) > 0
+    `, [dateStr]);
+
+    let sent = 0;
+    for (const row of users.rows) {
+      const body = [
+        row.courses > 0 ? `코스 ${row.courses}개 만들었고` : null,
+        row.places  > 0 ? `장소 ${row.places}곳 방문했어요` : null,
+      ].filter(Boolean).join(', ');
+
+      await sendPush({
+        userId: row.user_id,
+        title:  '이번 주 여행 리포트 📊',
+        body:   `지난 7일간 ${body}!`,
+        data:   { type: 'weekly_report' },
+      });
+      sent++;
+    }
+    console.log(`[Cron] 주간 리포트 완료 — ${sent}명 발송`);
+  } catch (err) {
+    console.error('[Cron] 주간 리포트 오류:', err.message);
+  }
+}, { timezone: 'Asia/Seoul' });
 
 // ─── Places 캐시 API ─────────────────────────────────────────────────────────
 // iOS가 Google Places API 결과를 PostgreSQL에 저장/조회
@@ -569,9 +917,213 @@ function courseNotFoundHtml() {
 </html>`;
 }
 
+// ─── Admin API ───────────────────────────────────────────────────────────────
+
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'tteona-admin-2026';
+const ADMIN_TOKEN    = process.env.ADMIN_TOKEN    || 'tteona-admin-secret-token';
+
+function adminAuth(req, res, next) {
+  const auth = req.headers['authorization'] || '';
+  if (auth === `Bearer ${ADMIN_TOKEN}`) return next();
+  res.status(401).json({ error: 'Unauthorized' });
+}
+
+app.post('/api/admin/login', (req, res) => {
+  const { password } = req.body;
+  if (password === ADMIN_PASSWORD) return res.json({ token: ADMIN_TOKEN });
+  res.status(401).json({ error: '비밀번호가 틀렸습니다' });
+});
+
+app.get('/api/admin/stats', adminAuth, async (req, res) => {
+  try {
+    const [usersSnap, coursesSnap, reportsSnap, pgStats, cacheStats] = await Promise.all([
+      db.collection('users').count().get(),
+      db.collection('courses').count().get(),
+      db.collection('reports').where('processed', '!=', true).count().get(),
+      pgPool.query(`
+        SELECT COALESCE(SUM(new_users),0)       AS new_users_7d,
+               COALESCE(SUM(active_users),0)    AS active_users_7d,
+               COALESCE(SUM(courses_created),0) AS courses_7d
+        FROM daily_stats
+        WHERE stat_date >= CURRENT_DATE - INTERVAL '7 days'
+      `),
+      pgPool.query('SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE expires_at > NOW()) AS valid FROM places_cache'),
+    ]);
+
+    res.json({
+      totalUsers:       usersSnap.data().count,
+      totalCourses:     coursesSnap.data().count,
+      pendingReports:   reportsSnap.data().count,
+      newUsers7d:       Number(pgStats.rows[0].new_users_7d),
+      activeUsers7d:    Number(pgStats.rows[0].active_users_7d),
+      coursesCreated7d: Number(pgStats.rows[0].courses_7d),
+      placesCacheTotal: Number(cacheStats.rows[0].total),
+      placesCacheValid: Number(cacheStats.rows[0].valid),
+    });
+  } catch (err) {
+    console.error('admin stats error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/reports', adminAuth, async (req, res) => {
+  try {
+    const snap = await db.collection('reports')
+      .orderBy('createdAt', 'desc')
+      .limit(50)
+      .get();
+    const reports = snap.docs.map(d => ({ id: d.id, ...d.data(), createdAt: d.data().createdAt?.toDate() }));
+    res.json(reports);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/admin/courses/:courseId', adminAuth, async (req, res) => {
+  try {
+    await db.collection('courses').doc(req.params.courseId).delete();
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/reports/:reportId/resolve', adminAuth, async (req, res) => {
+  try {
+    await db.collection('reports').doc(req.params.reportId).update({ processed: true });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/admin/users', adminAuth, async (req, res) => {
+  try {
+    const { search } = req.query;
+    let query = db.collection('users').orderBy('createdAt', 'desc').limit(30);
+    const snap = await query.get();
+    let users = snap.docs.map(d => ({ uid: d.id, ...d.data(), createdAt: d.data().createdAt?.toDate() }));
+    if (search) {
+      const q = search.toLowerCase();
+      users = users.filter(u =>
+        (u.nickname || '').toLowerCase().includes(q) ||
+        (u.email || '').toLowerCase().includes(q)
+      );
+    }
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/users/:uid/block', adminAuth, async (req, res) => {
+  try {
+    await db.collection('users').doc(req.params.uid).update({ isBlocked: true });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/users/:uid/unblock', adminAuth, async (req, res) => {
+  try {
+    await db.collection('users').doc(req.params.uid).update({ isBlocked: false });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Haversine ────────────────────────────────────────────────────────────────
+
+function haversineKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 app.use((req, res) => res.status(404).json({ error: 'Not found' }));
 
-app.listen(PORT, () => {
+// ─── WebSocket 실시간 위치 공유 ───────────────────────────────────────────────
+
+const httpServer = http.createServer(app);
+const wss = new WebSocket.Server({ server: httpServer, path: '/ws/location' });
+
+// roomId → Set<WebSocket>
+const wsRooms = new Map();
+
+wss.on('connection', (ws) => {
+  ws.isAlive = true;
+  ws.on('pong', () => { ws.isAlive = true; });
+
+  ws.on('message', (raw) => {
+    let msg;
+    try { msg = JSON.parse(raw); } catch { return; }
+
+    if (msg.type === 'join') {
+      ws.roomId  = msg.roomId;
+      ws.userId  = msg.userId;
+      ws.nickname = msg.nickname || '';
+      if (!wsRooms.has(msg.roomId)) wsRooms.set(msg.roomId, new Set());
+      wsRooms.get(msg.roomId).add(ws);
+      console.log(`[WS] ${msg.userId} joined room ${msg.roomId}`);
+    }
+
+    if (msg.type === 'location' && ws.roomId) {
+      const payload = JSON.stringify({
+        type:      'location',
+        userId:    ws.userId,
+        nickname:  ws.nickname,
+        latitude:  msg.latitude,
+        longitude: msg.longitude,
+        ts:        Date.now(),
+      });
+      const room = wsRooms.get(ws.roomId);
+      if (room) {
+        room.forEach(client => {
+          if (client !== ws && client.readyState === WebSocket.OPEN) {
+            client.send(payload);
+          }
+        });
+      }
+    }
+
+    if (msg.type === 'leave') wsLeaveRoom(ws);
+  });
+
+  ws.on('close', () => wsLeaveRoom(ws));
+  ws.on('error', () => wsLeaveRoom(ws));
+});
+
+function wsLeaveRoom(ws) {
+  if (!ws.roomId) return;
+  const room = wsRooms.get(ws.roomId);
+  if (room) {
+    room.delete(ws);
+    const leftMsg = JSON.stringify({ type: 'left', userId: ws.userId });
+    room.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) client.send(leftMsg);
+    });
+    if (room.size === 0) wsRooms.delete(ws.roomId);
+  }
+  console.log(`[WS] ${ws.userId} left room ${ws.roomId}`);
+  ws.roomId = null;
+}
+
+// 30초마다 끊긴 연결 정리
+setInterval(() => {
+  wss.clients.forEach(ws => {
+    if (!ws.isAlive) { ws.terminate(); return; }
+    ws.isAlive = false;
+    ws.ping();
+  });
+}, 30000);
+
+httpServer.listen(PORT, () => {
   console.log(`tteona API server running on port ${PORT}`);
   console.log('Firebase Admin SDK initialized ✅');
+  console.log('WebSocket server ready at /ws/location ✅');
 });

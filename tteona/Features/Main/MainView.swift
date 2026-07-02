@@ -46,23 +46,20 @@ struct MainView: View {
         case .liked: base = courseService.courses.filter { courseService.likedCourseIds.contains($0.courseId) }
         case .mine:  base = courseService.courses.filter { $0.authorId == authService.currentUser?.uid }
         }
-        
+
         let results: [Course]
         if searchText.isEmpty {
             results = base
         } else {
             let query = searchText.lowercased()
-            results = base.filter { 
-                $0.courseName.lowercased().contains(query) || 
+            results = base.filter {
+                $0.courseName.lowercased().contains(query) ||
                 $0.region.lowercased().contains(query) ||
                 $0.places.contains(where: { $0.placeName.lowercased().contains(query) })
             }
         }
-        
-        // 좋아요 순 정렬 (인기 코스 우선 노출)
-        return results.sorted { a, b in
-            return a.likeCount > b.likeCount
-        }
+
+        return results.sorted { $0.likeCount > $1.likeCount }
     }
 
     private var visibleCourses: [Course] {
@@ -294,11 +291,13 @@ struct MainView: View {
 
                     // 코스 필터
                     HStack(spacing: 0) {
-                        ForEach([("square.grid.2x2.fill", CourseFilter.all), ("heart.fill", .liked), ("person.fill", .mine)], id: \.0) { icon, filter in
+                        ForEach([
+                            ("square.grid.2x2.fill", CourseFilter.all),
+                            ("heart.fill",            .liked),
+                            ("person.fill",           .mine)
+                        ], id: \.0) { icon, filter in
                             Button {
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    courseFilter = filter
-                                }
+                                withAnimation(.easeInOut(duration: 0.2)) { courseFilter = filter }
                             } label: {
                                 Image(systemName: icon)
                                     .font(.system(size: 14))

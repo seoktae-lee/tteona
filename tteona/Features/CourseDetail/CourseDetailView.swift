@@ -367,7 +367,8 @@ struct CourseDetailView: View {
             Task {
                 let uid = authService.currentUser?.uid ?? ""
                 do {
-                    try await courseService.toggleLike(courseId: course.courseId, userId: uid)
+                    let nickname = userService.currentUser?.nickname ?? ""
+                    try await courseService.toggleLike(courseId: course.courseId, userId: uid, likerNickname: nickname)
                 } catch {
                     likeErrorMessage = courseService.errorMessage ?? error.localizedDescription
                     showLikeErrorAlert = true

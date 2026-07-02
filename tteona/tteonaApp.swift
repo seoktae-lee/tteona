@@ -39,6 +39,7 @@ struct TteonaApp: App {
                     guard let uid = user?.uid else { return }
                     Task {
                         await FCMService.shared.saveFCMToken(userId: uid)
+                        await PushService.shared.registerDeviceToken(userId: uid)
                     }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: Notification.Name("FCMTokenRefreshed"))) { _ in
@@ -85,5 +86,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         Messaging.messaging().apnsToken = deviceToken
+        let tokenString = deviceToken.map { String(format: "%02x", $0) }.joined()
+        UserDefaults.standard.set(tokenString, forKey: "apnsDeviceToken")
     }
 }

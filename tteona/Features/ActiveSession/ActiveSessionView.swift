@@ -108,20 +108,16 @@ struct ActiveSessionView: View {
             saveSession()
             locationService.stopTracking()
             if !roomIds.isEmpty {
-                let uid = authService.currentUser?.uid ?? ""
-                roomService.stopListeningLocations()
-                for rid in roomIds {
-                    roomService.stopSharingLocation(roomId: rid, userId: uid)
-                }
+                LocationSocketService.shared.disconnect()
             }
         }
         .onChange(of: locationService.currentLocation) { _, location in
-            guard let rid = roomIds.first,
-                  let location,
-                  let uid = authService.currentUser?.uid else { return }
+            guard !roomIds.isEmpty, let location else { return }
             guard scenePhase == .active else { return }
-            let nickname = userService.currentUser?.nickname ?? "멤버"
-            roomService.updateMyLocationThrottled(roomId: rid, userId: uid, nickname: nickname, location: location)
+            LocationSocketService.shared.sendLocation(
+                latitude:  location.coordinate.latitude,
+                longitude: location.coordinate.longitude
+            )
         }
         .onChange(of: locationService.arrivedAtPlace) { _, place in
             guard let place else { return }
@@ -236,8 +232,8 @@ struct ActiveSessionView: View {
             }
 
             // 동행 멤버 위치
-            ForEach(roomService.memberLocations) { member in
-                Annotation(member.nickname, coordinate: CLLocationCoordinate2D(latitude: member.latitude, longitude: member.longitude)) {
+            ForEach(LocationSocketService.shared.memberLocations) { member in
+                Annotation(member.nickname, coordinate: member.coordinate) {
                     MemberLocationPin(nickname: member.nickname)
                 }
             }
@@ -522,9 +518,19 @@ struct ActiveSessionView: View {
             roomIds: Array(roomIds),
             courseName: course.courseName
         )
+        // 코스 작성자에게 "누군가 내 코스를 따라가고 있어요" 알림 (본인 제외)
+        if uid != course.authorId {
+            Task {
+                await PushService.shared.notifyCourseFollowed(
+                    courseOwnerId: course.authorId,
+                    followerNickname: nickname,
+                    courseName: course.courseName
+                )
+            }
+        }
         if !roomIds.isEmpty {
             if let rid = roomIds.first {
-                roomService.startListeningLocations(roomId: rid, myUserId: uid)
+                LocationSocketService.shared.connect(roomId: rid, userId: uid, nickname: nickname)
             }
             for rid in roomIds {
                 roomService.postFeed(roomId: rid, type: .tripStart, userId: uid,

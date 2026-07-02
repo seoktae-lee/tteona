@@ -1,5 +1,6 @@
 import SwiftUI
 import MapKit
+import PhotosUI
 
 struct CreateCourseView: View {
     @EnvironmentObject private var authService: AuthService
@@ -12,6 +13,8 @@ struct CreateCourseView: View {
     @State private var isSaving = false
     @State private var errorMessage: String?
     @State private var showPlaceSearch = false
+    @State private var thumbnailItem: PhotosPickerItem?
+    @State private var thumbnailImage: UIImage?
     @State private var mapCenter: CLLocationCoordinate2D = CLLocationCoordinate2D(latitude: 37.5665, longitude: 126.9780)
     @State private var cameraPosition: MapCameraPosition = .region(
         MKCoordinateRegion(
@@ -28,6 +31,7 @@ struct CreateCourseView: View {
                     tagSection
                     mapPreviewSection
                     placesSection
+                    thumbnailSection
                     if let error = errorMessage {
                         Text(error)
                             .font(.system(size: 13))
@@ -65,6 +69,62 @@ struct CreateCourseView: View {
         }
         .onChange(of: places) { _, newPlaces in
             updateMapCamera(places: newPlaces)
+        }
+        .onChange(of: thumbnailItem) { _, newItem in
+            guard let newItem else { return }
+            Task {
+                if let data = try? await newItem.loadTransferable(type: Data.self),
+                   let img = UIImage(data: data) {
+                    await MainActor.run { thumbnailImage = img }
+                }
+            }
+        }
+    }
+
+    // MARK: - 대표 이미지 (탐색 탭 썸네일)
+    private var thumbnailSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionLabel("대표 이미지")
+            Text("탐색 탭에 노출될 코스 커버 이미지예요. 건너뛰면 기본 이미지가 사용돼요.")
+                .font(.system(size: 12))
+                .foregroundColor(.tteMediumGray)
+
+            PhotosPicker(selection: $thumbnailItem, matching: .images) {
+                if let thumbnailImage {
+                    ZStack(alignment: .bottomTrailing) {
+                        Image(uiImage: thumbnailImage)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 180)
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                        HStack(spacing: 4) {
+                            Image(systemName: "pencil")
+                            Text("변경")
+                        }
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 12).padding(.vertical, 7)
+                        .background(Capsule().fill(Color.black.opacity(0.55)))
+                        .padding(12)
+                    }
+                } else {
+                    VStack(spacing: 10) {
+                        Image(systemName: "photo.badge.plus")
+                            .font(.system(size: 32))
+                            .foregroundColor(.tteOrange.opacity(0.6))
+                        Text("갤러리에서 대표 이미지 선택")
+                            .font(.system(size: 14))
+                            .foregroundColor(.tteMediumGray)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 32)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(Color.tteOrange.opacity(0.3), style: StrokeStyle(lineWidth: 1.5, dash: [6]))
+                    )
+                }
+            }
         }
     }
 
@@ -249,6 +309,10 @@ struct CreateCourseView: View {
 
         do {
             try await courseService.saveCourse(course)
+            // 대표 이미지가 선택됐으면 WAS에 업로드 (실패해도 코스 저장은 유지)
+            if let thumbnailImage {
+                await CourseThumbnailService.shared.upload(courseId: course.courseId, image: thumbnailImage)
+            }
             dismiss()
         } catch {
             errorMessage = "저장에 실패했습니다. 다시 시도해주세요."
