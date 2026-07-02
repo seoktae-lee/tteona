@@ -919,20 +919,29 @@ pm2 save</div>
         <div class="task">
           <div class="task-check"></div>
           <div class="task-content">
-            <div class="task-title">협업 필터링 추천</div>
-            <div class="task-desc">"이 코스 좋아한 사람들이 좋아한 다른 코스"</div>
+            <div class="task-title">1순위 — 시즌 추천 (봄 벚꽃, 여름 해변, 가을 단풍, 겨울 야경)</div>
+            <div class="task-desc">신규 UI 불필요. 기존 스코어링 공식에 시즌 가중치 +10점 추가 (코스 태그/장소명에 계절 키워드 매칭). 서버만 수정, 배포 즉시 탐색 탭 "추천순"에 반영. 예상 반나절.</div>
           </div>
         </div>
         <div class="task">
           <div class="task-check"></div>
           <div class="task-content">
-            <div class="task-title">시즌 추천 (봄 벚꽃, 여름 해변, 가을 단풍, 겨울 야경)</div>
+            <div class="task-title">2순위 — 이번 주 TOP 10 코스 (매일 자정 Cron으로 재계산)</div>
+            <div class="task-desc">탐색 탭 "인기 크리에이터" 스트립 아래 같은 패턴의 가로 카드 스트립 추가. 서버는 node-cron 자정 재계산 + PostgreSQL 캐싱. 예상 1~2일.</div>
           </div>
         </div>
         <div class="task">
           <div class="task-check"></div>
           <div class="task-content">
-            <div class="task-title">이번 주 TOP 10 코스 (매일 자정 Cron으로 재계산)</div>
+            <div class="task-title">3순위 — 탐색 탭 검색바 (코스명/지역명 검색)</div>
+            <div class="task-desc">추천 엔진과 별개 기능. 홈탭(지도 중심)이 아닌 탐색 탭 상단에 배치 — 코스 발견 맥락과 일치. 예상 1~2일.</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">4순위 — 협업 필터링 추천 (좋아요 데이터 축적 후)</div>
+            <div class="task-desc">"이 코스 좋아한 사람들이 좋아한 다른 코스" — ExploreDetailView 하단 섹션으로 배치. 현재 좋아요 데이터가 적어 효과 미미, 유저 늘어난 뒤 진행.</div>
           </div>
         </div>
       </div>
@@ -1073,6 +1082,20 @@ pm2 save</div>
           <div class="task-content">
             <div class="task-title">WebSocket 실시간 위치 공유</div>
             <div class="task-desc">LocationSocketService.swift · ActiveSessionView.swift — Firestore 리스너 제거, 지연 3~5초 → 50~200ms</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">프로필 이미지 설정 + 크리에이터 랭킹 개선</div>
+            <div class="task-desc">SettingsView(PhotosPicker 아바타 업로드) · ProfileImageService 신규 · AppUser.profileImageUrl · ExploreGridView 랭킹 뱃지 잘림 수정 + 프로필 사진 표시</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">나의 오늘 → 코스 저장 시 썸네일 선택 + 기존 코스 썸네일 변경</div>
+            <div class="task-desc">기존엔 나의 오늘로 저장한 코스에 썸네일 설정 방법이 전혀 없어 탐색탭에 항상 기본 썸네일로 노출되던 공백 수정. ① Vlog 완성 화면(VlogPreviewView)에 "탐색탭에 보여질 썸네일 고르기" 버튼 — 코스로 저장한 경우에만 노출. ② 나의 코스 → 내 코스 탭에서 길게 눌러 "탐색탭 썸네일 변경" — 이미 저장된 코스도 언제든 변경 가능.</div>
           </div>
         </div>
         <div class="task">
@@ -1243,6 +1266,13 @@ pm2 save</div>
           <div class="task-content">
             <div class="task-title">크리에이터 랭킹</div>
             <div class="task-desc">탐색 탭 상단 "이번 주 인기 크리에이터" 가로 스트립 (TOP 10, 좋아요→코스 수 순, 10분 캐시). 팔로우 피드 확장은 팔로우 기능 도입 후 추후.</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">프로필 이미지 설정 (갤러리 업로드) — 서버 배포 완료</div>
+            <div class="task-desc">POST /api/users/:uid/avatar — sharp 512×512 크롭 → uploads/avatars 저장 + PostgreSQL user_avatars + Firestore profileImageUrl 동시 기록. 랭킹 API 응답에 profileImageUrl 포함. E2E 업로드/서빙 테스트 통과. iOS 반영은 앱스토어 업데이트 대기.</div>
           </div>
         </div>
         <div class="task">

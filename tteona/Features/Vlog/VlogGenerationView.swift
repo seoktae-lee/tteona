@@ -1,10 +1,13 @@
 import SwiftUI
 import AVKit
 import Photos
+import PhotosUI
 
 struct VlogGenerationView: View {
     let course: Course
     let sessionId: String
+    // 이번 세션에서 새로 저장된 코스일 때만 전달 — 프리뷰에 탐색탭 썸네일 선택 노출
+    var thumbnailCourseId: String? = nil
     var onDismissToHome: (() -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
 
@@ -23,7 +26,7 @@ struct VlogGenerationView: View {
         case .generating: generatingView
         case .preview:
             if let url = vlogURL {
-                VlogPreviewView(vlogURL: url) {
+                VlogPreviewView(vlogURL: url, thumbnailCourseId: thumbnailCourseId) {
                     dismiss()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                         onDismissToHome?()
@@ -128,13 +131,19 @@ struct VlogGenerationView: View {
 // MARK: - Vlog Preview
 struct VlogPreviewView: View {
     let vlogURL: URL
+    let thumbnailCourseId: String?
     let onDismiss: () -> Void
 
     @State private var player: AVPlayer
     @State private var showShareSheet = false
+    @State private var thumbPickerItem: PhotosPickerItem?
+    @State private var thumbState: ThumbState = .idle
 
-    init(vlogURL: URL, onDismiss: @escaping () -> Void) {
+    private enum ThumbState { case idle, uploading, done, failed }
+
+    init(vlogURL: URL, thumbnailCourseId: String? = nil, onDismiss: @escaping () -> Void) {
         self.vlogURL = vlogURL
+        self.thumbnailCourseId = thumbnailCourseId
         self.onDismiss = onDismiss
         _player = State(initialValue: AVPlayer(url: vlogURL))
     }
@@ -145,7 +154,7 @@ struct VlogPreviewView: View {
             VStack(spacing: 0) {
                 VideoPlayer(player: player)
                     .frame(maxWidth: .infinity)
-                    .frame(height: UIScreen.main.bounds.height * 0.65)
+                    .frame(height: UIScreen.main.bounds.height * (thumbnailCourseId == nil ? 0.65 : 0.58))
                     .onAppear { player.play() }
 
                 VStack(spacing: 16) {
@@ -155,6 +164,11 @@ struct VlogPreviewView: View {
                             .font(.system(size: 14)).foregroundColor(.white.opacity(0.8))
                     }
                     .padding(.top, 20)
+
+                    if let courseId = thumbnailCourseId {
+                        thumbnailButton(courseId: courseId)
+                            .padding(.horizontal, 24)
+                    }
 
                     Button {
                         showShareSheet = true
@@ -180,6 +194,55 @@ struct VlogPreviewView: View {
         }
         .sheet(isPresented: $showShareSheet) {
             ShareSheet(items: [vlogURL])
+        }
+    }
+
+    // MARK: - 탐색탭 썸네일 선택
+
+    private func thumbnailButton(courseId: String) -> some View {
+        PhotosPicker(selection: $thumbPickerItem, matching: .images) {
+            HStack(spacing: 8) {
+                switch thumbState {
+                case .idle:
+                    Image(systemName: "photo.on.rectangle.angled")
+                    Text("탐색탭에 보여질 썸네일 고르기")
+                case .uploading:
+                    ProgressView().tint(.white).scaleEffect(0.8)
+                    Text("썸네일 업로드 중...")
+                case .done:
+                    Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
+                    Text("썸네일 설정 완료 · 변경하기")
+                case .failed:
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.yellow)
+                    Text("업로드 실패 · 다시 시도")
+                }
+            }
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity).frame(height: 50)
+            .background(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(Color.white.opacity(0.35), lineWidth: 1.5)
+            )
+        }
+        .disabled(thumbState == .uploading)
+        .onChange(of: thumbPickerItem) { _, newItem in
+            Task { await uploadThumbnail(from: newItem, courseId: courseId) }
+        }
+    }
+
+    private func uploadThumbnail(from item: PhotosPickerItem?, courseId: String) async {
+        guard let item else { return }
+        guard let data = try? await item.loadTransferable(type: Data.self),
+              let image = UIImage(data: data) else {
+            thumbState = .failed
+            return
+        }
+        thumbState = .uploading
+        if await CourseThumbnailService.shared.upload(courseId: courseId, image: image) != nil {
+            thumbState = .done
+        } else {
+            thumbState = .failed
         }
     }
 }

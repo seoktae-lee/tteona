@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 
 struct MyCourseView: View {
     @EnvironmentObject private var authService: AuthService
@@ -10,6 +11,12 @@ struct MyCourseView: View {
     @State private var courseToDelete: Course?
     @State private var showDeleteConfirm = false
     @State private var courseSessionInfo: CourseSessionInfo? = nil
+    @State private var courseForThumbnail: Course?
+    @State private var showThumbnailPicker = false
+    @State private var thumbnailPickerItem: PhotosPickerItem?
+    @State private var isUploadingThumbnail = false
+    @State private var thumbnailResultMessage = ""
+    @State private var showThumbnailResult = false
 
     enum MyCourseTab: String, CaseIterable {
         case liked = "좋아요"
@@ -74,6 +81,28 @@ struct MyCourseView: View {
         } message: {
             Text("삭제하면 복구할 수 없어요.")
         }
+        .photosPicker(isPresented: $showThumbnailPicker, selection: $thumbnailPickerItem, matching: .images)
+        .onChange(of: thumbnailPickerItem) { _, newItem in
+            Task { await uploadThumbnail(from: newItem) }
+        }
+        .alert(thumbnailResultMessage, isPresented: $showThumbnailResult) {
+            Button("확인", role: .cancel) {}
+        }
+        .overlay {
+            if isUploadingThumbnail {
+                ZStack {
+                    Color.black.opacity(0.3).ignoresSafeArea()
+                    VStack(spacing: 14) {
+                        ProgressView().tint(.white).scaleEffect(1.3)
+                        Text("썸네일 업로드 중...")
+                            .font(.system(size: 14))
+                            .foregroundColor(.white)
+                    }
+                    .padding(28)
+                    .background(RoundedRectangle(cornerRadius: 16).fill(Color.black.opacity(0.7)))
+                }
+            }
+        }
         .task {
             if let uid = authService.currentUser?.uid {
                 await courseService.fetchLikedCourseIds(userId: uid)
@@ -136,6 +165,12 @@ struct MyCourseView: View {
                         CourseListRow(course: course)
                             .onTapGesture { selectedCourse = course }
                             .contextMenu(isMine ? ContextMenu {
+                                Button {
+                                    courseForThumbnail = course
+                                    showThumbnailPicker = true
+                                } label: {
+                                    Label("탐색탭 썸네일 변경", systemImage: "photo.on.rectangle.angled")
+                                }
                                 Button(role: .destructive) {
                                     courseToDelete = course
                                     showDeleteConfirm = true
@@ -167,6 +202,27 @@ struct MyCourseView: View {
         GroupToolbarMenu()
             .environmentObject(authService)
             .environmentObject(roomService)
+    }
+
+    private func uploadThumbnail(from item: PhotosPickerItem?) async {
+        guard let item, let course = courseForThumbnail else { return }
+        defer {
+            thumbnailPickerItem = nil
+            courseForThumbnail = nil
+        }
+        guard let data = try? await item.loadTransferable(type: Data.self),
+              let image = UIImage(data: data) else {
+            thumbnailResultMessage = "이미지를 불러오지 못했어요. 다시 시도해주세요."
+            showThumbnailResult = true
+            return
+        }
+        isUploadingThumbnail = true
+        let url = await CourseThumbnailService.shared.upload(courseId: course.courseId, image: image)
+        isUploadingThumbnail = false
+        thumbnailResultMessage = url != nil
+            ? "썸네일이 변경됐어요. 탐색탭에 곧 반영됩니다."
+            : "업로드에 실패했어요. 네트워크 확인 후 다시 시도해주세요."
+        showThumbnailResult = true
     }
 }
 

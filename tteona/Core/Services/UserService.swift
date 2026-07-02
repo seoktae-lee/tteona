@@ -37,6 +37,12 @@ class UserService: ObservableObject {
         currentUser?.nickname = nickname
     }
 
+    // WAS 업로드 라우트가 Firestore profileImageUrl 필드도 함께 저장하므로,
+    // 여기서는 원격 쓰기 없이 로컬 상태만 갱신한다.
+    func setProfileImageUrl(_ url: String) {
+        currentUser?.profileImageUrl = url
+    }
+
     func isNicknameTaken(_ nickname: String) async -> Bool {
         let snapshot = try? await db.collection("users")
             .whereField("nickname", isEqualTo: nickname.trimmingCharacters(in: .whitespaces))

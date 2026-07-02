@@ -14,6 +14,7 @@ struct CreatorRank: Decodable, Identifiable {
     let userId: String
     let nickname: String
     let isVerified: Bool
+    let profileImageUrl: String?
     let likes: Int
     let courses: Int
     var id: String { userId }

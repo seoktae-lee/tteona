@@ -29,6 +29,7 @@ struct ImpromptuSessionView: View {
     @State private var courseName = ""
     @State private var selectedTag: CourseTag = .friends
     @State private var generatedCourse: Course? = nil
+    @State private var courseSavedToFirestore = false
     @State private var showResumeSheet = false
     @State private var savedSession: SavedImpromptuSession? = nil
     @State private var activeRoomIds: Set<String> = []
@@ -127,7 +128,11 @@ struct ImpromptuSessionView: View {
         }
         .fullScreenCover(isPresented: $showVlog) {
             if let course = generatedCourse {
-                VlogGenerationView(course: course, sessionId: sessionId) {
+                VlogGenerationView(
+                    course: course,
+                    sessionId: sessionId,
+                    thumbnailCourseId: courseSavedToFirestore ? course.courseId : nil
+                ) {
                     dismiss()
                 }
             }
@@ -575,6 +580,7 @@ struct ImpromptuSessionView: View {
             likeCount: 0, createdAt: Date(), places: capturedPlaces
         )
         generatedCourse = course
+        courseSavedToFirestore = saveToFirestore
         sessionStore.clear()
         if saveToFirestore { Task { try? await courseService.saveCourse(course) } }
         postEndFeed(toRoomIds: Array(activeRoomIds), count: capturedPlaces.count)

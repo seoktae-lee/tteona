@@ -10,6 +10,7 @@ const WebSocket = require('ws');
 const multer = require('multer');
 const sharp  = require('sharp');
 const path   = require('path');
+const fs     = require('fs');
 const { initializeApp, cert } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
 
@@ -82,6 +83,8 @@ app.use(express.json());
 // ─── 썸네일 업로드 설정 ────────────────────────────────────────────────────────
 
 const THUMB_DIR = path.join(__dirname, 'uploads', 'thumbnails');
+const AVATAR_DIR = path.join(__dirname, 'uploads', 'avatars');
+fs.mkdirSync(AVATAR_DIR, { recursive: true });
 app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
   maxAge: '30d',
   immutable: false,
@@ -237,6 +240,41 @@ app.post('/api/courses/:courseId/thumbnail', upload.single('image'), async (req,
     res.json({ ok: true, url });
   } catch (err) {
     console.error('[Thumbnails] upload error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── 프로필 이미지 (WAS 로컬 저장 + PostgreSQL) ───────────────────────────────
+
+// 프로필 이미지 업로드 — multipart/form-data, 필드명 "image"
+app.post('/api/users/:uid/avatar', upload.single('image'), async (req, res) => {
+  const { uid } = req.params;
+  if (!req.file) return res.status(400).json({ error: 'image file required' });
+
+  try {
+    const filename = `${uid}.jpg`;
+    const filepath = path.join(AVATAR_DIR, filename);
+
+    // 정사각형 크롭 + 최대 512px, JPEG 품질 82
+    await sharp(req.file.buffer)
+      .rotate()
+      .resize(512, 512, { fit: 'cover', position: 'centre' })
+      .jpeg({ quality: 82 })
+      .toFile(filepath);
+
+    // 파일명이 고정이라 캐시 무효화용 버전 쿼리 추가
+    const url = `https://tteona.kr/uploads/avatars/${filename}?v=${Date.now()}`;
+    await pgPool.query(
+      `INSERT INTO user_avatars (user_id, url, uploaded_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (user_id) DO UPDATE SET url = EXCLUDED.url, uploaded_at = NOW()`,
+      [uid, url]
+    );
+    await db.collection('users').doc(uid).set({ profileImageUrl: url }, { merge: true });
+
+    res.json({ ok: true, url });
+  } catch (err) {
+    console.error('[Avatar] upload error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -419,6 +457,7 @@ app.get('/api/creators/ranking', async (req, res) => {
         userId: uid,
         nickname: ud.nickname || '여행자',
         isVerified: ud.isVerified === true,
+        profileImageUrl: ud.profileImageUrl || null,
         likes: s.likes,
         courses: s.courses,
       };

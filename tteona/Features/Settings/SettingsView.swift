@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 import UserNotifications
 
 struct SettingsView: View {
@@ -10,6 +11,8 @@ struct SettingsView: View {
     @State private var showDeleteFailedAlert = false
     @State private var deleteFailedMessage = "회원 탈퇴에 실패했어요. 잠시 후 다시 시도해주세요."
     @State private var notificationGranted: Bool? = nil
+    @State private var avatarPickerItem: PhotosPickerItem?
+    @State private var isUploadingAvatar = false
 
     var body: some View {
         NavigationStack {
@@ -76,13 +79,44 @@ struct SettingsView: View {
     private var profileSection: some View {
         Section {
             HStack(spacing: 14) {
-                ZStack {
-                    Circle()
-                        .fill(Color.tteOrange.opacity(0.15))
-                        .frame(width: 56, height: 56)
-                    Text(String(userService.currentUser?.nickname.prefix(1) ?? "?"))
-                        .font(.system(size: 22, weight: .semibold))
-                        .foregroundColor(.tteOrange)
+                PhotosPicker(selection: $avatarPickerItem, matching: .images) {
+                    ZStack {
+                        Circle()
+                            .fill(Color.tteOrange.opacity(0.15))
+                            .frame(width: 56, height: 56)
+                        if let urlString = userService.currentUser?.profileImageUrl, let url = URL(string: urlString) {
+                            AsyncImage(url: url) { image in
+                                image.resizable().scaledToFill()
+                            } placeholder: {
+                                Text(String(userService.currentUser?.nickname.prefix(1) ?? "?"))
+                                    .font(.system(size: 22, weight: .semibold))
+                                    .foregroundColor(.tteOrange)
+                            }
+                            .frame(width: 56, height: 56)
+                            .clipShape(Circle())
+                        } else {
+                            Text(String(userService.currentUser?.nickname.prefix(1) ?? "?"))
+                                .font(.system(size: 22, weight: .semibold))
+                                .foregroundColor(.tteOrange)
+                        }
+                        if isUploadingAvatar {
+                            Circle()
+                                .fill(Color.black.opacity(0.4))
+                                .frame(width: 56, height: 56)
+                            ProgressView().tint(.white)
+                        }
+                        Image(systemName: "camera.fill")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.white)
+                            .frame(width: 20, height: 20)
+                            .background(Circle().fill(Color.tteOrange))
+                            .overlay(Circle().stroke(Color.white, lineWidth: 1.5))
+                            .offset(x: 20, y: 20)
+                    }
+                }
+                .disabled(isUploadingAvatar)
+                .onChange(of: avatarPickerItem) { _, newItem in
+                    Task { await uploadAvatar(from: newItem) }
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     Text(userService.currentUser?.nickname.isEmpty == false
@@ -173,6 +207,19 @@ struct SettingsView: View {
     private func checkNotificationStatus() async {
         let settings = await UNUserNotificationCenter.current().notificationSettings()
         notificationGranted = settings.authorizationStatus == .authorized
+    }
+
+    private func uploadAvatar(from item: PhotosPickerItem?) async {
+        guard let item, let uid = authService.currentUser?.uid else { return }
+        guard let data = try? await item.loadTransferable(type: Data.self),
+              let image = UIImage(data: data) else { return }
+
+        isUploadingAvatar = true
+        defer { isUploadingAvatar = false }
+
+        if let url = await ProfileImageService.shared.upload(uid: uid, image: image) {
+            userService.setProfileImageUrl(url)
+        }
     }
 
     private var accountSection: some View {

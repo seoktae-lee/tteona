@@ -9,6 +9,7 @@ struct AppUser: Codable, Equatable {
     var isVerified: Bool = false
     var creatorLabel: String?
     var blockedUserIds: [String]?
+    var profileImageUrl: String?
 
     init(uid: String, email: String, nickname: String = "", createdAt: Date = Date(), blockedUserIds: [String]? = nil) {
         self.uid = uid
@@ -19,7 +20,7 @@ struct AppUser: Codable, Equatable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case uid, email, nickname, createdAt, isVerified, creatorLabel, blockedUserIds
+        case uid, email, nickname, createdAt, isVerified, creatorLabel, blockedUserIds, profileImageUrl
     }
 
     // 누락 필드(예: 오래된 계정의 isVerified)가 있어도 디코딩이 실패하지 않도록 관대하게 처리.
@@ -33,5 +34,6 @@ struct AppUser: Codable, Equatable {
         isVerified     = (try? c.decode(Bool.self, forKey: .isVerified)) ?? false
         creatorLabel   = try? c.decode(String.self, forKey: .creatorLabel)
         blockedUserIds = try? c.decode([String].self, forKey: .blockedUserIds)
+        profileImageUrl = try? c.decode(String.self, forKey: .profileImageUrl)
     }
 }

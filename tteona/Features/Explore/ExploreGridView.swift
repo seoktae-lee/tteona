@@ -175,9 +175,23 @@ struct ExploreGridView: View {
                                     .fill(Color.tteOrange.opacity(0.15))
                                     .frame(width: 56, height: 56)
                                     .overlay(
-                                        Text(String(creator.nickname.prefix(1)))
-                                            .font(.system(size: 20, weight: .bold))
-                                            .foregroundColor(.tteOrange)
+                                        Group {
+                                            if let urlString = creator.profileImageUrl, let url = URL(string: urlString) {
+                                                AsyncImage(url: url) { image in
+                                                    image.resizable().scaledToFill()
+                                                } placeholder: {
+                                                    Text(String(creator.nickname.prefix(1)))
+                                                        .font(.system(size: 20, weight: .bold))
+                                                        .foregroundColor(.tteOrange)
+                                                }
+                                            } else {
+                                                Text(String(creator.nickname.prefix(1)))
+                                                    .font(.system(size: 20, weight: .bold))
+                                                    .foregroundColor(.tteOrange)
+                                            }
+                                        }
+                                        .frame(width: 56, height: 56)
+                                        .clipShape(Circle())
                                     )
                                     .overlay(
                                         Circle().stroke(
@@ -211,6 +225,7 @@ struct ExploreGridView: View {
                     }
                 }
                 .padding(.horizontal, 16)
+                .padding(.top, 4)
             }
         }
         .padding(.vertical, 12)
