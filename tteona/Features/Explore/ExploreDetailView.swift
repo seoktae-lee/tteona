@@ -240,21 +240,59 @@ struct ExploreDetailView: View {
                 .font(.system(size: 16, weight: .bold))
                 .foregroundColor(.tteDarkGray)
 
+            routeMap
+
             ForEach(Array(course.places.enumerated()), id: \.element.id) { idx, place in
-                HStack(spacing: 12) {
+                PlaceCardRow(index: idx, place: place)
+            }
+        }
+    }
+
+    // MARK: - 동선 미니 지도
+
+    private var routeMap: some View {
+        Map(initialPosition: .region(fittingRegion), interactionModes: []) {
+            if course.places.count >= 2 {
+                MapPolyline(coordinates: course.places.map(\.coordinate))
+                    .stroke(Color.tteOrange, style: StrokeStyle(lineWidth: 3, lineCap: .round, dash: [1, 6]))
+            }
+            ForEach(Array(course.places.enumerated()), id: \.element.id) { idx, place in
+                Annotation(place.placeName, coordinate: place.coordinate) {
                     ZStack {
-                        Circle().fill(Color.tteOrange).frame(width: 26, height: 26)
+                        Circle().fill(Color.tteOrange).frame(width: 24, height: 24)
                         Text("\(idx + 1)")
-                            .font(.system(size: 13, weight: .bold))
+                            .font(.system(size: 12, weight: .bold))
                             .foregroundColor(.white)
                     }
-                    Text(place.placeName)
-                        .font(.system(size: 15))
-                        .foregroundColor(.tteDarkGray)
-                    Spacer()
+                    .overlay(Circle().stroke(Color.white, lineWidth: 2))
                 }
             }
         }
+        .frame(height: 200)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .allowsHitTesting(false)
+    }
+
+    private var fittingRegion: MKCoordinateRegion {
+        let lats = course.places.map(\.latitude)
+        let lngs = course.places.map(\.longitude)
+        guard let minLat = lats.min(), let maxLat = lats.max(),
+              let minLng = lngs.min(), let maxLng = lngs.max() else {
+            return MKCoordinateRegion(
+                center: CLLocationCoordinate2D(latitude: 37.5665, longitude: 126.9780),
+                span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+            )
+        }
+        let center = CLLocationCoordinate2D(
+            latitude: (minLat + maxLat) / 2,
+            longitude: (minLng + maxLng) / 2
+        )
+        // 핀이 가장자리에 붙지 않도록 1.5배 여유, 장소가 몰려있을 때 최소 스팬 보장
+        let span = MKCoordinateSpan(
+            latitudeDelta: max((maxLat - minLat) * 1.5, 0.01),
+            longitudeDelta: max((maxLng - minLng) * 1.5, 0.01)
+        )
+        return MKCoordinateRegion(center: center, span: span)
     }
 
     // MARK: - Buttons
@@ -297,5 +335,89 @@ struct ExploreDetailView: View {
                 .allowsHitTesting(false),
             alignment: .bottom
         )
+    }
+}
+
+// MARK: - 장소 사진 카드
+
+private struct PlaceCardRow: View {
+    let index: Int
+    let place: Place
+
+    @State private var photoURL: String?
+    @State private var category: String?
+    @State private var isLoading = true
+
+    var body: some View {
+        HStack(spacing: 12) {
+            placePhoto
+                .frame(width: 84, height: 84)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    ZStack {
+                        Circle().fill(Color.tteOrange).frame(width: 20, height: 20)
+                        Text("\(index + 1)")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                    if let category {
+                        Text(category)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(.tteOrange)
+                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .background(Capsule().fill(Color.tteOrange.opacity(0.12)))
+                    }
+                }
+                Text(place.placeName)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.tteDarkGray)
+                    .lineLimit(2)
+            }
+            Spacer()
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 14).fill(Color(UIColor.secondarySystemBackground)))
+        .task {
+            photoURL = await PlacesPhotoService.shared.photoURL(for: place.placeName)
+            category = await PlacesPhotoService.shared.placeCategory(for: place.placeName)
+            isLoading = false
+        }
+    }
+
+    @ViewBuilder
+    private var placePhoto: some View {
+        if isLoading {
+            ZStack {
+                Color.tteOrange.opacity(0.08)
+                ProgressView().scaleEffect(0.8)
+            }
+        } else if let urlString = photoURL, let url = URL(string: urlString) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                case .failure:
+                    photoPlaceholder
+                default:
+                    ZStack {
+                        Color.tteOrange.opacity(0.08)
+                        ProgressView().scaleEffect(0.8)
+                    }
+                }
+            }
+        } else {
+            photoPlaceholder
+        }
+    }
+
+    private var photoPlaceholder: some View {
+        ZStack {
+            Color.tteOrange.opacity(0.08)
+            Image(systemName: "mappin.and.ellipse")
+                .font(.system(size: 24))
+                .foregroundColor(.tteOrange.opacity(0.5))
+        }
     }
 }
