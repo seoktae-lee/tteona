@@ -313,6 +313,10 @@ class RoomService: ObservableObject {
     // MARK: - 댓글 추가
     func addComment(roomId: String, feedId: String, userId: String, nickname: String, text: String,
                     replyToNickname: String? = nil, replyToText: String? = nil) async throws {
+        // 콘텐츠 모더레이션 (서버 검사, 네트워크 실패 시 통과)
+        guard await StatsService.shared.isTextAllowed(text) else {
+            throw RoomError.inappropriateContent
+        }
         let commentId = UUID().uuidString
         var data: [String: Any] = [
             "commentId": commentId,
@@ -441,10 +445,12 @@ class RoomService: ObservableObject {
 
 enum RoomError: LocalizedError {
     case roomNotFound
+    case inappropriateContent
 
     var errorDescription: String? {
         switch self {
         case .roomNotFound: return "해당 초대 코드의 방을 찾을 수 없어요."
+        case .inappropriateContent: return "부적절한 표현이 포함되어 있어 등록할 수 없어요."
         }
     }
 }

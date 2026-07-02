@@ -296,6 +296,13 @@ struct CreateCourseView: View {
         isSaving = true
         errorMessage = nil
 
+        // 콘텐츠 모더레이션 (서버 검사, 네트워크 실패 시 통과)
+        guard await StatsService.shared.isTextAllowed(name) else {
+            errorMessage = "코스 이름에 부적절한 표현이 포함되어 있어요."
+            isSaving = false
+            return
+        }
+
         let course = Course(
             courseId: UUID().uuidString,
             authorId: authService.currentUser?.uid ?? "",

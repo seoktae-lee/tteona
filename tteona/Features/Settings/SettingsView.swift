@@ -95,6 +95,13 @@ struct SettingsView: View {
                 }
             }
             .padding(.vertical, 6)
+
+            NavigationLink {
+                TravelStatsView()
+                    .environmentObject(authService)
+            } label: {
+                Label("내 여행 통계", systemImage: "chart.bar.fill")
+            }
         }
     }
 

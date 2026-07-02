@@ -33,6 +33,7 @@ class CourseService: ObservableObject {
     func saveCourse(_ course: Course) async throws {
         try db.collection("courses").document(course.courseId).setData(from: course)
         courses.insert(course, at: 0)
+        Task { await StatsService.shared.postEvent(.courseCreated, userId: course.authorId) }
     }
 
     func deleteCourse(_ course: Course) async throws {
@@ -94,6 +95,9 @@ class CourseService: ObservableObject {
                         courseName: course.courseName
                     )
                 }
+            }
+            if !alreadyLiked {
+                Task { await StatsService.shared.postEvent(.courseLiked, userId: userId) }
             }
         } catch {
             // Rollback local state on failure

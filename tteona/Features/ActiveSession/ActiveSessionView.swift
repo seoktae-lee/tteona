@@ -126,6 +126,9 @@ struct ActiveSessionView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
                 withAnimation { showArrivalBanner = false }
             }
+            if let uid = authService.currentUser?.uid {
+                Task { await StatsService.shared.postEvent(.placeVisited, userId: uid) }
+            }
         }
         .onChange(of: notificationManager.pendingPlaceName) { _, placeName in
             guard let placeName else { return }

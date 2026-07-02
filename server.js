@@ -313,6 +313,156 @@ app.get('/api/courses/:courseId', async (req, res) => {
   }
 });
 
+// ─── 사용자 통계 ──────────────────────────────────────────────────────────────
+
+// 이벤트 적재 — iOS가 코스 생성/장소 방문/좋아요/공유 시 호출 (user_stats·daily_stats 축적)
+app.post('/api/stats/event', async (req, res) => {
+  const { userId, type } = req.body;
+  const COLS = {
+    course_created: 'courses_created',
+    place_visited:  'places_visited',
+    course_liked:   'courses_liked',
+    course_shared:  'courses_shared',
+  };
+  const col = COLS[type];
+  if (!userId || !col) return res.status(400).json({ error: 'userId and valid type required' });
+
+  try {
+    await pgPool.query(`
+      INSERT INTO user_stats (user_id, stat_date, ${col}, last_active)
+      VALUES ($1, CURRENT_DATE, 1, NOW())
+      ON CONFLICT (user_id, stat_date)
+      DO UPDATE SET ${col} = user_stats.${col} + 1, last_active = NOW()
+    `, [userId]);
+
+    if (type === 'course_created') {
+      await pgPool.query(`
+        INSERT INTO daily_stats (stat_date, courses_created)
+        VALUES (CURRENT_DATE, 1)
+        ON CONFLICT (stat_date)
+        DO UPDATE SET courses_created = daily_stats.courses_created + 1, updated_at = NOW()
+      `);
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[Stats] event error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 개인 누적 여행 통계
+app.get('/api/users/:uid/stats', async (req, res) => {
+  const uid = req.params.uid;
+  try {
+    const [coursesSnap, roomsCount, pg] = await Promise.all([
+      db.collection('courses').where('authorId', '==', uid).get(),
+      db.collection('rooms').where('memberIds', 'array-contains', uid).count().get(),
+      pgPool.query(
+        `SELECT COALESCE(SUM(places_visited),0) AS visited,
+                COUNT(DISTINCT stat_date)        AS active_days
+         FROM user_stats WHERE user_id = $1`, [uid]),
+    ]);
+
+    let likesReceived = 0, placesInCourses = 0;
+    coursesSnap.docs.forEach(d => {
+      const c = d.data();
+      likesReceived   += c.likeCount || 0;
+      placesInCourses += (c.places || []).length;
+    });
+
+    res.json({
+      coursesCreated:  coursesSnap.size,
+      placesInCourses,
+      likesReceived,
+      groups:          roomsCount.data().count,
+      placesVisited:   Number(pg.rows[0].visited),
+      activeDays:      Number(pg.rows[0].active_days),
+    });
+  } catch (err) {
+    console.error('[Stats] user stats error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── 크리에이터 랭킹 ──────────────────────────────────────────────────────────
+
+// 이번 주 인기 크리에이터 TOP 10 (좋아요 합계 → 코스 수 순, 10분 캐시)
+app.get('/api/creators/ranking', async (req, res) => {
+  const cacheKey = 'creators:weekly';
+  try {
+    const cached = await pgPool.query(
+      'SELECT result FROM recommendation_cache WHERE cache_key = $1 AND expires_at > NOW()',
+      [cacheKey]
+    );
+    if (cached.rows.length > 0) return res.json(JSON.parse(cached.rows[0].result));
+
+    const coursesSnap = await db.collection('courses').limit(500).get();
+    const byAuthor = new Map();
+    coursesSnap.docs.forEach(d => {
+      const c = d.data();
+      if (!c.authorId) return;
+      const cur = byAuthor.get(c.authorId) || { likes: 0, courses: 0 };
+      cur.likes   += c.likeCount || 0;
+      cur.courses += 1;
+      byAuthor.set(c.authorId, cur);
+    });
+
+    const top = [...byAuthor.entries()]
+      .sort((a, b) => (b[1].likes - a[1].likes) || (b[1].courses - a[1].courses))
+      .slice(0, 10);
+
+    const ranking = await Promise.all(top.map(async ([uid, s], i) => {
+      const u = await db.collection('users').doc(uid).get();
+      const ud = u.exists ? u.data() : {};
+      return {
+        rank: i + 1,
+        userId: uid,
+        nickname: ud.nickname || '여행자',
+        isVerified: ud.isVerified === true,
+        likes: s.likes,
+        courses: s.courses,
+      };
+    }));
+
+    const result = { ranking };
+    await pgPool.query(
+      `INSERT INTO recommendation_cache (cache_key, result, expires_at)
+       VALUES ($1, $2, NOW() + INTERVAL '10 minutes')
+       ON CONFLICT (cache_key) DO UPDATE SET result = $2, expires_at = NOW() + INTERVAL '10 minutes'`,
+      [cacheKey, JSON.stringify(result)]
+    );
+    res.json(result);
+  } catch (err) {
+    console.error('[Creators] ranking error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── 콘텐츠 자동 모더레이션 ───────────────────────────────────────────────────
+
+const BANNED_WORDS = [
+  '시발', '씨발', 'ㅅㅂ', 'ㅆㅂ', '병신', 'ㅂㅅ', '지랄', 'ㅈㄹ', '개새끼', '새끼',
+  '좆', '존나', 'ㅈㄴ', '니미', '엠창', '느금', '꺼져', '닥쳐',
+  '섹스', '야동', '포르노', '자위', '보지', '자지', '딸딸이',
+  '도박', '토토', '카지노', '바카라', '섹파', '조건만남', '출장샵', '오피',
+  'fuck', 'shit', 'bitch', 'porn', 'sex',
+];
+
+function normalizeForModeration(text) {
+  return String(text).toLowerCase().replace(/[\s\.\,\-\_\!\?\*\@\#\$\%\^\&\(\)\[\]0-9]/g, '');
+}
+
+// POST /api/moderate  body: { text }  →  { ok, blocked, matched? }
+app.post('/api/moderate', (req, res) => {
+  const text = req.body?.text;
+  if (typeof text !== 'string') return res.status(400).json({ error: 'text required' });
+
+  const normalized = normalizeForModeration(text);
+  const matched = BANNED_WORDS.find(w => normalized.includes(normalizeForModeration(w)));
+
+  res.json({ ok: true, blocked: !!matched, ...(matched ? { matched } : {}) });
+});
+
 // ─── Push 알림 API ───────────────────────────────────────────────────────────
 
 // iOS 앱이 로그인 시 APNs device token 등록
@@ -481,7 +631,12 @@ async function fetchAndRenderCourse(courseId, res) {
         ? `장소 ${placeCount}곳 · ${placeNames.slice(0, 3).join(', ')}${placeCount > 3 ? ' 외' : ''}`
         : '떠나 앱에서 이 코스를 만나보세요';
 
-    res.send(courseHtml({ courseId, courseName, ogDescription, placeNames, placeCount }));
+    // 웹 미리보기 지도용 좌표 (스크립트 주입 방지: JSON 직렬화 후 < 이스케이프)
+    const placesCoords = places
+      .filter(p => typeof p.latitude === 'number' && typeof p.longitude === 'number')
+      .map(p => ({ name: p.placeName || '', lat: p.latitude, lng: p.longitude }));
+
+    res.send(courseHtml({ courseId, courseName, ogDescription, placeNames, placeCount, placesCoords }));
   } catch (err) {
     console.error(err);
     res.status(500).send('<h1>오류가 발생했습니다</h1>');
@@ -499,10 +654,12 @@ function escapeHtml(str) {
     .replace(/'/g, '&#x27;');
 }
 
-function courseHtml({ courseId, courseName, ogDescription, placeNames, placeCount }) {
+function courseHtml({ courseId, courseName, ogDescription, placeNames, placeCount, placesCoords = [] }) {
   const ogTitle = `${courseName} — 떠나 코스`;
   const ogUrl   = `https://tteona.kr/course/${courseId}`;
   const ogImage = 'https://tteona.kr/og-image.png';
+  const coordsJson = JSON.stringify(placesCoords).replace(/</g, '\\u003c');
+  const hasMap = placesCoords.length >= 1;
 
   const stopsHtml = placeNames.map((name, i) => {
     const side = i % 2 === 0 ? 'left' : 'right';
@@ -538,6 +695,7 @@ function courseHtml({ courseId, courseName, ogDescription, placeNames, placeCoun
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600&family=Noto+Sans+KR:wght@400;600;700;900&display=swap" rel="stylesheet">
+  ${hasMap ? '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">' : ''}
 
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -662,6 +820,40 @@ function courseHtml({ courseId, courseName, ogDescription, placeNames, placeCoun
       position: relative;
       z-index: 2;
     }
+
+    /* ── 미리보기 지도 ── */
+    .map-section {
+      padding: 28px 24px 0;
+      position: relative;
+      z-index: 2;
+    }
+    .map-eyebrow {
+      font-size: 10px;
+      font-weight: 700;
+      color: rgba(255,255,255,0.25);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+    #course-map {
+      width: 100%;
+      height: 280px;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: #0d1a20;
+    }
+    .map-pin-icon {
+      width: 26px; height: 26px; border-radius: 50%;
+      background: #FF6B35; color: #fff;
+      font-size: 12px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      border: 2px solid #fff;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.45);
+      font-family: 'Noto Sans KR', sans-serif;
+    }
+    .leaflet-container { font-family: 'Noto Sans KR', sans-serif; }
+    .leaflet-control-attribution { background: rgba(0,0,0,0.4) !important; color: rgba(255,255,255,0.4) !important; font-size: 9px !important; }
+    .leaflet-control-attribution a { color: rgba(255,255,255,0.55) !important; }
 
     /* ── 경로 맵 ── */
     .route-section {
@@ -829,6 +1021,13 @@ function courseHtml({ courseId, courseName, ogDescription, placeNames, placeCoun
 
   <div class="sep"></div>
 
+  <!-- 코스 동선 미리보기 지도 -->
+  ${hasMap ? `
+  <div class="map-section">
+    <div class="map-eyebrow">MAP PREVIEW</div>
+    <div id="course-map"></div>
+  </div>` : ''}
+
   <!-- 경로 맵 -->
   ${stopsHtml ? `
   <div class="route-section">
@@ -860,6 +1059,53 @@ function courseHtml({ courseId, courseName, ogDescription, placeNames, placeCoun
       }, 2500);
     }
   </script>
+  ${hasMap ? `
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    (function () {
+      var coords = ${coordsJson};
+      var map = L.map('course-map', {
+        zoomControl: false,
+        scrollWheelZoom: false,
+        dragging: !L.Browser.mobile,
+        tap: false,
+        attributionControl: true
+      });
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap &copy; CARTO',
+        maxZoom: 19
+      }).addTo(map);
+
+      var latlngs = coords.map(function (c) { return [c.lat, c.lng]; });
+
+      if (latlngs.length >= 2) {
+        L.polyline(latlngs, {
+          color: '#FF6B35', weight: 4, opacity: 0.9,
+          lineCap: 'round', lineJoin: 'round'
+        }).addTo(map);
+      }
+
+      coords.forEach(function (c, i) {
+        L.marker([c.lat, c.lng], {
+          icon: L.divIcon({
+            className: '',
+            html: '<div class="map-pin-icon">' + (i + 1) + '</div>',
+            iconSize: [26, 26],
+            iconAnchor: [13, 13]
+          })
+        }).addTo(map).bindPopup(
+          '<b>' + (i + 1) + '. ' + c.name.replace(/</g, '&lt;') + '</b>',
+          { closeButton: false }
+        );
+      });
+
+      if (latlngs.length === 1) {
+        map.setView(latlngs[0], 15);
+      } else {
+        map.fitBounds(L.latLngBounds(latlngs), { padding: [34, 34] });
+      }
+    })();
+  </script>` : ''}
 </body>
 </html>`;
 }

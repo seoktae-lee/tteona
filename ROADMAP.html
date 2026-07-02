@@ -1211,17 +1211,17 @@ pm2 save</div>
       </div>
       <div class="tasks">
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
             <div class="task-title">개인 여행 통계</div>
-            <div class="task-desc">총 방문 장소 수, 이동 거리, Vlog 수, 함께한 사람 수 등 누적 통계 제공</div>
+            <div class="task-desc">설정 → "내 여행 통계" 화면: 만든 코스·기록 장소·받은 좋아요·그룹·방문 장소·활동일. GET /api/users/:uid/stats + POST /api/stats/event 적재(코스 생성/장소 방문/좋아요). user_stats 축적 시작 → 주간 리포트·관리자 대시보드도 실데이터 반영.</div>
           </div>
         </div>
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
             <div class="task-title">코스 웹 미리보기 지도</div>
-            <div class="task-desc">tteona.kr/course/{id} 페이지에 Google Maps로 코스 동선 시각화, 앱 설치 유도 강화</div>
+            <div class="task-desc">tteona.kr/course/{id}에 Leaflet + CartoDB 다크 타일(무료·무키)로 동선 폴리라인 + 번호 핀 렌더링. 라이브 배포 완료.</div>
           </div>
         </div>
         <div class="task">
@@ -1239,17 +1239,17 @@ pm2 save</div>
           </div>
         </div>
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
-            <div class="task-title">크리에이터 랭킹 + 팔로우 기능 확장</div>
-            <div class="task-desc">이번 주 인기 크리에이터, 팔로우한 사람의 최신 코스 피드</div>
+            <div class="task-title">크리에이터 랭킹</div>
+            <div class="task-desc">탐색 탭 상단 "이번 주 인기 크리에이터" 가로 스트립 (TOP 10, 좋아요→코스 수 순, 10분 캐시). 팔로우 피드 확장은 팔로우 기능 도입 후 추후.</div>
           </div>
         </div>
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
             <div class="task-title">콘텐츠 자동 모더레이션</div>
-            <div class="task-desc">욕설·부적절 내용 업로드 시 사전 필터링 (WAS에서 텍스트 검사)</div>
+            <div class="task-desc">POST /api/moderate — 금칙어 정규화 매칭(공백·숫자·특수문자 우회 차단). 코스명 등록·그룹 댓글 작성 시 사전 검사, 네트워크 실패 시 통과(fail-open).</div>
           </div>
         </div>
       </div>

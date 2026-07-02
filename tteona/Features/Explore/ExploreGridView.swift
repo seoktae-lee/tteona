@@ -23,6 +23,7 @@ struct ExploreGridView: View {
     @State private var showGroups = false
     @State private var courseSessionInfo: CourseSessionInfo?
     @State private var didRefetchWithLocation = false
+    @State private var creatorRanking: [CreatorRank] = []
 
     private let columns = [
         GridItem(.flexible(), spacing: 3),
@@ -58,6 +59,9 @@ struct ExploreGridView: View {
                     emptyState
                 } else {
                     ScrollView {
+                        if !creatorRanking.isEmpty {
+                            creatorRankingStrip
+                        }
                         LazyVGrid(columns: columns, spacing: 3) {
                             ForEach(sortedCourses) { course in
                                 GridCell(course: course, thumbnailURL: thumbnails[course.courseId])
@@ -153,6 +157,65 @@ struct ExploreGridView: View {
         }
     }
 
+    // MARK: - 크리에이터 랭킹 스트립
+
+    private var creatorRankingStrip: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("이번 주 인기 크리에이터")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundColor(.tteDarkGray)
+                .padding(.horizontal, 16)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 14) {
+                    ForEach(creatorRanking) { creator in
+                        VStack(spacing: 6) {
+                            ZStack(alignment: .topLeading) {
+                                Circle()
+                                    .fill(Color.tteOrange.opacity(0.15))
+                                    .frame(width: 56, height: 56)
+                                    .overlay(
+                                        Text(String(creator.nickname.prefix(1)))
+                                            .font(.system(size: 20, weight: .bold))
+                                            .foregroundColor(.tteOrange)
+                                    )
+                                    .overlay(
+                                        Circle().stroke(
+                                            creator.rank == 1 ? Color.tteOrange : Color.clear,
+                                            lineWidth: 2
+                                        )
+                                    )
+                                Text("\(creator.rank)")
+                                    .font(.system(size: 10, weight: .heavy))
+                                    .foregroundColor(.white)
+                                    .frame(width: 18, height: 18)
+                                    .background(Circle().fill(creator.rank <= 3 ? Color.tteOrange : Color.tteMediumGray))
+                                    .offset(x: -2, y: -2)
+                            }
+                            HStack(spacing: 2) {
+                                Text(creator.nickname)
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundColor(.tteDarkGray)
+                                    .lineLimit(1)
+                                if creator.isVerified {
+                                    Image(systemName: "checkmark.seal.fill")
+                                        .font(.system(size: 9))
+                                        .foregroundColor(.tteOrange)
+                                }
+                            }
+                            Text("♥ \(creator.likes)")
+                                .font(.system(size: 10))
+                                .foregroundColor(.tteMediumGray)
+                        }
+                        .frame(width: 72)
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+        }
+        .padding(.vertical, 12)
+    }
+
     private var emptyState: some View {
         VStack(spacing: 12) {
             Spacer()
@@ -178,9 +241,11 @@ struct ExploreGridView: View {
             userId: authService.currentUser?.uid,
             lat: coord?.latitude, lng: coord?.longitude
         )
+        async let rankTask = StatsService.shared.fetchCreatorRanking()
         _ = await coursesTask
         thumbnails = await thumbsTask
         recommendedIds = await recTask
+        creatorRanking = await rankTask
         isLoading = false
     }
 
