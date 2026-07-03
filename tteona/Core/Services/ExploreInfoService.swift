@@ -81,6 +81,29 @@ actor ExploreInfoService {
         }
     }
 
+    // 서버 통합 경로 (한국 자동차=카카오모빌리티 실측, 그 외=추정). 실패 시 nil.
+    func computeServerRoute(places: [Place], mode: String) async -> RouteInfo? {
+        guard places.count >= 2, let url = URL(string: "https://tteona.kr/api/route") else { return nil }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body: [String: Any] = [
+            "mode": mode,
+            "places": places.map { ["lat": $0.latitude, "lng": $0.longitude] }
+        ]
+        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        do {
+            let (data, _) = try await URLSession.shared.data(for: req)
+            guard let j = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+            let dist = (j["distanceMeters"] as? Double) ?? Double(j["distanceMeters"] as? Int ?? 0)
+            let time = (j["travelTimeSec"] as? Double) ?? Double(j["travelTimeSec"] as? Int ?? 0)
+            guard dist > 0 else { return nil }
+            return RouteInfo(distanceMeters: dist, travelTimeSec: time)
+        } catch {
+            return nil
+        }
+    }
+
     // 코스 전체 이동거리 + 소요시간 (수단별)
     func computeRoute(places: [Place], transport: MKDirectionsTransportType) async -> RouteInfo {
         guard places.count >= 2 else { return RouteInfo(distanceMeters: 0, travelTimeSec: 0) }

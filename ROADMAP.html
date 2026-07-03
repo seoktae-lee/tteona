@@ -1407,24 +1407,24 @@ pm2 save</div>
           </div>
         </div>
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
-            <div class="task-title">3단계 — 코스 상세 동선 지도 교체</div>
-            <div class="task-desc">ExploreDetailView·CourseDetailView의 동선 미니 지도 — 번호 핀 + 경로 폴리라인 + 자동 줌(전체 장소 fit)을 Google Maps로.</div>
+            <div class="task-title">3단계 — 코스 상세 동선 지도 교체 (완료)</div>
+            <div class="task-desc">ExploreDetailView(점선)·CourseDetailView(실선·선택 하이라이트)의 동선 미니 지도 — 번호 핀(원형) + 폴리라인 + 자동 줌(전체 장소 fit). 화면별 원본 선 스타일 유지.</div>
           </div>
         </div>
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
-            <div class="task-title">4단계 — 동행 실시간 위치 지도 교체 (ActiveSessionView)</div>
-            <div class="task-desc">WebSocket 실시간 멤버 위치를 Google Maps 위에 렌더. 나·멤버 마커 갱신.</div>
+            <div class="task-title">4단계 — 동행 실시간 위치 지도 교체 (완료)</div>
+            <div class="task-desc">ActiveSessionView·ImpromptuSessionView("나의 오늘") 모두 Google Maps로. 코스 핀(방문/현재/일반)·멤버 위치 핀은 기존 SwiftUI 디자인을 이미지 렌더로 그대로 유지. LocationSocketService 관찰 추가로 멤버 실시간 위치 갱신 버그도 수정. 좌표 변경이 마커 갱신 트리거.</div>
           </div>
         </div>
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
-            <div class="task-title">5단계 — 생성/검색 미니 지도 교체 (CreateCourse·PlaceSearch)</div>
-            <div class="task-desc">코스 생성·장소 선택 화면의 지도. 남은 MapKit 사용처 정리.</div>
+            <div class="task-title">5단계 — 생성/검색 미니 지도 교체 (완료) — 라이브 지도 100% 구글맵</div>
+            <div class="task-desc">CreateCourseView 미리보기 지도 Google로, PlaceSearchView MapKit 의존 제거(검색은 카카오). 이로써 앱 내 모든 라이브 지도(홈·탐색상세·코스상세·동행·나의오늘·생성) = Google Maps. FeedCommentView 구 지도는 죽은 코드(미사용).</div>
           </div>
         </div>
 

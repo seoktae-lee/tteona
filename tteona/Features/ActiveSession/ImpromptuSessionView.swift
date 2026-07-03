@@ -1,5 +1,5 @@
 import SwiftUI
-import MapKit
+import GoogleMaps
 import CoreLocation
 
 struct ImpromptuSessionView: View {
@@ -15,7 +15,8 @@ struct ImpromptuSessionView: View {
     private let activityManager = TodaySessionActivityManager.shared
 
     @State private var capturedPlaces: [Place] = []
-    @State private var cameraPosition: MapCameraPosition = .userLocation(fallback: .automatic)
+    @State private var cameraCommand: GMSCameraPosition?
+    @State private var didCenterOnUser = false
     @State private var isResolvingLocation = false
     @State private var isSavingClip = false
     @State private var resolvedLocation: CLLocation? = nil
@@ -79,6 +80,13 @@ struct ImpromptuSessionView: View {
             locationService.stopContinuousUpdates()
             activityManager.end()
             locationTask?.cancel()
+        }
+        .onChange(of: locationService.currentLocation) { _, loc in
+            // 위치 첫 확보 시 내 위치로 카메라 이동 (이후엔 유저가 자유롭게 이동)
+            guard let loc, !didCenterOnUser else { return }
+            didCenterOnUser = true
+            cameraCommand = GMSCameraPosition(latitude: loc.coordinate.latitude,
+                                              longitude: loc.coordinate.longitude, zoom: 15)
         }
         .sheet(isPresented: $showResumeSheet) {
             resumeSheet
@@ -175,20 +183,16 @@ struct ImpromptuSessionView: View {
 
     // MARK: - Map
     private var mapLayer: some View {
-        Map(position: $cameraPosition) {
-            UserAnnotation()
-            ForEach(capturedPlaces) { place in
-                Annotation(place.placeName, coordinate: place.coordinate) {
-                    FreeSessionPin(order: place.order)
-                }
-            }
-            if capturedPlaces.count >= 2 {
-                MapPolyline(coordinates: capturedPlaces.map(\.coordinate))
-                    .stroke(Color.tteOrange.opacity(0.6),
-                            style: StrokeStyle(lineWidth: 2.5, dash: [6, 4]))
-            }
-        }
-        .mapStyle(.standard)
+        GoogleMapView(
+            markers: capturedPlaces.map { GoogleMapMarker(id: $0.id, coordinate: $0.coordinate, badgeNumber: $0.order) },
+            polyline: capturedPlaces.count >= 2 ? capturedPlaces.map(\.coordinate) : nil,
+            dashedPolyline: true,
+            showsUserLocation: true,   // 내 위치는 구글맵 기본 파란 점
+            initialCamera: locationService.currentLocation.map {
+                GMSCameraPosition(latitude: $0.coordinate.latitude, longitude: $0.coordinate.longitude, zoom: 15)
+            },
+            cameraCommand: $cameraCommand
+        )
     }
 
     // MARK: - Top Bar

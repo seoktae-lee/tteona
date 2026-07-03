@@ -1,5 +1,6 @@
 import SwiftUI
-import MapKit
+import GoogleMaps
+import CoreLocation
 import PhotosUI
 
 struct CreateCourseView: View {
@@ -17,12 +18,7 @@ struct CreateCourseView: View {
     @State private var thumbnailItem: PhotosPickerItem?
     @State private var thumbnailImage: UIImage?
     @State private var mapCenter: CLLocationCoordinate2D = CLLocationCoordinate2D(latitude: 37.5665, longitude: 126.9780)
-    @State private var cameraPosition: MapCameraPosition = .region(
-        MKCoordinateRegion(
-            center: CLLocationCoordinate2D(latitude: 37.5665, longitude: 126.9780),
-            span: MKCoordinateSpan(latitudeDelta: 0.1, longitudeDelta: 0.1)
-        )
-    )
+    @State private var cameraCommand: GMSCameraPosition?
 
     var body: some View {
         NavigationStack {
@@ -166,23 +162,16 @@ struct CreateCourseView: View {
         VStack(alignment: .leading, spacing: 10) {
             SectionLabel("코스 지도 미리보기")
 
-            Map(position: $cameraPosition) {
-                ForEach(places) { place in
-                    Annotation(place.placeName, coordinate: place.coordinate) {
-                        PlacePin(order: place.order)
-                    }
-                }
-                if places.count >= 2 {
-                    MapPolyline(coordinates: places.map(\.coordinate))
-                        .stroke(Color.tteOrange, lineWidth: 2)
-                }
-            }
+            GoogleMapView(
+                markers: places.map { GoogleMapMarker(id: $0.id, coordinate: $0.coordinate, badgeNumber: $0.order) },
+                polyline: places.count >= 2 ? places.map(\.coordinate) : nil,
+                initialCamera: GMSCameraPosition(latitude: 37.5665, longitude: 126.9780, zoom: 11),
+                interactive: false,
+                cameraCommand: $cameraCommand,
+                onCameraIdle: { pos in mapCenter = pos.target }
+            )
             .frame(height: 200)
             .clipShape(RoundedRectangle(cornerRadius: 16))
-            .disabled(true)
-            .onMapCameraChange { context in
-                mapCenter = context.region.center
-            }
         }
     }
 
@@ -269,23 +258,9 @@ struct CreateCourseView: View {
     private func updateMapCamera(places: [Place]) {
         guard !places.isEmpty else { return }
         if places.count == 1 {
-            cameraPosition = .region(MKCoordinateRegion(
-                center: places[0].coordinate,
-                span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)
-            ))
+            cameraCommand = GMSCameraPosition(latitude: places[0].latitude, longitude: places[0].longitude, zoom: 14)
         } else {
-            let lats = places.map(\.latitude)
-            let lons = places.map(\.longitude)
-            cameraPosition = .region(MKCoordinateRegion(
-                center: CLLocationCoordinate2D(
-                    latitude: ((lats.min() ?? 0) + (lats.max() ?? 0)) / 2,
-                    longitude: ((lons.min() ?? 0) + (lons.max() ?? 0)) / 2
-                ),
-                span: MKCoordinateSpan(
-                    latitudeDelta: max(((lats.max() ?? 0) - (lats.min() ?? 0)) * 2, 0.02),
-                    longitudeDelta: max(((lons.max() ?? 0) - (lons.min() ?? 0)) * 2, 0.02)
-                )
-            ))
+            cameraCommand = GoogleMapView.fittingCamera(for: places.map(\.coordinate))
         }
     }
 

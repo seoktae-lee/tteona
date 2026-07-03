@@ -283,6 +283,7 @@ app.post('/api/users/:uid/avatar', upload.single('image'), async (req, res) => {
 // ─── 대중교통 경로 (ODsay) ─────────────────────────────────────────────────────
 
 const ODSAY_KEY = process.env.ODSAY_KEY || 'R7vAt5tF3lN95klpZbaWvSXMA7g+TtjbHT+4shfEgQ4';
+const KAKAO_REST_KEY = process.env.KAKAO_REST_KEY || 'b31c03c128d37a877e6cb407f59b8911';
 
 // 두 지점 간 대중교통 소요시간/거리 (실패 시 도보 추정 폴백)
 async function odsayLeg(sLat, sLng, eLat, eLng) {
@@ -743,6 +744,87 @@ app.get('/api/places/tour-photo', async (req, res) => {
     }
   } catch (err) {
     console.error('[TourPhoto] error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── 통합 경로 (지역 분기: 한국 자동차=카카오모빌리티, 그 외=추정) ───────────────
+
+function isKorea(lat, lng) {
+  return lat >= 33 && lat <= 39.5 && lng >= 124 && lng <= 132;
+}
+
+// 카카오모빌리티 자동차 한 구간 (실패 시 null)
+async function kakaoCarLeg(sLat, sLng, eLat, eLng) {
+  const url = `https://apis-navi.kakaomobility.com/v1/directions`
+    + `?origin=${sLng},${sLat}&destination=${eLng},${eLat}`;
+  try {
+    const r = await fetch(url, { headers: { Authorization: `KakaoAK ${KAKAO_REST_KEY}` } });
+    const j = await r.json();
+    const route = j?.routes?.[0];
+    if (route && route.result_code === 0 && route.summary) {
+      return { distanceMeters: route.summary.distance, travelTimeSec: route.summary.duration };
+    }
+  } catch (e) {
+    console.error('[Route] kakao leg error:', e.message);
+  }
+  return null;
+}
+
+// POST /api/route  body: { places: [{lat,lng}, ...], mode: 'car'|'walk' }
+app.post('/api/route', async (req, res) => {
+  const places = Array.isArray(req.body?.places) ? req.body.places : [];
+  const mode = req.body?.mode === 'walk' ? 'walk' : 'car';
+  if (places.length < 2) return res.json({ distanceMeters: 0, travelTimeSec: 0, source: 'none' });
+
+  const cacheKey = `route:${mode}:` + places
+    .map(p => `${Number(p.lat).toFixed(4)},${Number(p.lng).toFixed(4)}`).join(';');
+
+  try {
+    const cached = await pgPool.query(
+      'SELECT result FROM recommendation_cache WHERE cache_key = $1 AND expires_at > NOW()',
+      [cacheKey]
+    );
+    if (cached.rows.length > 0) return res.json(JSON.parse(cached.rows[0].result));
+
+    const first = places[0];
+    const useKakao = mode === 'car' && isKorea(Number(first.lat), Number(first.lng));
+    const walkSpeed = 4500 / 3600;   // 4.5km/h
+    const carSpeed  = 40000 / 3600;  // 40km/h(도심 평균)
+
+    let totalDist = 0, totalTime = 0;
+    let source = useKakao ? 'kakao' : 'estimate';
+
+    for (let i = 0; i < places.length - 1; i++) {
+      const a = places[i], b = places[i + 1];
+      let leg = null;
+      if (useKakao) leg = await kakaoCarLeg(Number(a.lat), Number(a.lng), Number(b.lat), Number(b.lng));
+      if (leg) {
+        totalDist += leg.distanceMeters;
+        totalTime += leg.travelTimeSec;
+      } else {
+        // 폴백: 직선거리 × 평균속도
+        const d = haversineKm(Number(a.lat), Number(a.lng), Number(b.lat), Number(b.lng)) * 1000;
+        totalDist += d;
+        totalTime += d / (mode === 'walk' ? walkSpeed : carSpeed);
+        source = 'estimate';
+      }
+    }
+
+    const result = {
+      distanceMeters: Math.round(totalDist),
+      travelTimeSec:  Math.round(totalTime),
+      source,
+    };
+    await pgPool.query(
+      `INSERT INTO recommendation_cache (cache_key, result, expires_at)
+       VALUES ($1, $2, NOW() + INTERVAL '1 day')
+       ON CONFLICT (cache_key) DO UPDATE SET result = $2, expires_at = NOW() + INTERVAL '1 day'`,
+      [cacheKey, JSON.stringify(result)]
+    );
+    res.json(result);
+  } catch (err) {
+    console.error('[Route] error:', err);
     res.status(500).json({ error: err.message });
   }
 });

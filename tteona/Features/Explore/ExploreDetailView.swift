@@ -49,7 +49,12 @@ struct ExploreDetailView: View {
             if let main = course.mainPlace {
                 weather = await ExploreInfoService.shared.fetchWeather(lat: main.latitude, lng: main.longitude)
             }
-            carRoute  = await ExploreInfoService.shared.computeRoute(places: course.places, transport: .automobile)
+            // 자동차: 서버 실측(한국=카카오모빌리티) 우선, 실패 시 로컬 추정 폴백
+            if let serverCar = await ExploreInfoService.shared.computeServerRoute(places: course.places, mode: "car") {
+                carRoute = serverCar
+            } else {
+                carRoute = await ExploreInfoService.shared.computeRoute(places: course.places, transport: .automobile)
+            }
             walkRoute = await ExploreInfoService.shared.computeRoute(places: course.places, transport: .walking)
             isLoadingRoute = false
             transitRoute = await ExploreInfoService.shared.computeTransitRoute(places: course.places)
