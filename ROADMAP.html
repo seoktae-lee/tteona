@@ -983,8 +983,8 @@ pm2 save</div>
         <div class="task">
           <div class="task-check done"></div>
           <div class="task-content">
-            <div class="task-title">그룹 실시간 채팅 + 오프라인 푸시 — 서버 배포 완료</div>
-            <div class="task-desc">기존 "피드+댓글"(Firestore·비동기)을 방 전체 단톡(WebSocket·실시간)으로 교체. server.js WS에 chat 타입 추가(PostgreSQL room_messages 저장 + 방 전체 브로드캐스트 + clientMsgId 낙관적 확정), GET /api/rooms/:id/messages 히스토리. iOS ChatSocketService·GroupChatView 신규, RoomDetailView가 멤버별 댓글 스레드 대신 단톡 표시(여행 활동은 시스템 메시지로 삽입). 카톡처럼 접속 안 한 멤버에게 "닉네임: 메시지" APNs 푸시(발신자·접속중 멤버 제외, 방 정보 5분 캐시, 무료). 알림 탭 시 해당 방 열림(type:'chat'). 2클라이언트 E2E(브로드캐스트·에코·DB저장·푸시경로) 통과. iOS 반영은 앱스토어 업데이트 대기.</div>
+            <div class="task-title">그룹 실시간 채팅 (단톡·푸시·답장·이모지반응) — 서버 배포 완료</div>
+            <div class="task-desc">기존 "피드+댓글"(Firestore·비동기)을 방 전체 단톡(WebSocket·실시간)으로 교체. server.js WS에 chat 타입(room_messages 저장 + 방 전체 브로드캐스트 + 메시지별 messageId uuid 부여 + clientMsgId 낙관적 확정), GET /api/rooms/:id/messages 히스토리. iOS ChatSocketService·GroupChatView 신규, RoomDetailView가 단톡 표시(여행 활동은 시스템 메시지로 삽입). ①오프라인 푸시: 접속 안 한 멤버에게 "닉네임: 메시지" APNs(발신자·접속중 제외, 5분 캐시, 무료), 탭 시 방 열림(type:'chat'). ②답장: 꾹 눌러 인용(reply_to 컬럼, 버블 인용블록 + 입력창 프리뷰), 인용블록 탭→원본 스크롤+하이라이트. ③이모지 반응: 꾹 눌러 👍❤️😂😮😢👏 토글(room_message_reactions 테이블, 실시간 브로드캐스트, 버블 하단 반응칩). 2클라이언트 E2E(채팅·푸시·답장·반응토글·히스토리) 전부 통과. iOS 반영은 앱스토어 업데이트 대기.</div>
           </div>
         </div>
       </div>

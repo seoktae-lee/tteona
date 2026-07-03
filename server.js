@@ -11,6 +11,7 @@ const multer = require('multer');
 const sharp  = require('sharp');
 const path   = require('path');
 const fs     = require('fs');
+const { randomUUID } = require('crypto');
 const { initializeApp, cert } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
 
@@ -757,12 +758,27 @@ app.get('/api/rooms/:roomId/messages', async (req, res) => {
     let where = 'room_id = $1';
     if (before) { params.splice(1, 0, before); where += ' AND created_at < $2'; }
     const result = await pgPool.query(
-      `SELECT id, user_id, nickname, text, created_at
+      `SELECT id, message_id, user_id, nickname, text, reply_to_nickname, reply_to_text, created_at
        FROM room_messages WHERE ${where}
        ORDER BY created_at DESC LIMIT $${params.length}`,
       params
     );
-    res.json({ messages: result.rows.reverse() });
+    const rows = result.rows.reverse();
+
+    // 반응 병합
+    const ids = rows.map(r => r.message_id).filter(Boolean);
+    if (ids.length > 0) {
+      const rx = await pgPool.query(
+        'SELECT message_id, emoji, user_id FROM room_message_reactions WHERE message_id = ANY($1)',
+        [ids]
+      );
+      const byMsg = {};
+      rx.rows.forEach(r => {
+        (byMsg[r.message_id] = byMsg[r.message_id] || []).push({ emoji: r.emoji, userId: r.user_id });
+      });
+      rows.forEach(r => { r.reactions = byMsg[r.message_id] || []; });
+    }
+    res.json({ messages: rows });
   } catch (err) {
     console.error('[RoomMessages] error:', err);
     res.status(500).json({ error: err.message });
@@ -1550,23 +1566,30 @@ wss.on('connection', (ws) => {
       const text = (msg.text || '').toString().slice(0, 2000).trim();
       if (!text) return;
       const clientMsgId = msg.clientMsgId || null;  // 발신자 중복 제거용
+      const messageId = randomUUID();  // 반응·답장 기준이 되는 안정적 고유 ID
+      // 답장(인용) 정보 — 상대 메시지 꾹 눌러 답장 시
+      const replyToNickname = msg.replyToNickname ? String(msg.replyToNickname).slice(0, 60) : null;
+      const replyToText     = msg.replyToText ? String(msg.replyToText).slice(0, 200) : null;
       const createdAt = new Date();
 
       // 저장 (fire-and-forget, 실패해도 브로드캐스트는 진행)
       pgPool.query(
-        `INSERT INTO room_messages (room_id, user_id, nickname, text, created_at)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [ws.roomId, ws.userId, ws.nickname, text, createdAt]
+        `INSERT INTO room_messages (message_id, room_id, user_id, nickname, text, reply_to_nickname, reply_to_text, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [messageId, ws.roomId, ws.userId, ws.nickname, text, replyToNickname, replyToText, createdAt]
       ).catch(e => console.error('[WS chat] persist error:', e.message));
 
       const payload = JSON.stringify({
-        type:        'chat',
-        roomId:      ws.roomId,
-        userId:      ws.userId,
-        nickname:    ws.nickname,
+        type:            'chat',
+        messageId,
+        roomId:          ws.roomId,
+        userId:          ws.userId,
+        nickname:        ws.nickname,
         text,
+        replyToNickname,
+        replyToText,
         clientMsgId,
-        ts:          createdAt.getTime(),
+        ts:              createdAt.getTime(),
       });
       const room = wsRooms.get(ws.roomId);
       const connected = new Set();
@@ -1579,6 +1602,36 @@ wss.on('connection', (ws) => {
       }
       // 접속 안 한 멤버에게만 APNs 푸시 (카톡처럼 "닉네임: 메시지")
       pushChatToOfflineMembers(ws.roomId, ws.userId, ws.nickname, text, connected);
+    }
+
+    // 이모지 반응 토글 — 있으면 제거, 없으면 추가 후 방 전체에 브로드캐스트
+    if (msg.type === 'reaction' && ws.roomId) {
+      const messageId = String(msg.messageId || '');
+      const emoji = String(msg.emoji || '').slice(0, 8);
+      if (!messageId || !emoji) return;
+      const roomId = ws.roomId, userId = ws.userId;
+      (async () => {
+        try {
+          const del = await pgPool.query(
+            'DELETE FROM room_message_reactions WHERE message_id = $1 AND user_id = $2 AND emoji = $3',
+            [messageId, userId, emoji]
+          );
+          let added = false;
+          if (del.rowCount === 0) {
+            await pgPool.query(
+              `INSERT INTO room_message_reactions (message_id, user_id, emoji)
+               VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+              [messageId, userId, emoji]
+            );
+            added = true;
+          }
+          const payload = JSON.stringify({ type: 'reaction', messageId, emoji, userId, added });
+          const room = wsRooms.get(roomId);
+          if (room) room.forEach(c => { if (c.readyState === WebSocket.OPEN) c.send(payload); });
+        } catch (e) {
+          console.error('[WS reaction] error:', e.message);
+        }
+      })();
     }
 
     if (msg.type === 'leave') wsLeaveRoom(ws);

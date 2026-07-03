@@ -28,7 +28,13 @@ struct GroupChatView: View {
 
     @StateObject private var chat = ChatSocketService()
     @State private var draft = ""
+    @State private var replyingTo: ChatMessage?
+    @State private var scrollTargetId: String?
+    @State private var highlightedId: String?
     @FocusState private var inputFocused: Bool
+
+    // 카톡 스타일 빠른 반응 이모지
+    private let quickEmojis = ["👍", "❤️", "😂", "😮", "😢", "👏"]
 
     private var uid: String { authService.currentUser?.uid ?? "" }
     private var myNickname: String { userService.currentUser?.nickname ?? "멤버" }
@@ -47,8 +53,17 @@ struct GroupChatView: View {
                         ForEach(entries) { entry in
                             switch entry {
                             case .message(let m):
-                                ChatBubble(message: m, isMine: m.userId == uid)
-                                    .id(entry.id)
+                                ChatBubble(
+                                    message: m,
+                                    isMine: m.userId == uid,
+                                    myUserId: uid,
+                                    quickEmojis: quickEmojis,
+                                    highlighted: highlightedId == m.id,
+                                    onReply: { replyingTo = m; inputFocused = true },
+                                    onReact: { emoji in chat.toggleReaction(messageId: m.id, emoji: emoji) },
+                                    onQuoteTap: { scrollToOriginal(of: m) }
+                                )
+                                .id(entry.id)
                             case .system(let f):
                                 SystemMessageRow(text: GroupChatView.systemText(for: f))
                                     .id(entry.id)
@@ -61,6 +76,11 @@ struct GroupChatView: View {
                 }
                 .onChange(of: entries.count) { _, _ in
                     withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo("BOTTOM", anchor: .bottom) }
+                }
+                .onChange(of: scrollTargetId) { _, target in
+                    guard let target else { return }
+                    withAnimation(.easeInOut(duration: 0.25)) { proxy.scrollTo("m_\(target)", anchor: .center) }
+                    scrollTargetId = nil
                 }
                 .onAppear {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
@@ -88,32 +108,64 @@ struct GroupChatView: View {
     // MARK: - 입력 바
 
     private var inputBar: some View {
-        HStack(spacing: 10) {
-            TextField("메시지 입력...", text: $draft, axis: .vertical)
-                .lineLimit(1...4)
-                .font(.system(size: 15))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(RoundedRectangle(cornerRadius: 20).fill(Color(UIColor.secondarySystemBackground)))
-                .focused($inputFocused)
-
-            Button {
-                send()
-            } label: {
-                Image(systemName: "arrow.up")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(.white)
-                    .frame(width: 38, height: 38)
-                    .background(Circle().fill(canSend ? Color.tteOrange : Color.tteMediumGray.opacity(0.4)))
+        VStack(spacing: 0) {
+            if let reply = replyingTo {
+                replyPreview(reply)
             }
-            .disabled(!canSend)
+            HStack(spacing: 10) {
+                TextField("메시지 입력...", text: $draft, axis: .vertical)
+                    .lineLimit(1...4)
+                    .font(.system(size: 15))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(RoundedRectangle(cornerRadius: 20).fill(Color(UIColor.secondarySystemBackground)))
+                    .focused($inputFocused)
+
+                Button {
+                    send()
+                } label: {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.white)
+                        .frame(width: 38, height: 38)
+                        .background(Circle().fill(canSend ? Color.tteOrange : Color.tteMediumGray.opacity(0.4)))
+                }
+                .disabled(!canSend)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
         .background(
             Color.tteBackground
                 .overlay(Rectangle().fill(Color(UIColor.separator)).frame(height: 0.5), alignment: .top)
         )
+    }
+
+    // 답장 대상 미리보기 (입력창 위)
+    private func replyPreview(_ reply: ChatMessage) -> some View {
+        HStack(spacing: 10) {
+            Rectangle().fill(Color.tteOrange).frame(width: 3).cornerRadius(2)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(reply.nickname)님에게 답장")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.tteOrange)
+                Text(reply.text)
+                    .font(.system(size: 12))
+                    .foregroundColor(.tteMediumGray)
+                    .lineLimit(1)
+            }
+            Spacer()
+            Button {
+                replyingTo = nil
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 18))
+                    .foregroundColor(.tteMediumGray.opacity(0.6))
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 10)
+        .padding(.bottom, 2)
     }
 
     private var canSend: Bool {
@@ -123,7 +175,18 @@ struct GroupChatView: View {
     private func send() {
         let text = draft
         draft = ""
-        chat.sendChat(text)
+        chat.sendChat(text, replyTo: replyingTo)
+        replyingTo = nil
+    }
+
+    // 답장 인용 블록 탭 → 원본 메시지로 스크롤 + 잠깐 하이라이트
+    private func scrollToOriginal(of reply: ChatMessage) {
+        guard let targetId = chat.originalMessageId(for: reply) else { return }
+        scrollTargetId = targetId
+        withAnimation { highlightedId = targetId }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+            withAnimation { if highlightedId == targetId { highlightedId = nil } }
+        }
     }
 
     // MARK: - 피드 → 시스템 메시지 텍스트
@@ -146,6 +209,12 @@ struct GroupChatView: View {
 private struct ChatBubble: View {
     let message: ChatMessage
     let isMine: Bool
+    let myUserId: String
+    var quickEmojis: [String] = []
+    var highlighted: Bool = false
+    var onReply: () -> Void = {}
+    var onReact: (String) -> Void = { _ in }
+    var onQuoteTap: () -> Void = {}
 
     var body: some View {
         HStack {
@@ -159,20 +228,93 @@ private struct ChatBubble: View {
                 }
                 HStack(alignment: .bottom, spacing: 5) {
                     if isMine { timeLabel }
-                    Text(message.text)
-                        .font(.system(size: 15))
-                        .foregroundColor(isMine ? .white : .tteDarkGray)
-                        .padding(.horizontal, 13)
-                        .padding(.vertical, 9)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(isMine ? Color.tteOrange.opacity(message.pending ? 0.55 : 1.0)
-                                             : Color(UIColor.secondarySystemBackground))
-                        )
+                    bubbleBody
                     if !isMine { timeLabel }
                 }
+                reactionChips
             }
             if !isMine { Spacer(minLength: 40) }
+        }
+    }
+
+    private var bubbleBody: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // 인용된 원본 (답장인 경우) — 탭하면 원본으로 이동
+            if message.hasReply {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(message.replyToNickname ?? "")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(isMine ? .white.opacity(0.9) : .tteOrange)
+                    Text(message.replyToText ?? "")
+                        .font(.system(size: 12))
+                        .foregroundColor(isMine ? .white.opacity(0.75) : .tteMediumGray)
+                        .lineLimit(2)
+                }
+                .padding(.horizontal, 9)
+                .padding(.vertical, 6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(isMine ? Color.white.opacity(0.18) : Color.black.opacity(0.05))
+                )
+                .padding(.bottom, 4)
+                .contentShape(Rectangle())
+                .onTapGesture { onQuoteTap() }
+            }
+            Text(message.text)
+                .font(.system(size: 15))
+                .foregroundColor(isMine ? .white : .tteDarkGray)
+        }
+        .padding(.horizontal, 13)
+        .padding(.vertical, 9)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(isMine ? Color.tteOrange.opacity(message.pending ? 0.55 : 1.0)
+                             : Color(UIColor.secondarySystemBackground))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.tteOrange, lineWidth: highlighted ? 2.5 : 0)
+        )
+        .contextMenu {
+            ForEach(quickEmojis, id: \.self) { emoji in
+                Button { onReact(emoji) } label: { Text("\(emoji)  반응") }
+            }
+            Divider()
+            Button { onReply() } label: { Label("답장", systemImage: "arrowshape.turn.up.left") }
+            Button { UIPasteboard.general.string = message.text } label: {
+                Label("복사", systemImage: "doc.on.doc")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var reactionChips: some View {
+        let chips = message.reactionChips(myUserId: myUserId)
+        if !chips.isEmpty {
+            HStack(spacing: 4) {
+                ForEach(chips, id: \.emoji) { chip in
+                    Button { onReact(chip.emoji) } label: {
+                        HStack(spacing: 3) {
+                            Text(chip.emoji).font(.system(size: 12))
+                            Text("\(chip.count)")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(chip.mine ? .tteOrange : .tteMediumGray)
+                        }
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(
+                            Capsule().fill(chip.mine ? Color.tteOrange.opacity(0.15)
+                                                     : Color(UIColor.secondarySystemBackground))
+                        )
+                        .overlay(
+                            Capsule().stroke(chip.mine ? Color.tteOrange.opacity(0.5) : Color.clear, lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.top, 1)
         }
     }
 
