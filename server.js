@@ -138,6 +138,7 @@ app.get('/api/courses/recommend', async (req, res) => {
     }
 
     const now = Date.now();
+    const season = currentSeason();  // 서버 타임존(Asia/Seoul) 기준 현재 계절
 
     const scored = courses.map(c => {
       let score = 0;
@@ -164,11 +165,18 @@ app.get('/api/courses/recommend', async (req, res) => {
       // 태그 선호 (0–10점)
       if (tag && c.tag === tag) score += 10;
 
+      // 시즌 매칭 (0–18점): 코스명·장소명에 현재 계절 키워드 포함 시
+      const haystack = (c.courseName || '') + ' ' + (c.places || []).map(p => p.placeName || '').join(' ');
+      if (season.words.some(w => haystack.includes(w))) score += 18;
+
       return { courseId: c.courseId, score };
     });
 
     scored.sort((a, b) => b.score - a.score);
-    const result = { courseIds: scored.slice(0, parseInt(limit)).map(s => s.courseId) };
+    const result = {
+      courseIds: scored.slice(0, parseInt(limit)).map(s => s.courseId),
+      season: season.name,
+    };
 
     await pgPool.query(
       `INSERT INTO recommendation_cache (cache_key, result, expires_at)
@@ -1552,6 +1560,15 @@ app.post('/api/admin/users/:uid/unblock', adminAuth, async (req, res) => {
 });
 
 // ─── Haversine ────────────────────────────────────────────────────────────────
+
+// 현재 계절 + 계절 키워드 (서버 타임존 Asia/Seoul 기준)
+function currentSeason() {
+  const m = new Date().getMonth() + 1; // 1–12
+  if (m >= 3 && m <= 5)  return { name: '봄',   words: ['벚꽃', '꽃', '봄', '유채', '튤립', '꽃놀이', '봄나들이'] };
+  if (m >= 6 && m <= 8)  return { name: '여름', words: ['해변', '바다', '해수욕', '계곡', '물놀이', '수영', '워터', '섬', '피서'] };
+  if (m >= 9 && m <= 11) return { name: '가을', words: ['단풍', '억새', '가을', '코스모스', '국화', '낙엽'] };
+  return { name: '겨울', words: ['야경', '눈', '스키', '온천', '겨울', '일루미네이션', '조명', '불빛', '눈꽃'] };
+}
 
 function haversineKm(lat1, lng1, lat2, lng2) {
   const R = 6371;

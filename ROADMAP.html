@@ -917,10 +917,10 @@ pm2 save</div>
           </div>
         </div>
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
-            <div class="task-title">1순위 — 시즌 추천 (봄 벚꽃, 여름 해변, 가을 단풍, 겨울 야경)</div>
-            <div class="task-desc">신규 UI 불필요. 기존 스코어링 공식에 시즌 가중치 +10점 추가 (코스 태그/장소명에 계절 키워드 매칭). 서버만 수정, 배포 즉시 탐색 탭 "추천순"에 반영. 예상 반나절.</div>
+            <div class="task-title">1순위 — 시즌 추천 (봄 벚꽃, 여름 해변, 가을 단풍, 겨울 야경) — 배포 완료·라이브</div>
+            <div class="task-desc">서버 타임존 기준 currentSeason() 판정 + 추천 스코어링에 시즌 매칭 +18점(코스명·장소명 계절 키워드). 응답에 season 필드 추가. 서버만 수정이라 앱 업데이트 없이 즉시 탐색 탭 "추천순"에 반영(현재 7월=여름 → 해변·계곡 코스 상위). 검증 완료.</div>
           </div>
         </div>
         <div class="task">
@@ -1430,10 +1430,10 @@ pm2 save</div>
 
         <div class="task-group-title">경로 정확도 — 서버 지역 분기</div>
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
-            <div class="task-title">6단계 — 통합 경로 API (WAS /api/route)</div>
-            <div class="task-desc">좌표가 한국이면 ODsay(대중교통·연동됨)+카카오모빌리티/T맵(자동차·도보), 해외면 Google Directions로 서버가 분기. 앱은 단일 엔드포인트만 호출. iOS의 MKDirections 어림값 제거 → 실제 도로 거리·시간. 결과 PostgreSQL 캐싱(비용 억제).</div>
+            <div class="task-title">6단계 — 통합 경로 API (WAS /api/route) — 자동차 실측 완료</div>
+            <div class="task-desc">POST /api/route: 좌표가 한국이면 자동차=카카오모빌리티 구간별 실측 합산(기존 카카오 키·무료), 해외/실패 시 직선거리 추정 폴백. PostgreSQL 1일 캐싱. iOS 자동차 이동시간이 서버 실측 우선(로컬 폴백). 대중교통은 이미 ODsay. E2E(서울 실측 12.5km/27분·캐시·해외폴백) 통과. 남은 것: 도보 실측(Tmap 보행자 API 필요), 해외 자동차(서버용 Google Directions 키 필요) — 추후.</div>
           </div>
         </div>
 
