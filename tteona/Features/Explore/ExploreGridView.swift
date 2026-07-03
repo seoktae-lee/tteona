@@ -26,9 +26,8 @@ struct ExploreGridView: View {
     @State private var creatorRanking: [CreatorRank] = []
 
     private let columns = [
-        GridItem(.flexible(), spacing: 3),
-        GridItem(.flexible(), spacing: 3),
-        GridItem(.flexible(), spacing: 3),
+        GridItem(.flexible(), spacing: 8),
+        GridItem(.flexible(), spacing: 8),
     ]
 
     private var sortedCourses: [Course] {
@@ -62,12 +61,14 @@ struct ExploreGridView: View {
                         if !creatorRanking.isEmpty {
                             creatorRankingStrip
                         }
-                        LazyVGrid(columns: columns, spacing: 3) {
+                        LazyVGrid(columns: columns, spacing: 8) {
                             ForEach(sortedCourses) { course in
                                 GridCell(course: course, thumbnailURL: thumbnails[course.courseId])
                                     .onTapGesture { selectedCourse = course }
                             }
                         }
+                        .padding(.horizontal, 12)
+                        .padding(.top, 4)
                     }
                 }
             }
@@ -287,46 +288,64 @@ private struct GridCell: View {
     private var hasCustomThumbnail: Bool { thumbnailURL != nil }
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
-            Color(UIColor.secondarySystemBackground)
-
-            if let url = thumbnailURL.flatMap(URL.init) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image.resizable().scaledToFill()
-                    case .failure:
-                        placeOrDefaultThumbnail
-                    default:
-                        Color(UIColor.secondarySystemBackground)
-                    }
+        // Color로 열 너비에 맞는 3:4 세로 카드를 확정 → 이미지는 카드 크기에 맞춰 클립하고,
+        // 그라디언트·텍스트는 "카드 하단"에 고정 (넘친 이미지 아래로 밀려 잘리지 않도록 레이어 분리)
+        Color(UIColor.secondarySystemBackground)
+            .aspectRatio(3.0 / 4.0, contentMode: .fit)
+            .overlay {
+                thumbnailImage
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
+            }
+            .overlay(alignment: .bottom) {
+                LinearGradient(colors: [.clear, .black.opacity(0.15), .black.opacity(0.8)],
+                               startPoint: .top, endPoint: .bottom)
+                    .frame(height: 90)
+                    .frame(maxWidth: .infinity)
+            }
+            .overlay(alignment: .bottomLeading) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(course.courseName)
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.white)
+                        .lineLimit(2)
+                        .shadow(color: .black.opacity(0.4), radius: 3, y: 1)
+                    Text("\(course.region) · \(course.tag.rawValue)")
+                        .font(.system(size: 11))
+                        .foregroundColor(.white.opacity(0.9))
+                        .lineLimit(1)
+                        .shadow(color: .black.opacity(0.4), radius: 3, y: 1)
                 }
-            } else {
-                placeOrDefaultThumbnail
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-
-            LinearGradient(colors: [.clear, .black.opacity(0.6)], startPoint: .center, endPoint: .bottom)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(course.courseName)
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundColor(.white)
-                    .lineLimit(1)
-                Text("\(course.region) · \(course.tag.rawValue)")
-                    .font(.system(size: 10))
-                    .foregroundColor(.white.opacity(0.85))
-                    .lineLimit(1)
-            }
-            .padding(8)
-        }
-        .aspectRatio(1, contentMode: .fill)
-        .clipped()
-        .task {
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .contentShape(Rectangle())
+            .task {
             // 커스텀 썸네일이 있으면 장소 사진을 굳이 조회하지 않음 (불필요한 API 호출 방지)
             guard !hasCustomThumbnail, placePhotoURL == nil,
                   let first = course.places.first else { return }
             placePhotoURL = await PlacesPhotoService.shared.photoURL(
                 for: first.placeName, latitude: first.latitude, longitude: first.longitude)
+        }
+    }
+
+    // 커스텀 썸네일 우선, 없으면 장소사진/기본 썸네일 폴백 — 정사각형을 꽉 채움
+    @ViewBuilder
+    private var thumbnailImage: some View {
+        if let url = thumbnailURL.flatMap(URL.init) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                case .failure:
+                    placeOrDefaultThumbnail
+                default:
+                    Color(UIColor.secondarySystemBackground)
+                }
+            }
+        } else {
+            placeOrDefaultThumbnail
         }
     }
 
