@@ -10,6 +10,7 @@ struct CreateCourseView: View {
     @State private var courseName = ""
     @State private var selectedTag: CourseTag = .couple
     @State private var places: [Place] = []
+    @State private var mainPlaceName: String?   // 유저가 지정한 대표 장소 (nil이면 자동 선택)
     @State private var isSaving = false
     @State private var errorMessage: String?
     @State private var showPlaceSearch = false
@@ -223,11 +224,21 @@ struct CreateCourseView: View {
                     )
                 }
             } else {
+                Text("📍 핀을 눌러 지도 핀·썸네일 기준이 될 대표 장소를 정하세요 (미지정 시 자동 선택)")
+                    .font(.system(size: 12))
+                    .foregroundColor(.tteMediumGray)
+                    .padding(.horizontal, 2)
                 ForEach(Array(places.enumerated()), id: \.element.id) { idx, place in
-                    PlaceRowEdit(place: place) {
-                        places.remove(at: idx)
-                        reorderPlaces()
-                    }
+                    PlaceRowEdit(
+                        place: place,
+                        isMain: place.placeName == effectiveMainName,
+                        onSetMain: { mainPlaceName = place.placeName },
+                        onDelete: {
+                            if mainPlaceName == place.placeName { mainPlaceName = nil }
+                            places.remove(at: idx)
+                            reorderPlaces()
+                        }
+                    )
                 }
                 .onMove { from, to in
                     places.move(fromOffsets: from, toOffset: to)
@@ -235,6 +246,12 @@ struct CreateCourseView: View {
                 }
             }
         }
+    }
+
+    // 현재 화면에 표시할 대표 장소명 — 수동 지정이 유효하면 그것, 아니면 자동 선택
+    private var effectiveMainName: String? {
+        if let n = mainPlaceName, places.contains(where: { $0.placeName == n }) { return n }
+        return Course.autoPickMainPlace(places)?.placeName
     }
 
     // MARK: - Helpers
@@ -303,6 +320,9 @@ struct CreateCourseView: View {
             return
         }
 
+        // 유저가 대표 장소를 직접 지정했을 때만 order 저장 (미지정 시 nil → 자동 선택)
+        let mainOrder: Int? = mainPlaceName.flatMap { n in places.first(where: { $0.placeName == n })?.order }
+
         let course = Course(
             courseId: UUID().uuidString,
             authorId: authService.currentUser?.uid ?? "",
@@ -311,7 +331,8 @@ struct CreateCourseView: View {
             region: regionFromPlaces(places),
             likeCount: 0,
             createdAt: Date(),
-            places: places
+            places: places,
+            mainPlaceOrder: mainOrder
         )
 
         do {
@@ -331,6 +352,8 @@ struct CreateCourseView: View {
 // MARK: - Place Row (Edit Mode)
 struct PlaceRowEdit: View {
     let place: Place
+    var isMain: Bool = false
+    var onSetMain: () -> Void = {}
     let onDelete: () -> Void
 
     var body: some View {
@@ -349,21 +372,41 @@ struct PlaceRowEdit: View {
                 Text(place.placeName)
                     .font(.system(size: 15, weight: .medium))
                     .foregroundColor(.tteDarkGray)
+                if isMain {
+                    Text("대표 장소")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.tteOrange)
+                }
             }
 
             Spacer()
+
+            Button(action: onSetMain) {
+                Image("tteona-pin")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 22, height: 22)
+                    .opacity(isMain ? 1.0 : 0.28)
+                    .grayscale(isMain ? 0 : 1)
+            }
+            .buttonStyle(.plain)
 
             Button(action: onDelete) {
                 Image(systemName: "minus.circle.fill")
                     .foregroundColor(.red.opacity(0.7))
                     .font(.system(size: 20))
             }
+            .buttonStyle(.plain)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background(
             RoundedRectangle(cornerRadius: 12)
                 .fill(Color(UIColor.secondarySystemBackground))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.tteOrange.opacity(isMain ? 0.5 : 0), lineWidth: 1.5)
         )
     }
 }

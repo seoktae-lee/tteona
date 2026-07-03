@@ -1,4 +1,5 @@
 import SwiftUI
+import GoogleMaps
 import MapKit
 
 struct ExploreDetailView: View {
@@ -45,8 +46,8 @@ struct ExploreDetailView: View {
         .navigationBarHidden(true)
         .task {
             author = await userService.fetchAuthor(uid: course.authorId)
-            if let first = course.places.first {
-                weather = await ExploreInfoService.shared.fetchWeather(lat: first.latitude, lng: first.longitude)
+            if let main = course.mainPlace {
+                weather = await ExploreInfoService.shared.fetchWeather(lat: main.latitude, lng: main.longitude)
             }
             carRoute  = await ExploreInfoService.shared.computeRoute(places: course.places, transport: .automobile)
             walkRoute = await ExploreInfoService.shared.computeRoute(places: course.places, transport: .walking)
@@ -251,48 +252,17 @@ struct ExploreDetailView: View {
     // MARK: - 동선 미니 지도
 
     private var routeMap: some View {
-        Map(initialPosition: .region(fittingRegion), interactionModes: []) {
-            if course.places.count >= 2 {
-                MapPolyline(coordinates: course.places.map(\.coordinate))
-                    .stroke(Color.tteOrange, style: StrokeStyle(lineWidth: 3, lineCap: .round, dash: [1, 6]))
-            }
-            ForEach(Array(course.places.enumerated()), id: \.element.id) { idx, place in
-                Annotation(place.placeName, coordinate: place.coordinate) {
-                    ZStack {
-                        Circle().fill(Color.tteOrange).frame(width: 24, height: 24)
-                        Text("\(idx + 1)")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(.white)
-                    }
-                    .overlay(Circle().stroke(Color.white, lineWidth: 2))
-                }
-            }
-        }
+        GoogleMapView(
+            markers: course.places.enumerated().map { idx, place in
+                GoogleMapMarker(id: place.id, coordinate: place.coordinate, badgeNumber: idx + 1)
+            },
+            polyline: course.places.count >= 2 ? course.places.map(\.coordinate) : nil,
+            dashedPolyline: true,
+            initialCamera: GoogleMapView.fittingCamera(for: course.places.map(\.coordinate)),
+            interactive: false
+        )
         .frame(height: 200)
         .clipShape(RoundedRectangle(cornerRadius: 14))
-        .allowsHitTesting(false)
-    }
-
-    private var fittingRegion: MKCoordinateRegion {
-        let lats = course.places.map(\.latitude)
-        let lngs = course.places.map(\.longitude)
-        guard let minLat = lats.min(), let maxLat = lats.max(),
-              let minLng = lngs.min(), let maxLng = lngs.max() else {
-            return MKCoordinateRegion(
-                center: CLLocationCoordinate2D(latitude: 37.5665, longitude: 126.9780),
-                span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
-            )
-        }
-        let center = CLLocationCoordinate2D(
-            latitude: (minLat + maxLat) / 2,
-            longitude: (minLng + maxLng) / 2
-        )
-        // 핀이 가장자리에 붙지 않도록 1.5배 여유, 장소가 몰려있을 때 최소 스팬 보장
-        let span = MKCoordinateSpan(
-            latitudeDelta: max((maxLat - minLat) * 1.5, 0.01),
-            longitudeDelta: max((maxLng - minLng) * 1.5, 0.01)
-        )
-        return MKCoordinateRegion(center: center, span: span)
     }
 
     // MARK: - Buttons

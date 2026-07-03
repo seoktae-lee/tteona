@@ -19,6 +19,7 @@
 		548BBF322FAA178E00334BA6 /* tteona_WidgetExtensionExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 548BBF1F2FAA178D00334BA6 /* tteona_WidgetExtensionExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		549C59642FACAB0800074627 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 549C59632FACAB0800074627 /* FirebaseMessaging */; };
 		549C59682FACB93600074627 /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = 549C59672FACB93600074627 /* FirebaseFunctions */; };
+		54A435822FF7EE94003B0FCA /* GoogleMaps in Frameworks */ = {isa = PBXBuildFile; productRef = 54A435812FF7EE94003B0FCA /* GoogleMaps */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -103,6 +104,7 @@
 			files = (
 				549C59642FACAB0800074627 /* FirebaseMessaging in Frameworks */,
 				548BBDC22FA97FFD00334BA6 /* FirebaseAuth in Frameworks */,
+				54A435822FF7EE94003B0FCA /* GoogleMaps in Frameworks */,
 				548BBDC42FA97FFD00334BA6 /* FirebaseFirestore in Frameworks */,
 				549C59682FACB93600074627 /* FirebaseFunctions in Frameworks */,
 				548BBE5D2FA9958B00334BA6 /* GoogleSignIn in Frameworks */,
@@ -184,6 +186,7 @@
 				548BBEE42FA9B48500334BA6 /* KakaoSDKUser */,
 				549C59632FACAB0800074627 /* FirebaseMessaging */,
 				549C59672FACB93600074627 /* FirebaseFunctions */,
+				54A435812FF7EE94003B0FCA /* GoogleMaps */,
 			);
 			productName = tteona;
 			productReference = 548BBD542FA9720A00334BA6 /* tteona.app */;
@@ -242,6 +245,7 @@
 				548BBDC02FA97FFD00334BA6 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 				548BBE5B2FA9958B00334BA6 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
 				548BBEDF2FA9B48500334BA6 /* XCRemoteSwiftPackageReference "kakao-ios-sdk" */,
+				54A435802FF7EE94003B0FCA /* XCRemoteSwiftPackageReference "ios-maps-sdk" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 548BBD552FA9720A00334BA6 /* Products */;
@@ -589,6 +593,14 @@
 				minimumVersion = 2.27.3;
 			};
 		};
+		54A435802FF7EE94003B0FCA /* XCRemoteSwiftPackageReference "ios-maps-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/googlemaps/ios-maps-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 10.15.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -636,6 +648,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 548BBDC02FA97FFD00334BA6 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseFunctions;
+		};
+		54A435812FF7EE94003B0FCA /* GoogleMaps */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 54A435802FF7EE94003B0FCA /* XCRemoteSwiftPackageReference "ios-maps-sdk" */;
+			productName = GoogleMaps;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

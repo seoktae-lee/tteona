@@ -3,6 +3,7 @@ import FirebaseCore
 import FirebaseMessaging
 import KakaoSDKCommon
 import KakaoSDKAuth
+import GoogleMaps
 import UserNotifications
 
 @main
@@ -15,6 +16,10 @@ struct TteonaApp: App {
     init() {
         FirebaseApp.configure()
         KakaoSDK.initSDK(appKey: "49d0d57217d4659334d500aa7a763ee4")
+        // 구글맵 SDK — Info.plist의 기존 Google 키 재사용 (번들ID 제한 걸려 있음)
+        if let mapsKey = Bundle.main.object(forInfoDictionaryKey: "GOOGLE_PLACES_API_KEY") as? String {
+            GMSServices.provideAPIKey(mapsKey)
+        }
     }
 
     var body: some Scene {

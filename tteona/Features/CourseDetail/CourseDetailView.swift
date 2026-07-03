@@ -1,5 +1,5 @@
 import SwiftUI
-import MapKit
+import GoogleMaps
 
 struct CourseDetailView: View {
     let course: Course
@@ -11,7 +11,6 @@ struct CourseDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showRoomSelect = false
     @State private var showOtherCourseAlert = false
-    @State private var cameraPosition: MapCameraPosition = .automatic
     @State private var isLikeProcessing = false
     @State private var showLikeErrorAlert = false
     @State private var likeErrorMessage: String = ""
@@ -99,7 +98,6 @@ struct CourseDetailView: View {
         .task {
             let uid = authService.currentUser?.uid ?? ""
             await courseService.fetchLikedCourseIds(userId: uid)
-            fitMapToCourse()
             courseAuthor = await userService.fetchAuthor(uid: course.authorId)
         }
         .fullScreenCover(isPresented: $showRoomSelect) {
@@ -204,18 +202,15 @@ struct CourseDetailView: View {
         let sorted = course.places.sorted { $0.order < $1.order }
         let selectedOrder = selectedPlaceIndex < sorted.count ? sorted[selectedPlaceIndex].order : -1
 
-        return Map(position: $cameraPosition) {
-            ForEach(course.places) { place in
-                Annotation(place.placeName, coordinate: place.coordinate) {
-                    PlacePin(order: place.order, isSelected: place.order == selectedOrder)
-                }
-            }
-            if course.places.count >= 2 {
-                MapPolyline(coordinates: course.places.map(\.coordinate))
-                    .stroke(Color.tteOrange, lineWidth: 2.5)
-            }
-        }
-        .mapStyle(.standard)
+        return GoogleMapView(
+            markers: course.places.map { place in
+                GoogleMapMarker(id: place.id, coordinate: place.coordinate,
+                                badgeNumber: place.order,
+                                highlighted: place.order == selectedOrder)
+            },
+            polyline: course.places.count >= 2 ? course.places.map(\.coordinate) : nil,
+            initialCamera: GoogleMapView.fittingCamera(for: course.places.map(\.coordinate))
+        )
     }
 
     private var sortedPlaces: [Place] {
@@ -397,26 +392,6 @@ struct CourseDetailView: View {
         CourseShareHelper.share(course: course)
     }
 
-    private func fitMapToCourse() {
-        guard !course.places.isEmpty else { return }
-        if course.places.count == 1 {
-            cameraPosition = .region(MKCoordinateRegion(
-                center: CLLocationCoordinate2D(latitude: course.places[0].latitude + 0.004, longitude: course.places[0].longitude),
-                span: MKCoordinateSpan(latitudeDelta: 0.015, longitudeDelta: 0.015)
-            ))
-            return
-        }
-        let lats = course.places.map(\.latitude)
-        let lons = course.places.map(\.longitude)
-        let minLat = lats.min()!, maxLat = lats.max()!
-        let minLon = lons.min()!, maxLon = lons.max()!
-        let latDelta = max((maxLat - minLat) * 1.7, 0.01)
-        let lonDelta = max((maxLon - minLon) * 1.7, 0.01)
-        cameraPosition = .region(MKCoordinateRegion(
-            center: CLLocationCoordinate2D(latitude: (minLat + maxLat) / 2, longitude: (minLon + maxLon) / 2),
-            span: MKCoordinateSpan(latitudeDelta: latDelta, longitudeDelta: lonDelta)
-        ))
-    }
 }
 
 // MARK: - Place Page Photo (스와이프 갤러리용)

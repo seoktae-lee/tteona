@@ -150,10 +150,10 @@ app.get('/api/courses/recommend', async (req, res) => {
       const ageDays = (now - createdMs) / 86400000;
       score += Math.max(0, 25 - ageDays * 0.5);
 
-      // 지역 인접 (0–25점): 첫 장소 기준
+      // 지역 인접 (0–25점): 대표 장소 기준
       if (!isNaN(userLat) && !isNaN(userLng) && c.places?.length > 0) {
-        const p = c.places[0];
-        if (p.latitude && p.longitude) {
+        const p = mainPlaceOf(c);
+        if (p && p.latitude && p.longitude) {
           const dist = haversineKm(userLat, userLng, p.latitude, p.longitude);
           if (dist < 10)       score += 25;
           else if (dist < 50)  score += 15;
@@ -1478,6 +1478,22 @@ function haversineKm(lat1, lng1, lat2, lng2) {
   const a = Math.sin(dLat / 2) ** 2
     + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// 대표 장소 — iOS Course.mainPlace 로직과 동일 (지정 order 우선, 아니면 경유지 후순위 자동 선택)
+function isTransitLikePlace(name) {
+  if (typeof name !== 'string') return false;
+  if (name.endsWith('역')) return true;
+  return ['주차장', '터미널', '정류장', '환승센터', '휴게소', '톨게이트', '공영주차'].some(k => name.includes(k));
+}
+function mainPlaceOf(course) {
+  const places = course.places || [];
+  if (places.length === 0) return null;
+  if (course.mainPlaceOrder != null) {
+    const p = places.find(pl => pl.order === course.mainPlaceOrder);
+    if (p) return p;
+  }
+  return places.find(pl => !isTransitLikePlace(pl.placeName)) || places[0];
 }
 
 app.use((req, res) => res.status(404).json({ error: 'Not found' }));

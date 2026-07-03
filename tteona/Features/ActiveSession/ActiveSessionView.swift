@@ -1,11 +1,13 @@
 import SwiftUI
 import MapKit
+import GoogleMaps
 
 struct ActiveSessionView: View {
     let course: Course
     var roomIds: Set<String> = []
     var isResuming: Bool = false
     @StateObject private var locationService = LocationService()
+    @ObservedObject private var locationSocket = LocationSocketService.shared
     @EnvironmentObject private var notificationManager: AppNotificationManager
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var userService: UserService
@@ -18,7 +20,6 @@ struct ActiveSessionView: View {
     @State private var skippedPlaces: Set<Int> = []
     @State private var showCamera = false
     @State private var showVlog = false
-    @State private var cameraPosition: MapCameraPosition = .automatic
     @State private var showArrivalBanner = false
     @State private var arrivedPlace: Place?
     @State private var orderedPlaces: [Place] = []
@@ -59,7 +60,6 @@ struct ActiveSessionView: View {
             didStartSession = true
             locationService.requestPermission()
             locationService.startTracking(places: course.places)
-            fitMap()
             if let saved = sessionStore.loadTodaySession(),
                saved.course.courseId == course.courseId {
                 
@@ -209,38 +209,46 @@ struct ActiveSessionView: View {
 
     // MARK: - Map
     private var mapLayer: some View {
-        Map(position: $cameraPosition) {
-            // 현재 위치
-            if let loc = locationService.currentLocation {
-                Annotation("현재 위치", coordinate: loc.coordinate) {
-                    CurrentLocationPin()
-                }
-            }
+        GoogleMapView(
+            markers: sessionMarkers,
+            polyline: orderedPlaces.count >= 2 ? orderedPlaces.map(\.coordinate) : nil,
+            dashedPolyline: true,
+            showsUserLocation: true,   // 현재 위치는 구글맵 기본 파란 점
+            initialCamera: GoogleMapView.fittingCamera(for: course.places.map(\.coordinate))
+        )
+    }
 
-            // 코스 핀들
-            ForEach(Array(orderedPlaces.enumerated()), id: \.element.id) { index, place in
-                Annotation(place.placeName, coordinate: place.coordinate) {
-                    SessionPlacePin(
-                        order: index + 1,
-                        isVisited: visitedPlaces.contains(place.order),
-                        isCurrent: index == currentPlaceIndex
-                    )
-                }
-            }
-
-            // 경로선
-            if orderedPlaces.count >= 2 {
-                MapPolyline(coordinates: orderedPlaces.map(\.coordinate))
-                    .stroke(Color.tteOrange.opacity(0.5), style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
-            }
-
-            // 동행 멤버 위치
-            ForEach(LocationSocketService.shared.memberLocations) { member in
-                Annotation(member.nickname, coordinate: member.coordinate) {
-                    MemberLocationPin(nickname: member.nickname)
-                }
-            }
+    // 코스 장소 핀(방문/현재/일반) + 동행 멤버 위치 핀 — 기존 SwiftUI 핀 디자인을 이미지로 렌더
+    private var sessionMarkers: [GoogleMapMarker] {
+        var result: [GoogleMapMarker] = []
+        for (index, place) in orderedPlaces.enumerated() {
+            let visited = visitedPlaces.contains(place.order)
+            let current = index == currentPlaceIndex
+            result.append(GoogleMapMarker(
+                id: "place_\(place.id)",
+                coordinate: place.coordinate,
+                icon: Self.renderPinImage(SessionPlacePin(order: index + 1, isVisited: visited, isCurrent: current)),
+                iconAnchor: CGPoint(x: 0.5, y: 0.5),
+                styleKey: "s:\(index):\(visited ? 1 : 0):\(current ? 1 : 0)"
+            ))
         }
+        for member in locationSocket.memberLocations {
+            result.append(GoogleMapMarker(
+                id: "member_\(member.userId)",
+                coordinate: member.coordinate,
+                icon: Self.renderPinImage(MemberLocationPin(nickname: member.nickname)),
+                iconAnchor: CGPoint(x: 0.5, y: 0.32),   // 원(상단)이 좌표에 오도록
+                styleKey: "m:\(member.nickname)"
+            ))
+        }
+        return result
+    }
+
+    // SwiftUI 핀 뷰 → 마커 아이콘 이미지
+    private static func renderPinImage<V: View>(_ view: V) -> UIImage? {
+        let renderer = ImageRenderer(content: view.padding(3))
+        renderer.scale = UIScreen.main.scale
+        return renderer.uiImage
     }
 
     // MARK: - Top Bar
@@ -564,24 +572,6 @@ struct ActiveSessionView: View {
             roomIds: Array(roomIds)
         )
         sessionStore.save(session)
-    }
-
-    private func fitMap() {
-        guard !course.places.isEmpty else { return }
-        let coords = course.places.map(\.coordinate)
-        let lats = coords.map(\.latitude)
-        let lons = coords.map(\.longitude)
-        let region = MKCoordinateRegion(
-            center: CLLocationCoordinate2D(
-                latitude: ((lats.min() ?? 0) + (lats.max() ?? 0)) / 2,
-                longitude: ((lons.min() ?? 0) + (lons.max() ?? 0)) / 2
-            ),
-            span: MKCoordinateSpan(
-                latitudeDelta: ((lats.max() ?? 0) - (lats.min() ?? 0)) * 1.8,
-                longitudeDelta: ((lons.max() ?? 0) - (lons.min() ?? 0)) * 1.8
-            )
-        )
-        cameraPosition = .region(region)
     }
 
     private func formatDistance(_ meters: Double) -> String {

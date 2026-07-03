@@ -1101,6 +1101,13 @@ pm2 save</div>
         <div class="task">
           <div class="task-check"></div>
           <div class="task-content">
+            <div class="task-title">코스 대표 장소(핀 기준점) — 자동 선택 + 수동 지정</div>
+            <div class="task-desc">기존엔 항상 첫 장소에 핀이 꽂혀 지하철역·주차장 같은 경유지가 대표가 되던 문제. Course.mainPlaceOrder 추가 + 자동선택 휴리스틱(OO역·주차장·터미널 등 경유지 후순위, 명소 우선). 지도 핀·썸네일·날씨·추천 근접도 모두 대표 장소 기준으로 통일. 코스 생성 화면에서 ⭐로 수동 지정 가능(미지정 시 자동). 서버 추천도 동일 로직 적용(배포 완료). 구 코스는 마이그레이션 없이 자동선택으로 소급 적용.</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
             <div class="task-title">탐색 상세 화면 리치화 — 동선 지도 + 장소별 사진 카드 + TourAPI 사진</div>
             <div class="task-desc">ExploreDetailView 코스 동선 섹션 개편: 번호 핀 + 점선 경로 미니 지도(MapKit) 추가, 텍스트 목록 → 장소별 사진 카드(사진 + 카테고리 라벨). 사진 소스는 관광공사 TourAPI(큐레이션·좌표선별) 우선 → Google Places 폴백. PlacesPhotoService가 좌표 함께 전달하도록 전체 호출부 수정.</div>
           </div>
@@ -1344,6 +1351,105 @@ pm2 save</div>
           <div class="task-content">
             <div class="task-title">실시간 그룹 채팅</div>
             <div class="task-desc">Phase 9 WebSocket 기반 위치 공유와 동일 화면에서 텍스트 채팅 추가</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────────────── 지도 인프라 ───────────────── -->
+  <div class="section-title">지도 인프라 (전세계 확장 대비)</div>
+
+  <div class="notice">
+    <strong>왜 Google Maps인가</strong> — 떠나는 지도·위치가 핵심이고 <strong>전세계 확장</strong>이 목표. 카카오/네이버맵은 한국 전용(해외 데이터 없음)이라 락인되면 안 됨. 베이스 지도는 전세계 단일 제공자(Google), 경로 정확도는 지역별 API로 분기하는 구조. <strong>네이티브 iOS 지도 표시는 무과금</strong>(결제계정 등록만 필요), 실제 비용은 Places/Directions인데 기존 캐싱으로 억제. 카카오는 장소검색·로그인에 계속 사용.
+  </div>
+
+  <div class="phase p4">
+    <div class="phase-header">
+      <div class="phase-num" style="font-size:13px;">🗺️</div>
+      <div class="phase-meta">
+        <h3>Apple MapKit → Google Maps 전환</h3>
+        <div class="phase-tags">
+          <span class="tag hot">🔥 앱의 심장</span>
+          <span class="tag server">iOS + WAS</span>
+          <span class="tag money">💰 지도표시 무료</span>
+        </div>
+      </div>
+    </div>
+    <div class="phase-body">
+      <div class="analogy">
+        🧭 <strong>비유: 임시 지도에서 진짜 지도책으로</strong><br>
+        지금은 Apple 지도인데 한국에선 길찾기(MKDirections)가 안 돼서 이동시간을 <strong>직선거리 어림값</strong>으로 때우고 있음(ExploreInfoService 폴백). POI·한글 표기도 약함. 전세계 커버되는 Google 지도를 베이스로 깔고, 길찾기는 지역별 최적 API로 정확하게 바꿈. 단계별로 하나씩 교체 — 한 번에 다 바꾸는 게 아님.
+      </div>
+      <div class="tasks">
+        <div class="task-group-title">사전 준비</div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">0단계 — Google Cloud 세팅 (완료)</div>
+            <div class="task-desc">Maps SDK for iOS 활성화 + 기존 tteona-places 키(iOS 앱 번들ID 제한) 재사용. 결제 계정 연결됨. 지도 표시는 무과금.</div>
+          </div>
+        </div>
+
+        <div class="task-group-title">iOS — 지도 렌더링 교체</div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">1단계 — 재사용 지도 래퍼 제작 (완료)</div>
+            <div class="task-desc">GoogleMaps SDK 10.15 SPM 추가 + GMSServices.provideAPIKey(Info.plist 키 재사용). GoogleMapView(UIViewRepresentable) 신규 — 마커/폴리라인/내위치/카메라 동기화, 마커 id 집합 변경시만 갱신(깜빡임 방지), 브랜드 오렌지 핀 + 번호핀 렌더러. 빌드 통과.</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">2단계 — 홈 지도 교체 (완료·실기기 확인 대기)</div>
+            <div class="task-desc">MainView의 MapKit Map → GoogleMapView. 코스 마커(대표 장소 기준), 마커 탭→프리뷰, 내 위치 표시, 카메라 이동 4곳(국가 초기이동·지역검색·현재위치·장소검색) 모두 GMSCameraPosition으로 전환. 빌드 통과 — 실제 렌더는 실기기 확인 필요.</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">3단계 — 코스 상세 동선 지도 교체</div>
+            <div class="task-desc">ExploreDetailView·CourseDetailView의 동선 미니 지도 — 번호 핀 + 경로 폴리라인 + 자동 줌(전체 장소 fit)을 Google Maps로.</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">4단계 — 동행 실시간 위치 지도 교체 (ActiveSessionView)</div>
+            <div class="task-desc">WebSocket 실시간 멤버 위치를 Google Maps 위에 렌더. 나·멤버 마커 갱신.</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">5단계 — 생성/검색 미니 지도 교체 (CreateCourse·PlaceSearch)</div>
+            <div class="task-desc">코스 생성·장소 선택 화면의 지도. 남은 MapKit 사용처 정리.</div>
+          </div>
+        </div>
+
+        <div class="task-group-title">경로 정확도 — 서버 지역 분기</div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">6단계 — 통합 경로 API (WAS /api/route)</div>
+            <div class="task-desc">좌표가 한국이면 ODsay(대중교통·연동됨)+카카오모빌리티/T맵(자동차·도보), 해외면 Google Directions로 서버가 분기. 앱은 단일 엔드포인트만 호출. iOS의 MKDirections 어림값 제거 → 실제 도로 거리·시간. 결과 PostgreSQL 캐싱(비용 억제).</div>
+          </div>
+        </div>
+
+        <div class="task-group-title">마무리 / 확장</div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">7단계 — 핀 클러스터링 + 브랜드 스타일</div>
+            <div class="task-desc">코스 밀집 지역 마커 클러스터링. 다크/틸 톤 커스텀 지도 스타일로 앱 정체성 통일.</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">8단계 — 앱/웹 지도 일관성</div>
+            <div class="task-desc">웹 코스 미리보기(현재 Leaflet+CartoDB)도 Google Maps JS로 통일 검토 → 앱과 동일한 지도 경험.</div>
           </div>
         </div>
       </div>

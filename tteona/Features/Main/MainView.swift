@@ -1,5 +1,6 @@
 import SwiftUI
 import MapKit
+import GoogleMaps
 
 struct MainView: View {
     @EnvironmentObject private var authService: AuthService
@@ -28,16 +29,15 @@ struct MainView: View {
     @State private var previewCourse: Course?
 
     enum CourseFilter { case all, liked, mine }
-    @State private var mapRegion = MKCoordinateRegion(
-        center: CLLocationCoordinate2D(latitude: 36.5, longitude: 127.8),
-        span: MKCoordinateSpan(latitudeDelta: 5, longitudeDelta: 5)
-    )
-    @State private var cameraPosition: MapCameraPosition = .region(
-        MKCoordinateRegion(
-            center: CLLocationCoordinate2D(latitude: 36.5, longitude: 127.8),
-            span: MKCoordinateSpan(latitudeDelta: 5, longitudeDelta: 5)
-        )
-    )
+    // 구글맵 카메라 — cameraCommand에 값 세팅하면 그 위치로 이동(유저 팬 방해 없이)
+    @State private var cameraCommand: GMSCameraPosition?
+    @State private var didMoveToUser = false
+
+    // MKCoordinateSpan(위도 델타) → 구글맵 zoom 레벨 변환
+    private func gmsCamera(center: CLLocationCoordinate2D, latDelta: Double) -> GMSCameraPosition {
+        let zoom = Float(max(3, min(19, log2(360.0 / max(latDelta, 0.0001)))))
+        return GMSCameraPosition(latitude: center.latitude, longitude: center.longitude, zoom: zoom)
+    }
 
     private var filteredCourses: [Course] {
         let base: [Course]
@@ -62,10 +62,25 @@ struct MainView: View {
         return results.sorted { $0.likeCount > $1.likeCount }
     }
 
-    private var visibleCourses: [Course] {
-        filteredCourses.filter { course in
-            guard let first = course.places.first else { return false }
-            return mapRegion.contains(first.coordinate)
+    // 지도에 찍을 코스 마커 (대표 장소 기준, 태그별 핀 + 코스명 라벨)
+    private var courseMarkers: [GoogleMapMarker] {
+        filteredCourses.compactMap { course in
+            guard let main = course.mainPlace else { return nil }
+            return GoogleMapMarker(
+                id: course.courseId,
+                coordinate: main.coordinate,
+                pinImageName: Self.pinImageName(for: course.tag),
+                label: course.courseName
+            )
+        }
+    }
+
+    private static func pinImageName(for tag: CourseTag) -> String {
+        switch tag {
+        case .couple:  return "pin_couple"
+        case .family:  return "pin_family"
+        case .solo:    return "pin_solo"
+        case .friends: return "pin_friends"
         }
     }
 
@@ -134,9 +149,7 @@ struct MainView: View {
             }
         }
         .onChange(of: locationService.currentLocation) { _, location in
-            guard mapRegion.center.latitude == 36.5,
-                  mapRegion.center.longitude == 127.8,
-                  let coord = location?.coordinate else { return }
+            guard !didMoveToUser, let coord = location?.coordinate else { return }
             Task { await moveToCountry(coord: coord) }
         }
         .sheet(item: $selectedCourse) { course in
@@ -154,12 +167,7 @@ struct MainView: View {
         .sheet(isPresented: $showRegionSearch) {
             RegionSearchView { name, coord in
                 searchedRegionName = name
-                withAnimation {
-                    cameraPosition = .region(MKCoordinateRegion(
-                        center: coord,
-                        span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
-                    ))
-                }
+                cameraCommand = gmsCamera(center: coord, latDelta: 0.05)
             }
         }
         .sheet(isPresented: $showCourseResumeSheet, onDismiss: {
@@ -216,29 +224,23 @@ struct MainView: View {
 
     // MARK: - Map
     private var mapLayer: some View {
-        Map(position: $cameraPosition) {
-            ForEach(visibleCourses) { course in
-                if let first = course.places.first {
-                    Annotation(course.courseName, coordinate: first.coordinate) {
-                        CourseMapPin(course: course)
-                            .onTapGesture {
-                                if activeSessionStore.hasTodaySession {
-                                    pendingNewCourse = course
-                                    showCourseResumeSheet = true
-                                } else {
-                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                        previewCourse = course
-                                    }
-                                }
-                            }
+        GoogleMapView(
+            markers: courseMarkers,
+            showsUserLocation: true,
+            initialCamera: gmsCamera(center: CLLocationCoordinate2D(latitude: 36.5, longitude: 127.8), latDelta: 5),
+            cameraCommand: $cameraCommand,
+            onMarkerTap: { courseId in
+                guard let course = filteredCourses.first(where: { $0.courseId == courseId }) else { return }
+                if activeSessionStore.hasTodaySession {
+                    pendingNewCourse = course
+                    showCourseResumeSheet = true
+                } else {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        previewCourse = course
                     }
                 }
             }
-        }
-        .mapStyle(.standard(elevation: .flat))
-        .onMapCameraChange { context in
-            mapRegion = context.region
-        }
+        )
     }
 
     // MARK: - Top Bar
@@ -326,12 +328,8 @@ struct MainView: View {
         let countryCode = placemarks?.first?.isoCountryCode ?? ""
         let delta = countrySpan(for: countryCode)
         await MainActor.run {
-            withAnimation {
-                cameraPosition = .region(MKCoordinateRegion(
-                    center: coord,
-                    span: MKCoordinateSpan(latitudeDelta: delta, longitudeDelta: delta)
-                ))
-            }
+            didMoveToUser = true
+            cameraCommand = gmsCamera(center: coord, latDelta: delta)
         }
     }
 
@@ -513,12 +511,7 @@ struct MainView: View {
                     Spacer()
                     Button {
                         guard let coord = locationService.currentLocation?.coordinate else { return }
-                        withAnimation {
-                            cameraPosition = .region(MKCoordinateRegion(
-                                center: coord,
-                                span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
-                            ))
-                        }
+                        cameraCommand = gmsCamera(center: coord, latDelta: 0.05)
                     } label: {
                         Image(systemName: "location.fill")
                             .font(.system(size: 18, weight: .medium))
@@ -634,9 +627,9 @@ struct CourseCardView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
         .task {
-            if let first = course.places.first {
+            if let main = course.mainPlace {
                 photoURL = await PlacesPhotoService.shared.photoURL(
-                    for: first.placeName, latitude: first.latitude, longitude: first.longitude)
+                    for: main.placeName, latitude: main.latitude, longitude: main.longitude)
             }
         }
     }
@@ -678,13 +671,7 @@ extension MainView {
             let response = try await MKLocalSearch(request: request).start()
             if let firstItem = response.mapItems.first {
                 let coord = firstItem.placemark.coordinate
-                
-                withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
-                    cameraPosition = .region(MKCoordinateRegion(
-                        center: coord,
-                        span: MKCoordinateSpan(latitudeDelta: 0.1, longitudeDelta: 0.1)
-                    ))
-                }
+                cameraCommand = gmsCamera(center: coord, latDelta: 0.1)
             }
         } catch {
             print("[Search] Map search failed: \(error.localizedDescription)")

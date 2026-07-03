@@ -10,7 +10,8 @@ actor ProfileImageService {
 
     @discardableResult
     func upload(uid: String, image: UIImage) async -> String? {
-        guard let jpeg = image.jpegData(compressionQuality: 0.85) else { return nil }
+        // 원본 대신 축소본 전송 — 서버가 512로 리샘플하고, 업로드 한도(용량)도 안전
+        guard let jpeg = ImageUploadHelper.downscaledJPEG(image) else { return nil }
         guard let url = URL(string: "\(baseURL)/\(uid)/avatar") else { return nil }
 
         let boundary = "Boundary-\(UUID().uuidString)"

@@ -324,9 +324,9 @@ private struct GridCell: View {
             .task {
             // 커스텀 썸네일이 있으면 장소 사진을 굳이 조회하지 않음 (불필요한 API 호출 방지)
             guard !hasCustomThumbnail, placePhotoURL == nil,
-                  let first = course.places.first else { return }
+                  let main = course.mainPlace else { return }
             placePhotoURL = await PlacesPhotoService.shared.photoURL(
-                for: first.placeName, latitude: first.latitude, longitude: first.longitude)
+                for: main.placeName, latitude: main.latitude, longitude: main.longitude)
         }
     }
 
