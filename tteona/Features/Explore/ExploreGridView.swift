@@ -281,6 +281,11 @@ private struct GridCell: View {
     let course: Course
     let thumbnailURL: String?
 
+    // 커스텀 썸네일이 없는 코스는 첫 장소(메인 장소) 사진을 대체 썸네일로 사용
+    @State private var placePhotoURL: String?
+
+    private var hasCustomThumbnail: Bool { thumbnailURL != nil }
+
     var body: some View {
         ZStack(alignment: .bottomLeading) {
             Color(UIColor.secondarySystemBackground)
@@ -291,13 +296,13 @@ private struct GridCell: View {
                     case .success(let image):
                         image.resizable().scaledToFill()
                     case .failure:
-                        DefaultCourseThumbnail(compact: true)
+                        placeOrDefaultThumbnail
                     default:
                         Color(UIColor.secondarySystemBackground)
                     }
                 }
             } else {
-                DefaultCourseThumbnail(compact: true)
+                placeOrDefaultThumbnail
             }
 
             LinearGradient(colors: [.clear, .black.opacity(0.6)], startPoint: .center, endPoint: .bottom)
@@ -316,5 +321,30 @@ private struct GridCell: View {
         }
         .aspectRatio(1, contentMode: .fill)
         .clipped()
+        .task {
+            // 커스텀 썸네일이 있으면 장소 사진을 굳이 조회하지 않음 (불필요한 API 호출 방지)
+            guard !hasCustomThumbnail, placePhotoURL == nil,
+                  let first = course.places.first else { return }
+            placePhotoURL = await PlacesPhotoService.shared.photoURL(
+                for: first.placeName, latitude: first.latitude, longitude: first.longitude)
+        }
+    }
+
+    @ViewBuilder
+    private var placeOrDefaultThumbnail: some View {
+        if let url = placePhotoURL.flatMap(URL.init) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                case .failure:
+                    DefaultCourseThumbnail(compact: true)
+                default:
+                    Color(UIColor.secondarySystemBackground)
+                }
+            }
+        } else {
+            DefaultCourseThumbnail(compact: true)
+        }
     }
 }

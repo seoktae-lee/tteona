@@ -981,10 +981,10 @@ pm2 save</div>
           </div>
         </div>
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
-            <div class="task-title">그룹 실시간 채팅 구현</div>
-            <div class="task-desc">같은 방 멤버끼리 지도 화면에서 실시간 텍스트 채팅</div>
+            <div class="task-title">그룹 실시간 채팅 + 오프라인 푸시 — 서버 배포 완료</div>
+            <div class="task-desc">기존 "피드+댓글"(Firestore·비동기)을 방 전체 단톡(WebSocket·실시간)으로 교체. server.js WS에 chat 타입 추가(PostgreSQL room_messages 저장 + 방 전체 브로드캐스트 + clientMsgId 낙관적 확정), GET /api/rooms/:id/messages 히스토리. iOS ChatSocketService·GroupChatView 신규, RoomDetailView가 멤버별 댓글 스레드 대신 단톡 표시(여행 활동은 시스템 메시지로 삽입). 카톡처럼 접속 안 한 멤버에게 "닉네임: 메시지" APNs 푸시(발신자·접속중 멤버 제외, 방 정보 5분 캐시, 무료). 알림 탭 시 해당 방 열림(type:'chat'). 2클라이언트 E2E(브로드캐스트·에코·DB저장·푸시경로) 통과. iOS 반영은 앱스토어 업데이트 대기.</div>
           </div>
         </div>
       </div>
@@ -1101,8 +1101,8 @@ pm2 save</div>
         <div class="task">
           <div class="task-check"></div>
           <div class="task-content">
-            <div class="task-title">탐색 상세 화면 리치화 — 동선 지도 + 장소별 사진 카드</div>
-            <div class="task-desc">ExploreDetailView 코스 동선 섹션 개편: 번호 핀 + 점선 경로 미니 지도(MapKit) 추가, 텍스트 목록 → 장소별 사진 카드(Google Places 사진 + 카테고리 라벨). 코스 분위기를 보고 파악 가능.</div>
+            <div class="task-title">탐색 상세 화면 리치화 — 동선 지도 + 장소별 사진 카드 + TourAPI 사진</div>
+            <div class="task-desc">ExploreDetailView 코스 동선 섹션 개편: 번호 핀 + 점선 경로 미니 지도(MapKit) 추가, 텍스트 목록 → 장소별 사진 카드(사진 + 카테고리 라벨). 사진 소스는 관광공사 TourAPI(큐레이션·좌표선별) 우선 → Google Places 폴백. PlacesPhotoService가 좌표 함께 전달하도록 전체 호출부 수정.</div>
           </div>
         </div>
         <div class="task">
@@ -1143,8 +1143,8 @@ pm2 save</div>
         <div class="task">
           <div class="task-check done"></div>
           <div class="task-content">
-            <div class="task-title">썸네일 업로드/표시 + 기본 썸네일</div>
-            <div class="task-desc">코스 생성 시 PHPicker로 대표 이미지 선택 → WAS 저장(uploads/thumbnails) + PostgreSQL(course_thumbnails), Nginx 서빙. 미등록 시 떠나 기본 썸네일(틸 그라데이션 + 굽은 길 + TRAVEL/MOVE/EXPLORE + 나루) 네이티브 렌더.</div>
+            <div class="task-title">썸네일 업로드/표시 + 장소사진 자동 폴백 + 기본 썸네일</div>
+            <div class="task-desc">코스 생성 시 PHPicker로 대표 이미지 선택 → WAS 저장(uploads/thumbnails) + PostgreSQL(course_thumbnails), Nginx 서빙. 커스텀 썸네일 미등록 시 첫 장소(메인 장소) 사진(TourAPI→Google)을 자동 대체 썸네일로 표시 → 그것도 없으면 떠나 기본 썸네일(틸 그라데이션 + 나루) 네이티브 렌더. 3단 폴백.</div>
           </div>
         </div>
         <div class="task">
@@ -1259,6 +1259,13 @@ pm2 save</div>
           <div class="task-content">
             <div class="task-title">날씨 연동</div>
             <div class="task-desc">탐색 상세 화면에 첫 장소 기준 현재 날씨 표시 (Open-Meteo, 무료·무키). "날씨 기반 코스 추천"은 추후.</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">장소 대표 사진 큐레이션 (한국관광공사 TourAPI) — 서버 배포 완료</div>
+            <div class="task-desc">GET /api/places/tour-photo?name&lat&lng — 관광공사 검색 후 ①이름 정확일치 ②좌표 근접(동명이소 구분) ③콘텐츠타입(관광지·명소 우선, 축제·행사 배제) 순 선별. firstimage 대표 이미지 + 카테고리 반환, PostgreSQL place_photos 캐싱(양성30일/음성7일). 무료·무키. iOS PlacesPhotoService가 TourAPI 우선 → Google Places 폴백. E2E(경복궁 서울/울산 동명이소 구분, 캐시 히트) 통과. iOS 반영은 앱스토어 업데이트 대기.</div>
           </div>
         </div>
         <div class="task">

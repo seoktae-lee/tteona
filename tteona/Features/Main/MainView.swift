@@ -634,8 +634,9 @@ struct CourseCardView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
         .task {
-            if let placeName = course.places.first?.placeName {
-                photoURL = await PlacesPhotoService.shared.photoURL(for: placeName)
+            if let first = course.places.first {
+                photoURL = await PlacesPhotoService.shared.photoURL(
+                    for: first.placeName, latitude: first.latitude, longitude: first.longitude)
             }
         }
     }
@@ -854,8 +855,10 @@ struct PlacePhotoThumbnail: View {
             }
         }
         .task {
-            async let photo = PlacesPhotoService.shared.photoURL(for: place.placeName)
-            async let cat = PlacesPhotoService.shared.placeCategory(for: place.placeName)
+            async let photo = PlacesPhotoService.shared.photoURL(
+                for: place.placeName, latitude: place.latitude, longitude: place.longitude)
+            async let cat = PlacesPhotoService.shared.placeCategory(
+                for: place.placeName, latitude: place.latitude, longitude: place.longitude)
             (photoURL, category) = await (photo, cat)
             isLoading = false
         }

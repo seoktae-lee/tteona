@@ -635,6 +635,140 @@ app.post('/api/places/cache', async (req, res) => {
   }
 });
 
+// ─── 장소 대표 사진 (한국관광공사 TourAPI, PostgreSQL 캐싱) ────────────────────
+// iOS가 좌표와 함께 장소명을 넘기면 좌표가 가장 가까운 관광공사 콘텐츠의
+// 큐레이션 대표 이미지를 반환. 사진 없으면 404 → iOS가 Google Places로 폴백.
+
+const TOUR_API_KEY = process.env.TOUR_API_KEY
+  || '7748c2f036dd997dd949629a45f1b89ce3bf6dce73ed160c5600fcb777351c8c';
+
+// contenttypeid → 사람이 읽는 카테고리
+const TOUR_CONTENT_TYPE = {
+  '12': '관광지', '14': '문화시설', '15': '축제·공연',
+  '25': '여행코스', '28': '레포츠', '32': '숙박', '38': '쇼핑', '39': '음식점',
+};
+
+// 장소명 + 좌표(약 1km 버킷)로 캐시 키 생성 — 동명이소 구분
+function tourPlaceKey(name, lat, lng) {
+  const n = (name || '').trim();
+  const latR = isNaN(lat) ? 'x' : lat.toFixed(2);
+  const lngR = isNaN(lng) ? 'x' : lng.toFixed(2);
+  return `${n}|${latR}|${lngR}`;
+}
+
+app.get('/api/places/tour-photo', async (req, res) => {
+  const name = (req.query.name || '').trim();
+  if (!name) return res.status(400).json({ error: 'name required' });
+  const lat = parseFloat(req.query.lat);
+  const lng = parseFloat(req.query.lng);
+  const key = tourPlaceKey(name, lat, lng);
+
+  try {
+    // 1) 캐시 조회 (음성 캐시 포함 — url null이어도 유효기간 내면 404 즉답)
+    const cached = await pgPool.query(
+      'SELECT url, category FROM place_photos WHERE place_key = $1 AND expires_at > NOW()',
+      [key]
+    );
+    if (cached.rows.length > 0) {
+      const row = cached.rows[0];
+      if (!row.url) return res.status(404).json({ error: 'no photo (cached)' });
+      return res.json({ url: row.url, category: row.category, source: 'tour', cached: true });
+    }
+
+    // 2) TourAPI 키워드 검색
+    const url = 'https://apis.data.go.kr/B551011/KorService2/searchKeyword2'
+      + `?serviceKey=${encodeURIComponent(TOUR_API_KEY)}`
+      + '&numOfRows=20&pageNo=1&MobileOS=IOS&MobileApp=tteona&_type=json'
+      + `&keyword=${encodeURIComponent(name)}`;
+
+    let items = [];
+    try {
+      const r = await fetch(url);
+      const j = await r.json();
+      const raw = j?.response?.body?.items?.item;
+      items = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+    } catch (e) {
+      console.error('[TourPhoto] fetch error:', e.message);
+    }
+
+    // 사진 있는 항목만
+    const withImage = items.filter(it => it.firstimage && it.firstimage.trim());
+
+    // 대표 이미지로 적합한 콘텐츠 타입 우선순위 (낮을수록 우선)
+    // 관광지·문화시설·숙박·음식점(실제 장소) > 축제·여행코스(행사/묶음)
+    const typeRank = { '12': 0, '14': 1, '32': 2, '39': 2, '38': 3, '28': 3, '25': 8, '15': 9 };
+    const norm = s => (s || '').replace(/\s+/g, '').toLowerCase();
+    const target = norm(name);
+
+    let picked = null;
+    if (withImage.length > 0) {
+      // 1) 이름 정확 일치 항목이 있으면 그 안에서만 선택 (별빛야행 같은 파생 콘텐츠 배제)
+      const exact = withImage.filter(it => norm(it.title) === target);
+      const pool = exact.length > 0 ? exact : withImage;
+
+      picked = pool
+        .map(it => ({
+          it,
+          // 좌표 없으면 거리 0, 있으면 0.5km 단위로 버킷화해 근접 동률은 타입으로 판정
+          distBucket: (!isNaN(lat) && !isNaN(lng))
+            ? Math.round(haversineKm(lat, lng, parseFloat(it.mapy), parseFloat(it.mapx)) * 2)
+            : 0,
+          typeRank: typeRank[it.contenttypeid] ?? 5,
+        }))
+        .sort((a, b) => (a.distBucket - b.distBucket) || (a.typeRank - b.typeRank))[0].it;
+    }
+
+    // 3) 결과 캐싱 (양성 30일 / 음성 7일)
+    if (picked) {
+      const category = TOUR_CONTENT_TYPE[picked.contenttypeid] || null;
+      await pgPool.query(
+        `INSERT INTO place_photos (place_key, url, category, source, expires_at)
+         VALUES ($1, $2, $3, 'tour', NOW() + INTERVAL '30 days')
+         ON CONFLICT (place_key) DO UPDATE SET
+           url = EXCLUDED.url, category = EXCLUDED.category,
+           fetched_at = NOW(), expires_at = EXCLUDED.expires_at`,
+        [key, picked.firstimage.trim(), category]
+      );
+      return res.json({ url: picked.firstimage.trim(), category, source: 'tour', cached: false });
+    } else {
+      await pgPool.query(
+        `INSERT INTO place_photos (place_key, url, category, source, expires_at)
+         VALUES ($1, NULL, NULL, 'tour', NOW() + INTERVAL '7 days')
+         ON CONFLICT (place_key) DO UPDATE SET
+           url = NULL, category = NULL, fetched_at = NOW(), expires_at = EXCLUDED.expires_at`,
+        [key]
+      );
+      return res.status(404).json({ error: 'no photo' });
+    }
+  } catch (err) {
+    console.error('[TourPhoto] error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── 그룹 채팅 기록 ───────────────────────────────────────────────────────────
+// 최근 메시지 조회 (오래된 → 최신 순으로 반환). WebSocket 접속 전 히스토리 로드용.
+app.get('/api/rooms/:roomId/messages', async (req, res) => {
+  const { roomId } = req.params;
+  const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+  const before = req.query.before; // ISO 타임스탬프 — 페이지네이션(더 이전 메시지)
+  try {
+    const params = [roomId, limit];
+    let where = 'room_id = $1';
+    if (before) { params.splice(1, 0, before); where += ' AND created_at < $2'; }
+    const result = await pgPool.query(
+      `SELECT id, user_id, nickname, text, created_at
+       FROM room_messages WHERE ${where}
+       ORDER BY created_at DESC LIMIT $${params.length}`,
+      params
+    );
+    res.json({ messages: result.rows.reverse() });
+  } catch (err) {
+    console.error('[RoomMessages] error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── 코스 공유 OG 링크 ────────────────────────────────────────────────────────
 // iOS 앱: /course?id=UUID (쿼리 파라미터)
 // 직접 링크: /course/UUID (경로 파라미터) — 두 형식 모두 지원
@@ -1332,6 +1466,41 @@ function haversineKm(lat1, lng1, lat2, lng2) {
 
 app.use((req, res) => res.status(404).json({ error: 'Not found' }));
 
+// ─── 그룹 채팅 오프라인 푸시 ───────────────────────────────────────────────────
+
+// 방 정보(이름 + 멤버) 캐시 — 메시지마다 Firestore 조회 방지 (5분 TTL)
+const roomInfoCache = new Map(); // roomId → { name, memberIds, at }
+
+async function getRoomInfo(roomId) {
+  const c = roomInfoCache.get(roomId);
+  if (c && Date.now() - c.at < 5 * 60 * 1000) return c;
+  const doc = await db.collection('rooms').doc(roomId).get();
+  if (!doc.exists) return null;
+  const d = doc.data();
+  const info = { name: d.name || '그룹', memberIds: d.memberIds || [], at: Date.now() };
+  roomInfoCache.set(roomId, info);
+  return info;
+}
+
+// 발신자·접속중 멤버를 제외한 나머지에게만 채팅 푸시
+async function pushChatToOfflineMembers(roomId, senderId, senderNick, text, connectedSet) {
+  try {
+    const info = await getRoomInfo(roomId);
+    if (!info) return;
+    const targets = info.memberIds.filter(id => id !== senderId && !connectedSet.has(id));
+    for (const id of targets) {
+      sendPush({
+        userId: id,
+        title:  info.name,
+        body:   `${senderNick}: ${text}`,
+        data:   { type: 'chat', roomId, senderUserId: senderId },
+      }).catch(() => {});
+    }
+  } catch (e) {
+    console.error('[WS chat push] error:', e.message);
+  }
+}
+
 // ─── WebSocket 실시간 위치 공유 ───────────────────────────────────────────────
 
 const httpServer = http.createServer(app);
@@ -1374,6 +1543,42 @@ wss.on('connection', (ws) => {
           }
         });
       }
+    }
+
+    // 그룹 실시간 채팅 — PostgreSQL 저장 후 방 전체에 브로드캐스트
+    if (msg.type === 'chat' && ws.roomId) {
+      const text = (msg.text || '').toString().slice(0, 2000).trim();
+      if (!text) return;
+      const clientMsgId = msg.clientMsgId || null;  // 발신자 중복 제거용
+      const createdAt = new Date();
+
+      // 저장 (fire-and-forget, 실패해도 브로드캐스트는 진행)
+      pgPool.query(
+        `INSERT INTO room_messages (room_id, user_id, nickname, text, created_at)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [ws.roomId, ws.userId, ws.nickname, text, createdAt]
+      ).catch(e => console.error('[WS chat] persist error:', e.message));
+
+      const payload = JSON.stringify({
+        type:        'chat',
+        roomId:      ws.roomId,
+        userId:      ws.userId,
+        nickname:    ws.nickname,
+        text,
+        clientMsgId,
+        ts:          createdAt.getTime(),
+      });
+      const room = wsRooms.get(ws.roomId);
+      const connected = new Set();
+      if (room) {
+        room.forEach(client => {
+          // 발신자 포함 전원에게 전송 (발신자는 clientMsgId로 낙관적 메시지 확정)
+          if (client.readyState === WebSocket.OPEN) client.send(payload);
+          if (client.userId) connected.add(client.userId);
+        });
+      }
+      // 접속 안 한 멤버에게만 APNs 푸시 (카톡처럼 "닉네임: 메시지")
+      pushChatToOfflineMembers(ws.roomId, ws.userId, ws.nickname, text, connected);
     }
 
     if (msg.type === 'leave') wsLeaveRoom(ws);

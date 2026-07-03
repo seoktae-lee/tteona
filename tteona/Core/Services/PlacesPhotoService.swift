@@ -10,25 +10,54 @@ actor PlacesPhotoService {
     }
 
     private var cache: [String: PlaceInfo] = [:]
+    private let wasBaseURL = "https://tteona.kr/api"
 
     private var apiKey: String {
         Bundle.main.object(forInfoDictionaryKey: "GOOGLE_PLACES_API_KEY") as? String ?? ""
     }
 
-    func photoURL(for placeName: String) async -> String? {
-        await ensureFetched(placeName)
+    // 좌표를 함께 넘기면 관광공사 TourAPI에서 좌표가 가장 가까운 큐레이션 사진을 우선 사용.
+    // 좌표 없이 호출하면 기존 동작(Google Places)과 동일.
+    func photoURL(for placeName: String, latitude: Double? = nil, longitude: Double? = nil) async -> String? {
+        await ensureFetched(placeName, latitude: latitude, longitude: longitude)
         return cache[placeName]?.photoURL
     }
 
-    func placeCategory(for placeName: String) async -> String? {
-        await ensureFetched(placeName)
+    func placeCategory(for placeName: String, latitude: Double? = nil, longitude: Double? = nil) async -> String? {
+        await ensureFetched(placeName, latitude: latitude, longitude: longitude)
         return cache[placeName]?.category
     }
 
-    private func ensureFetched(_ placeName: String) async {
+    private func ensureFetched(_ placeName: String, latitude: Double?, longitude: Double?) async {
         guard cache[placeName] == nil else { return }
         cache[placeName] = PlaceInfo()  // 중복 요청 방지용 플레이스홀더
+
+        // 1순위: 관광공사 TourAPI (무료·큐레이션, WAS 경유 + 좌표 기반 선별)
+        if let tour = await fetchFromTourAPI(placeName, latitude: latitude, longitude: longitude) {
+            cache[placeName] = tour
+            return
+        }
+        // 2순위: Google Places 폴백 (커버리지 보완)
         await fetchAndCache(placeName)
+    }
+
+    private func fetchFromTourAPI(_ placeName: String, latitude: Double?, longitude: Double?) async -> PlaceInfo? {
+        var comps = URLComponents(string: "\(wasBaseURL)/places/tour-photo")
+        var items = [URLQueryItem(name: "name", value: placeName)]
+        if let latitude { items.append(URLQueryItem(name: "lat", value: String(latitude))) }
+        if let longitude { items.append(URLQueryItem(name: "lng", value: String(longitude))) }
+        comps?.queryItems = items
+        guard let url = comps?.url else { return nil }
+
+        do {
+            let (data, response) = try await URLSession.shared.data(from: url)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return nil }
+            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let photoURL = json["url"] as? String, !photoURL.isEmpty else { return nil }
+            return PlaceInfo(photoURL: photoURL, category: json["category"] as? String)
+        } catch {
+            return nil
+        }
     }
 
     private func fetchAndCache(_ placeName: String) async {

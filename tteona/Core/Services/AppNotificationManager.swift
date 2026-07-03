@@ -55,6 +55,16 @@ extension AppNotificationManager: UNUserNotificationCenterDelegate {
                 return
             }
 
+            // 그룹 단톡 알림: 같은 방을 보고 있으면(멤버 무관) 배너 억제
+            if type == "chat" {
+                if let active = self.activeChatRoom, active.roomId == roomId {
+                    completionHandler([])
+                } else {
+                    completionHandler([.banner, .sound])
+                }
+                return
+            }
+
             let targetUserId: String
             if type == "feed_comment" {
                 targetUserId = (userInfo["targetUserId"] as? String) ?? senderUserId
@@ -99,6 +109,9 @@ extension AppNotificationManager: UNUserNotificationCenterDelegate {
                   let senderUserId = userInfo["senderUserId"] as? String else { return }
 
             switch type {
+            case "chat":
+                // 그룹 단톡 메시지 알림 → 해당 방 단톡 열기 (멤버 라우팅 불필요)
+                self.pendingChatRoom = PendingChatRoom(roomId: roomId, targetUserId: senderUserId)
             case "feed_comment":
                 // 댓글 알림 → 내(피드 작성자) 피드창 열기
                 let openUserId = (userInfo["targetUserId"] as? String) ?? senderUserId

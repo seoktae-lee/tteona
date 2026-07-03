@@ -478,7 +478,8 @@ struct PlacePagePhoto: View {
             .padding(14)
         }
         .task {
-            photoURL = await PlacesPhotoService.shared.photoURL(for: place.placeName)
+            photoURL = await PlacesPhotoService.shared.photoURL(
+                for: place.placeName, latitude: place.latitude, longitude: place.longitude)
             isLoading = false
         }
     }
@@ -604,8 +605,10 @@ struct PlaceRow: View {
             .background(Capsule().fill(Color.tteOrange.opacity(0.1)))
         }
         .task {
-            async let photo = PlacesPhotoService.shared.photoURL(for: place.placeName)
-            async let cat = PlacesPhotoService.shared.placeCategory(for: place.placeName)
+            async let photo = PlacesPhotoService.shared.photoURL(
+                for: place.placeName, latitude: place.latitude, longitude: place.longitude)
+            async let cat = PlacesPhotoService.shared.placeCategory(
+                for: place.placeName, latitude: place.latitude, longitude: place.longitude)
             (photoURL, category) = await (photo, cat)
             isLoading = false
         }

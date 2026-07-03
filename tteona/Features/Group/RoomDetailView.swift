@@ -3,28 +3,14 @@ import MapKit
 
 struct RoomDetailView: View {
     let room: Room
-    var autoOpenUserId: String? = nil
+    var autoOpenUserId: String? = nil   // (구 댓글 스레드용 — 단톡 전환 후 미사용, 호환 위해 유지)
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var userService: UserService
     @EnvironmentObject private var roomService: RoomService
     @State private var showLeaveAlert = false
-    @State private var selectedFeedMember: FeedMember?
     @State private var showShareSheet = false
-    @State private var activeMemberIds: Set<String> = []
-    @State private var latestFeedPerMember: [String: FeedItem] = [:]
-    @State private var lastReadPerMember: [String: Date] = [:]
 
     private var uid: String { authService.currentUser?.uid ?? "" }
-
-    private var sortedMembers: [RoomMember] {
-        roomService.currentRoomMembers.sorted { a, b in
-            if a.userId == uid { return true }
-            if b.userId == uid { return false }
-            let aDate = latestFeedPerMember[a.userId]?.createdAt ?? .distantPast
-            let bDate = latestFeedPerMember[b.userId]?.createdAt ?? .distantPast
-            return aDate > bDate
-        }
-    }
 
     private var roomInviteURL: URL {
         var components = URLComponents()
@@ -47,7 +33,10 @@ struct RoomDetailView: View {
 
             Divider()
 
-            memberChatList
+            GroupChatView(room: room)
+                .environmentObject(authService)
+                .environmentObject(userService)
+                .environmentObject(roomService)
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -69,12 +58,6 @@ struct RoomDetailView: View {
                 }
             }
         }
-        .sheet(item: $selectedFeedMember) { member in
-            MemberChatView(roomId: room.roomId, memberUserId: member.userId, memberNickname: member.nickname)
-                .environmentObject(authService)
-                .environmentObject(userService)
-                .environmentObject(roomService)
-        }
         .alert("그룹 나가기", isPresented: $showLeaveAlert) {
             Button("나가기", role: .destructive) {
                 Task { try? await roomService.leaveRoom(roomId: room.roomId, userId: uid) }
@@ -87,20 +70,11 @@ struct RoomDetailView: View {
             ShareSheet(items: [roomInviteURL])
         }
         .onAppear {
-            Task {
-                await loadRoomData()
-                if let userId = autoOpenUserId,
-                   let member = roomService.currentRoomMembers.first(where: { $0.userId == userId }) {
-                    selectedFeedMember = FeedMember(userId: member.userId, nickname: member.nickname)
-                }
-            }
+            Task { await roomService.fetchMembers(roomId: room.roomId) }
             roomService.startListeningFeed(roomId: room.roomId)
         }
         .onDisappear {
             roomService.stopListeningFeed()
-        }
-        .onChange(of: roomService.feedItems) { _, _ in
-            Task { await refreshMemberStatus() }
         }
     }
 
@@ -139,73 +113,6 @@ struct RoomDetailView: View {
         .padding(12)
         .background(RoundedRectangle(cornerRadius: 12).fill(Color(UIColor.secondarySystemBackground)))
     }
-
-    // MARK: - 멤버 채팅방 목록
-    private var memberChatList: some View {
-        Group {
-            if roomService.currentRoomMembers.isEmpty {
-                VStack(spacing: 14) {
-                    Spacer()
-                    Image(systemName: "person.2")
-                        .font(.system(size: 44))
-                        .foregroundColor(.tteOrange.opacity(0.35))
-                    Text("아직 멤버가 없어요")
-                        .font(.system(size: 14))
-                        .foregroundColor(.tteMediumGray)
-                    Spacer()
-                }
-            } else {
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        ForEach(sortedMembers) { member in
-                            let isActive = activeMemberIds.contains(member.userId)
-                            let latestFeed = latestFeedPerMember[member.userId]
-                            let hasNew = hasNewMemberFeed(memberId: member.userId)
-                            Button {
-                                roomService.markMemberFeedAsRead(roomId: room.roomId, userId: uid, memberUserId: member.userId)
-                                lastReadPerMember[member.userId] = Date()
-                                selectedFeedMember = FeedMember(userId: member.userId, nickname: member.nickname)
-                            } label: {
-                                MemberChatRow(
-                                    member: member,
-                                    isMe: member.userId == uid,
-                                    latestFeed: latestFeed,
-                                    hasNewFeed: hasNew,
-                                    isActive: isActive
-                                )
-                            }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 6)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // MARK: - 데이터 로드
-    private func loadRoomData() async {
-        await roomService.fetchMembers(roomId: room.roomId)
-        await refreshMemberStatus()
-        if let myDoc = await roomService.fetchMyMemberDoc(roomId: room.roomId, userId: uid) {
-            lastReadPerMember = myDoc.lastReadPerMember ?? [:]
-        }
-    }
-
-    private func refreshMemberStatus() async {
-        let memberIds = roomService.currentRoomMembers.map(\.userId)
-        async let active = roomService.fetchActiveMemberIds(roomId: room.roomId)
-        async let latest = roomService.fetchLatestFeedPerMember(roomId: room.roomId, memberIds: memberIds)
-        activeMemberIds = await active
-        latestFeedPerMember = await latest
-    }
-
-    private func hasNewMemberFeed(memberId: String) -> Bool {
-        guard let latestFeed = latestFeedPerMember[memberId] else { return false }
-        guard let readAt = lastReadPerMember[memberId] else { return true }
-        return latestFeed.createdAt > readAt
-    }
-
 }
 
 // MARK: - 피드 카드

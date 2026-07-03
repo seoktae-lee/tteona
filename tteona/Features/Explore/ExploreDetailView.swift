@@ -380,8 +380,10 @@ private struct PlaceCardRow: View {
         .padding(10)
         .background(RoundedRectangle(cornerRadius: 14).fill(Color(UIColor.secondarySystemBackground)))
         .task {
-            photoURL = await PlacesPhotoService.shared.photoURL(for: place.placeName)
-            category = await PlacesPhotoService.shared.placeCategory(for: place.placeName)
+            photoURL = await PlacesPhotoService.shared.photoURL(
+                for: place.placeName, latitude: place.latitude, longitude: place.longitude)
+            category = await PlacesPhotoService.shared.placeCategory(
+                for: place.placeName, latitude: place.latitude, longitude: place.longitude)
             isLoading = false
         }
     }

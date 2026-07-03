@@ -430,8 +430,9 @@ struct CourseListRow: View {
         .shadow(color: .black.opacity(0.1), radius: 8, y: 3)
         .task {
             async let photo: String? = {
-                guard let name = course.places.first?.placeName else { return nil }
-                return await PlacesPhotoService.shared.photoURL(for: name)
+                guard let first = course.places.first else { return nil }
+                return await PlacesPhotoService.shared.photoURL(
+                    for: first.placeName, latitude: first.latitude, longitude: first.longitude)
             }()
             async let author = userService.fetchAuthor(uid: course.authorId)
             let (p, a) = await (photo, author)
