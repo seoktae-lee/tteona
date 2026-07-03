@@ -39,9 +39,17 @@ struct GroupChatView: View {
     private var uid: String { authService.currentUser?.uid ?? "" }
     private var myNickname: String { userService.currentUser?.nickname ?? "멤버" }
 
+    // 채팅에 시스템 메시지로 노출할 활동 — 저빈도·고가치 마일스톤만.
+    // 장소별 캡처(freeCapture)·사진·도착은 스팸이 되어 제외.
+    private static let chatVisibleFeedTypes: Set<FeedType> = [
+        .tripStart, .tripEnd, .freeTripStart, .freeTripEnd
+    ]
+
     private var entries: [ChatTimelineEntry] {
         var all: [ChatTimelineEntry] = chat.messages.map { .message($0) }
-        all += roomService.feedItems.map { .system($0) }
+        all += roomService.feedItems
+            .filter { Self.chatVisibleFeedTypes.contains($0.type) }
+            .map { .system($0) }
         return all.sorted { $0.date < $1.date }
     }
 
