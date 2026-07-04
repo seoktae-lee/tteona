@@ -2,6 +2,7 @@ import SwiftUI
 import AVKit
 import Photos
 import PhotosUI
+import FirebaseAuth
 
 struct VlogGenerationView: View {
     let course: Course
@@ -15,6 +16,8 @@ struct VlogGenerationView: View {
     @State private var vlogURL: URL?
     @State private var errorMessage: String?
     @State private var progress: Double = 0
+    @State private var stageText = "추억을 만들고 있어요..."
+    @State private var savedBothFormats = false
     @State private var didGenerate = false
 
     private let vlogService = VlogService()
@@ -26,7 +29,8 @@ struct VlogGenerationView: View {
         case .generating: generatingView
         case .preview:
             if let url = vlogURL {
-                VlogPreviewView(vlogURL: url, thumbnailCourseId: thumbnailCourseId) {
+                VlogPreviewView(vlogURL: url, thumbnailCourseId: thumbnailCourseId,
+                                savedBothFormats: savedBothFormats) {
                     dismiss()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                         onDismissToHome?()
@@ -60,9 +64,10 @@ struct VlogGenerationView: View {
                 }
 
                 VStack(spacing: 8) {
-                    Text("추억을 만들고 있어요...")
+                    Text(stageText)
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundColor(.white)
+                        .animation(.easeInOut(duration: 0.2), value: stageText)
                     Text(course.courseName)
                         .font(.system(size: 14))
                         .foregroundColor(.white.opacity(0.6))
@@ -75,14 +80,40 @@ struct VlogGenerationView: View {
             guard !didGenerate else { return }
             didGenerate = true
             do {
-                let url = try await vlogService.generateVlog(
-                    course: course,
-                    sessionId: sessionId,
-                    onProgress: { p in
-                        Task { @MainActor in progress = p }
+                var mainURL: URL
+                var altURL: URL?
+                if let uid = Auth.auth().currentUser?.uid {
+                    do {
+                        // 1순위: 서버(WAS 8코어) 합성 — 폰 부담 없이 빠르고 BGM·멀티포맷 포함
+                        let result = try await VlogServerService.shared.generate(
+                            course: course, sessionId: sessionId, userId: uid,
+                            onProgress: { p, stage in
+                                progress = p
+                                stageText = stage
+                            }
+                        )
+                        mainURL = result.main
+                        altURL = result.alt
+                        print("[VlogGeneration] 서버 합성 성공 (멀티포맷: \(result.alt != nil))")
+                    } catch {
+                        // 서버 실패(네트워크·서버 다운 등) → 기존 로컬 합성 폴백으로 항상 동작 보장
+                        print("[VlogGeneration] 서버 합성 실패 → 로컬 폴백: \(error.localizedDescription)")
+                        await MainActor.run {
+                            stageText = "추억을 만들고 있어요..."
+                            progress = 0.05
+                        }
+                        mainURL = try await vlogService.generateVlog(
+                            course: course, sessionId: sessionId,
+                            onProgress: { p in Task { @MainActor in progress = p } }
+                        )
                     }
-                )
-                print("[VlogGeneration] url=\(url.path) exists=\(FileManager.default.fileExists(atPath: url.path))")
+                } else {
+                    mainURL = try await vlogService.generateVlog(
+                        course: course, sessionId: sessionId,
+                        onProgress: { p in Task { @MainActor in progress = p } }
+                    )
+                }
+                print("[VlogGeneration] url=\(mainURL.path) exists=\(FileManager.default.fileExists(atPath: mainURL.path))")
                 // 앨범 저장 권한 확인
                 let status = PHPhotoLibrary.authorizationStatus(for: .addOnly)
                 let isAuthorized = status == .authorized || status == .limited
@@ -97,8 +128,13 @@ struct VlogGenerationView: View {
                         )
                     }
                 }
-                try await vlogService.saveToPhotoLibrary(url: url)
-                vlogURL = url
+                try await vlogService.saveToPhotoLibrary(url: mainURL)
+                if let altURL {
+                    // 릴스·유튜브용 반대 방향 버전도 함께 저장 (실패해도 무시)
+                    try? await vlogService.saveToPhotoLibrary(url: altURL)
+                    savedBothFormats = true
+                }
+                vlogURL = mainURL
                 phase = .preview
             } catch {
                 errorMessage = error.localizedDescription
@@ -132,6 +168,7 @@ struct VlogGenerationView: View {
 struct VlogPreviewView: View {
     let vlogURL: URL
     let thumbnailCourseId: String?
+    let savedBothFormats: Bool
     let onDismiss: () -> Void
 
     @State private var player: AVPlayer
@@ -141,9 +178,11 @@ struct VlogPreviewView: View {
 
     private enum ThumbState { case idle, uploading, done, failed }
 
-    init(vlogURL: URL, thumbnailCourseId: String? = nil, onDismiss: @escaping () -> Void) {
+    init(vlogURL: URL, thumbnailCourseId: String? = nil,
+         savedBothFormats: Bool = false, onDismiss: @escaping () -> Void) {
         self.vlogURL = vlogURL
         self.thumbnailCourseId = thumbnailCourseId
+        self.savedBothFormats = savedBothFormats
         self.onDismiss = onDismiss
         _player = State(initialValue: AVPlayer(url: vlogURL))
     }
@@ -160,7 +199,7 @@ struct VlogPreviewView: View {
                 VStack(spacing: 16) {
                     HStack(spacing: 6) {
                         Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
-                        Text("앨범에 저장됨")
+                        Text(savedBothFormats ? "세로·가로 2가지 버전이 앨범에 저장됨" : "앨범에 저장됨")
                             .font(.system(size: 14)).foregroundColor(.white.opacity(0.8))
                     }
                     .padding(.top, 20)

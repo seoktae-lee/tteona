@@ -829,59 +829,63 @@ pm2 save</div>
       <div class="tasks">
         <div class="task-group-title">서버 파이프라인 구축</div>
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
-            <div class="task-title">클립 업로드 API 엔드포인트 구현</div>
-            <div class="task-desc">iOS 앱에서 녹화된 .mp4 클립들을 WAS로 업로드</div>
+            <div class="task-title">클립 업로드 API 엔드포인트 구현 (완료·배포)</div>
+            <div class="task-desc">POST /api/vlog/jobs(잡 생성) → POST /jobs/:id/clips?order=N(multipart, 디스크 저장, 개당 300MB) → POST /jobs/:id/start(큐 투입) → GET /jobs/:id(진행률 폴링). nginx /api/vlog/ 전용 한도 300M + 업로드 스트리밍.</div>
           </div>
         </div>
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
-            <div class="task-title">DB에 Vlog 작업 큐 테이블 구현</div>
-            <div class="task-desc">업로드 완료 → 큐에 작업 추가 → FFmpeg 처리 → 완료 알림</div>
+            <div class="task-title">DB에 Vlog 작업 큐 테이블 구현 (완료)</div>
+            <div class="task-desc">Phase 2의 vlog_jobs 테이블 활용. enum에 'uploading' 추가(uploading→pending→processing→completed/failed). 워커가 5초마다 pending 1개 처리(동시 1개 — 8코어 집중), progress 실시간 갱신.</div>
           </div>
         </div>
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
-            <div class="task-title">FFmpeg 합성 로직 구현</div>
-            <div class="task-desc">타이틀 카드 + 장소별 클립 + 자막 오버레이 + 페이드 인/아웃</div>
+            <div class="task-title">FFmpeg 합성 로직 구현 (완료·E2E 검증)</div>
+            <div class="task-desc">로컬 AVFoundation과 동일 스타일: 타이틀 카드 2초(주황 #FFB587 + 한글 날짜 + tteona, Gowun Batang 폰트 서버 업로드) + 클립별 정규화(첫 클립 방향 기준 1080p, scale+pad, 회전 메타 처리) + 장소명 자막(반투명 박스) + 페이드 0.4초 + 동일 인코딩 세그먼트 concat(-c copy, faststart). 3클립 E2E: 업로드→합성 10초→1080x1920 h264/aac 11.1초 결과물, 타이틀·한글자막 프레임 검증 통과.</div>
           </div>
         </div>
 
         <div class="task-group-title">추가 기능</div>
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
-            <div class="task-title">BGM 자동 삽입</div>
-            <div class="task-desc">여행 태그(커플/친구/가족/혼자)별 배경음악 자동 선택 및 길이에 맞게 컷</div>
+            <div class="task-title">BGM 자동 삽입 (완료·E2E 검증)</div>
+            <div class="task-desc">저작권 프리 12곡을 태그별 3곡씩 서버 배치(assets/bgm/{couple,friends,family,solo}). 태그 폴더에서 랜덤 선택, 원음 유지 + BGM 30% 볼륨 amix(normalize=0), 영상 길이에 맞게 루프·컷 + 끝 1.5초 페이드아웃. 영상 스트림은 재인코딩 없음(-c copy)이라 빠름.</div>
           </div>
         </div>
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
-            <div class="task-title">멀티 포맷 출력 (릴스 9:16 / 유튜브 16:9)</div>
+            <div class="task-title">멀티 포맷 출력 (릴스 9:16 / 유튜브 16:9) (완료·E2E 검증)</div>
+            <div class="task-desc">메인(촬영 방향) + 반대 방향 버전 자동 생성 — 블러 배경 패딩(split→scale/crop/boxblur→overlay). 상태 API가 altUrl 반환, iOS가 두 버전 모두 다운로드해 앨범 저장("세로·가로 2가지 버전이 앨범에 저장됨"). 멀티포맷 실패 시에도 메인은 정상 완성(부가기능 격리).</div>
           </div>
         </div>
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
-            <div class="task-title">완성 후 APNs로 "Vlog 완성됐어요" 푸시 알림</div>
+            <div class="task-title">완성 후 APNs로 "Vlog 완성됐어요" 푸시 알림 (완료)</div>
+            <div class="task-desc">워커가 completed 시 sendPush("🎬 Vlog 완성!" + 코스명, type:'vlog_done') 발송. 기존 APNs 인프라 재사용.</div>
           </div>
         </div>
 
         <div class="task-group-title">iOS 앱 수정</div>
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
-            <div class="task-title">로컬 AVFoundation 합성 → 서버 업로드 방식으로 변경</div>
+            <div class="task-title">로컬 AVFoundation 합성 → 서버 업로드 방식으로 변경 (완료)</div>
+            <div class="task-desc">VlogServerService 신규 — 잡 생성→클립 스트리밍 업로드(메모리 미적재, 임시파일 multipart)→start→2초 폴링→완성본 다운로드. VlogGenerationView가 서버 우선, 실패 시(네트워크·서버 다운) 기존 로컬 합성으로 자동 폴백 — 기능 항상 동작 보장. 빌드 통과, 실기기 검증 대기.</div>
           </div>
         </div>
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
-            <div class="task-title">처리 중 대기 UI 추가 (진행률 표시)</div>
+            <div class="task-title">처리 중 대기 UI 추가 (진행률 표시) (완료)</div>
+            <div class="task-desc">기존 진행률 링 재사용 + 단계별 텍스트("클립 업로드 중 (i/n)" → "서버에서 편집 중이에요" → "완성본을 받아오고 있어요"). 서버 progress(0~100)를 링에 실시간 매핑.</div>
           </div>
         </div>
       </div>

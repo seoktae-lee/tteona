@@ -11,7 +11,7 @@ class VlogService {
 
         var segments: [(asset: AVURLAsset, placeName: String, date: Date)] = []
         for place in places {
-            let url = clipURL(place: place, sessionId: sessionId)
+            let url = Self.clipURL(place: place, sessionId: sessionId)
             guard FileManager.default.fileExists(atPath: url.path) else {
                 print("[Vlog] skip \(place.placeName) — file not found")
                 continue
@@ -343,7 +343,8 @@ class VlogService {
         (try? FileManager.default.attributesOfItem(atPath: url.path)[.creationDate] as? Date) ?? Date()
     }
 
-    private func clipURL(place: Place, sessionId: String) -> URL {
+    // 서버 업로드(VlogServerService)에서도 동일 경로를 쓰므로 static 공유
+    static func clipURL(place: Place, sessionId: String) -> URL {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let name = place.clipFileName ?? {
             let safeName = place.placeName

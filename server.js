@@ -837,6 +837,347 @@ app.post('/api/route', async (req, res) => {
   }
 });
 
+// ─── 서버 사이드 Vlog 생성 (FFmpeg) ───────────────────────────────────────────
+// 흐름: 잡 생성(uploading) → 클립 업로드 → start(pending) → 워커가 합성(processing)
+//       → 완성(completed, output_url) → APNs 푸시. 실패 시 failed + error_msg.
+
+const { spawn } = require('child_process');
+
+const VLOG_DIR = path.join(__dirname, 'uploads', 'vlog');
+fs.mkdirSync(VLOG_DIR, { recursive: true });
+const VLOG_FONT = path.join(__dirname, 'assets', 'fonts', 'GowunBatang-Regular.ttf');
+
+// 클립 업로드용 multer — 영상은 크므로 디스크에 바로 저장 (개당 최대 300MB)
+const vlogUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      const jobId = parseInt(req.params.jobId);
+      if (isNaN(jobId)) return cb(new Error('invalid jobId'));
+      const dir = path.join(VLOG_DIR, String(jobId), 'clips');
+      fs.mkdirSync(dir, { recursive: true });
+      cb(null, dir);
+    },
+    filename: (req, file, cb) => {
+      const order = parseInt(req.query.order);
+      cb(null, `${isNaN(order) ? Date.now() : order}.mp4`);
+    },
+  }),
+  limits: { fileSize: 300 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('video/') || file.mimetype === 'application/octet-stream') cb(null, true);
+    else cb(new Error('영상 파일만 업로드 가능합니다.'));
+  },
+});
+
+// 잡 생성 — body: { userId, courseId?, courseName?, tag?, places: [{order, placeName}] }
+app.post('/api/vlog/jobs', async (req, res) => {
+  const { userId, courseId, courseName, tag, places } = req.body || {};
+  if (!userId || !Array.isArray(places) || places.length === 0) {
+    return res.status(400).json({ error: 'userId and places required' });
+  }
+  try {
+    const r = await pgPool.query(
+      `INSERT INTO vlog_jobs (user_id, course_id, course_name, status, clips, options)
+       VALUES ($1, $2, $3, 'uploading', $4, $5) RETURNING id`,
+      [userId, courseId || 'free', courseName || '나의 오늘',
+       JSON.stringify(places), JSON.stringify({ tag: tag || null })]
+    );
+    res.json({ jobId: r.rows[0].id });
+  } catch (err) {
+    console.error('[Vlog] create error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 클립 업로드 — multipart 필드 "clip", 쿼리 ?order=N (장소 순번)
+app.post('/api/vlog/jobs/:jobId/clips', vlogUpload.single('clip'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'clip file required' });
+  res.json({ ok: true, size: req.file.size });
+});
+
+// 업로드 완료 → 처리 큐 투입
+app.post('/api/vlog/jobs/:jobId/start', async (req, res) => {
+  const id = parseInt(req.params.jobId);
+  try {
+    const r = await pgPool.query(
+      `UPDATE vlog_jobs SET status = 'pending' WHERE id = $1 AND status = 'uploading' RETURNING id`,
+      [id]
+    );
+    if (r.rowCount === 0) return res.status(404).json({ error: 'job not found or not uploading' });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 상태 조회 — iOS 진행률 폴링용 (altUrl = 반대 방향 멀티포맷 버전)
+app.get('/api/vlog/jobs/:jobId', async (req, res) => {
+  try {
+    const r = await pgPool.query(
+      'SELECT status, progress, output_url, error_msg, options FROM vlog_jobs WHERE id = $1',
+      [parseInt(req.params.jobId)]
+    );
+    if (r.rows.length === 0) return res.status(404).json({ error: 'job not found' });
+    const j = r.rows[0];
+    const opts = typeof j.options === 'object' && j.options !== null ? j.options : {};
+    res.json({
+      status: j.status, progress: j.progress,
+      outputUrl: j.output_url, altUrl: opts.altUrl || null,
+      errorMsg: j.error_msg,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── FFmpeg 실행 헬퍼 ──
+
+function runFF(args, timeoutMs = 10 * 60 * 1000) {
+  return new Promise((resolve, reject) => {
+    const p = spawn('ffmpeg', ['-hide_banner', '-y', ...args]);
+    let err = '';
+    p.stderr.on('data', d => { err += d; if (err.length > 20000) err = err.slice(-10000); });
+    const to = setTimeout(() => { p.kill('SIGKILL'); reject(new Error('ffmpeg timeout')); }, timeoutMs);
+    p.on('close', code => {
+      clearTimeout(to);
+      if (code === 0) resolve();
+      else reject(new Error(`ffmpeg exit ${code}: ${err.slice(-800)}`));
+    });
+  });
+}
+
+function probeVideo(file) {
+  return new Promise((resolve, reject) => {
+    const p = spawn('ffprobe', ['-v', 'error', '-print_format', 'json', '-show_streams', '-show_format', file]);
+    let out = '';
+    p.stdout.on('data', d => out += d);
+    p.on('close', code => {
+      if (code !== 0) return reject(new Error('ffprobe failed'));
+      try {
+        const j = JSON.parse(out);
+        const v = (j.streams || []).find(s => s.codec_type === 'video');
+        const a = (j.streams || []).find(s => s.codec_type === 'audio');
+        if (!v) return reject(new Error('no video stream'));
+        // 아이폰 회전 메타데이터를 반영한 "표시" 크기 계산
+        let rot = 0;
+        const sd = (v.side_data_list || []).find(s => s.rotation != null);
+        if (sd) rot = Math.abs(sd.rotation);
+        else if (v.tags && v.tags.rotate) rot = Math.abs(parseInt(v.tags.rotate) || 0);
+        const swap = rot === 90 || rot === 270;
+        resolve({
+          width: swap ? v.height : v.width,
+          height: swap ? v.width : v.height,
+          duration: parseFloat(j.format?.duration || v.duration || 0),
+          hasAudio: !!a,
+        });
+      } catch (e) { reject(e); }
+    });
+  });
+}
+
+// drawtext 이스케이프 지옥을 피하기 위해 텍스트는 파일로 전달
+function writeTextFile(dir, name, text) {
+  const f = path.join(dir, name);
+  fs.writeFileSync(f, text, 'utf8');
+  return f;
+}
+
+// ── 합성 파이프라인: 클립별 정규화(자막·페이드) → concat ──
+// 로컬 AVFoundation 합성과 동일 스타일: 타이틀 카드 2초(주황 #FFB587 + 날짜 + tteona),
+// 클립 페이드 0.4초(마지막 클립은 페이드아웃 없음), 장소명 자막.
+async function composeVlog(job) {
+  const jobDir = path.join(VLOG_DIR, String(job.id));
+  const clipsDir = path.join(jobDir, 'clips');
+  const workDir = path.join(jobDir, 'work');
+  fs.mkdirSync(workDir, { recursive: true });
+
+  const places = (Array.isArray(job.clips) ? job.clips : JSON.parse(job.clips || '[]'))
+    .slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+  const clips = places
+    .map(p => ({ ...p, file: path.join(clipsDir, `${p.order}.mp4`) }))
+    .filter(c => fs.existsSync(c.file));
+  if (clips.length === 0) throw new Error('업로드된 클립이 없습니다');
+
+  const setProgress = n =>
+    pgPool.query('UPDATE vlog_jobs SET progress = $2 WHERE id = $1', [job.id, n]).catch(() => {});
+
+  // 출력 해상도: 첫 클립 방향 기준 1080p 클래스로 정규화 (4K 입력도 인코딩 부담 억제)
+  const first = await probeVideo(clips[0].file);
+  const portrait = first.height >= first.width;
+  const W = portrait ? 1080 : 1920, H = portrait ? 1920 : 1080;
+  await setProgress(5);
+
+  const enc = ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21', '-pix_fmt', 'yuv420p',
+               '-r', '30', '-c:a', 'aac', '-ar', '44100', '-ac', '2'];
+  const segments = [];
+
+  // 1) 타이틀 카드 (2초)
+  const now = new Date();
+  const titleTxt = writeTextFile(workDir, 'title.txt',
+    `${now.getFullYear()}년 ${now.getMonth() + 1}월 ${now.getDate()}일`);
+  const titleOut = path.join(workDir, 'seg_000.mp4');
+  const titleVf = [
+    `drawtext=fontfile=${VLOG_FONT}:textfile=${titleTxt}:fontcolor=white:fontsize=${Math.round(H * 0.075)}:x=(w-text_w)/2:y=(h-text_h)/2`,
+    `drawtext=fontfile=${VLOG_FONT}:text=tteona:fontcolor=white@0.75:fontsize=${Math.round(H * 0.045)}:x=(w-text_w)/2:y=h*0.87`,
+    'fade=t=out:st=1.7:d=0.3',
+  ].join(',');
+  await runFF([
+    '-f', 'lavfi', '-i', `color=c=0xFFB587:s=${W}x${H}:d=2:r=30`,
+    '-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100',
+    '-t', '2', '-vf', titleVf, ...enc, titleOut,
+  ]);
+  segments.push(titleOut);
+  await setProgress(12);
+
+  // 2) 클립별 정규화 + 장소명 자막 + 페이드
+  for (let i = 0; i < clips.length; i++) {
+    const c = clips[i];
+    const info = await probeVideo(c.file);
+    const segOut = path.join(workDir, `seg_${String(i + 1).padStart(3, '0')}.mp4`);
+    const subTxt = writeTextFile(workDir, `sub_${i}.txt`, c.placeName || '');
+    const isLast = i === clips.length - 1;
+    const D = Math.max(info.duration, 0.8);
+
+    const vf = [
+      `scale=${W}:${H}:force_original_aspect_ratio=decrease`,
+      `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black`,
+      'setsar=1',
+      `drawtext=fontfile=${VLOG_FONT}:textfile=${subTxt}:fontcolor=white:fontsize=${Math.round(H * 0.038)}:x=(w-text_w)/2:y=h*0.86:box=1:boxcolor=black@0.35:boxborderw=${Math.round(H * 0.012)}`,
+      'fade=t=in:st=0:d=0.4',
+    ];
+    if (!isLast) vf.push(`fade=t=out:st=${Math.max(0, D - 0.4).toFixed(2)}:d=0.4`);
+
+    let af = 'afade=t=in:st=0:d=0.4';
+    if (!isLast) af += `,afade=t=out:st=${Math.max(0, D - 0.4).toFixed(2)}:d=0.4`;
+
+    const args = ['-i', c.file];
+    if (!info.hasAudio) {
+      args.push('-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100', '-shortest');
+    }
+    args.push('-vf', vf.join(','), '-af', af, ...enc, segOut);
+    await runFF(args, 15 * 60 * 1000);
+    segments.push(segOut);
+    await setProgress(12 + Math.round(78 * (i + 1) / clips.length));
+  }
+
+  // 3) concat — 세그먼트가 전부 동일 인코딩이라 재인코딩 없이 이어붙임
+  const listFile = writeTextFile(workDir, 'list.txt', segments.map(s => `file '${s}'`).join('\n'));
+  const rawFile = path.join(workDir, 'raw.mp4');
+  await runFF(['-f', 'concat', '-safe', '0', '-i', listFile, '-c', 'copy', '-movflags', '+faststart', rawFile]);
+  await setProgress(88);
+
+  // 4) BGM 믹스 — 태그별 랜덤 트랙, 원음 유지 + BGM 30% 볼륨, 끝 1.5초 페이드아웃
+  //    (영상 스트림은 -c copy라 재인코딩 없음 → 빠름)
+  const outFile = path.join(jobDir, 'vlog.mp4');
+  const bgm = pickBgm(job);
+  if (bgm) {
+    const total = (await probeVideo(rawFile)).duration;
+    const fadeStart = Math.max(0, total - 1.5).toFixed(2);
+    await runFF([
+      '-i', rawFile, '-stream_loop', '-1', '-i', bgm,
+      '-filter_complex',
+      `[1:a]volume=0.30[bg];[0:a][bg]amix=inputs=2:duration=first:dropout_transition=3:normalize=0[mx];[mx]afade=t=out:st=${fadeStart}:d=1.5[a]`,
+      '-map', '0:v', '-map', '[a]',
+      '-c:v', 'copy', '-c:a', 'aac', '-ar', '44100', '-ac', '2',
+      '-movflags', '+faststart', outFile,
+    ]);
+    console.log(`[Vlog] job ${job.id} BGM: ${path.basename(bgm)}`);
+  } else {
+    fs.copyFileSync(rawFile, outFile);
+  }
+  await setProgress(92);
+
+  // 5) 멀티 포맷 — 반대 방향 버전(블러 배경 패딩): 릴스 9:16 ↔ 유튜브 16:9
+  let altUrl = null;
+  try {
+    const altW = portrait ? 1920 : 1080, altH = portrait ? 1080 : 1920;
+    const altName = portrait ? 'vlog_wide.mp4' : 'vlog_tall.mp4';
+    const altFile = path.join(jobDir, altName);
+    await runFF([
+      '-i', outFile,
+      '-filter_complex',
+      `[0:v]split=2[bga][fga];[bga]scale=${altW}:${altH}:force_original_aspect_ratio=increase,crop=${altW}:${altH},boxblur=20:3[bgb];[fga]scale=${altW}:${altH}:force_original_aspect_ratio=decrease[fgs];[bgb][fgs]overlay=(W-w)/2:(H-h)/2`,
+      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '22', '-pix_fmt', 'yuv420p',
+      '-c:a', 'copy', '-movflags', '+faststart', altFile,
+    ], 15 * 60 * 1000);
+    altUrl = `https://tteona.kr/uploads/vlog/${job.id}/${altName}`;
+    await pgPool.query(
+      `UPDATE vlog_jobs SET options = options || $2 WHERE id = $1`,
+      [job.id, JSON.stringify({ altUrl })]
+    );
+  } catch (e) {
+    // 멀티포맷은 부가 기능 — 실패해도 메인 결과물은 완성 처리
+    console.error(`[Vlog] job ${job.id} 멀티포맷 실패(무시):`, e.message);
+  }
+  await setProgress(97);
+
+  // 중간 산출물 정리 (원본 클립은 보존 — 추후 오래된 잡 정리 크론에서 일괄 삭제)
+  try { fs.rmSync(workDir, { recursive: true, force: true }); } catch {}
+
+  return `https://tteona.kr/uploads/vlog/${job.id}/vlog.mp4`;
+}
+
+// 태그별 BGM 랜덤 선택 (태그 폴더 우선, 없으면 전체 폴더 순회)
+const BGM_DIR = path.join(__dirname, 'assets', 'bgm');
+const BGM_TAG_DIR = { '커플': 'couple', '친구': 'friends', '가족': 'family', '혼자': 'solo' };
+
+function pickBgm(job) {
+  try {
+    const opts = typeof job.options === 'object' && job.options !== null
+      ? job.options : JSON.parse(job.options || '{}');
+    const preferred = BGM_TAG_DIR[opts.tag];
+    const dirs = [];
+    if (preferred) dirs.push(path.join(BGM_DIR, preferred));
+    dirs.push(...Object.values(BGM_TAG_DIR).map(d => path.join(BGM_DIR, d)));
+    for (const d of dirs) {
+      if (!fs.existsSync(d)) continue;
+      const files = fs.readdirSync(d).filter(f => /\.(mp3|m4a|aac|wav)$/i.test(f));
+      if (files.length) return path.join(d, files[Math.floor(Math.random() * files.length)]);
+    }
+  } catch {}
+  return null;
+}
+
+// ── 워커: 5초마다 pending 잡 1개 처리 (동시 1개 — 8코어를 한 잡에 집중) ──
+let vlogBusy = false;
+setInterval(async () => {
+  if (vlogBusy) return;
+  let job;
+  try {
+    const r = await pgPool.query(`
+      UPDATE vlog_jobs SET status = 'processing', started_at = NOW(), progress = 1
+      WHERE id = (SELECT id FROM vlog_jobs WHERE status = 'pending' ORDER BY created_at LIMIT 1)
+      RETURNING *`);
+    if (r.rows.length === 0) return;
+    job = r.rows[0];
+  } catch { return; }
+
+  vlogBusy = true;
+  console.log(`[Vlog] job ${job.id} 합성 시작 (user=${job.user_id})`);
+  try {
+    const url = await composeVlog(job);
+    await pgPool.query(
+      `UPDATE vlog_jobs SET status = 'completed', progress = 100, output_url = $2, completed_at = NOW() WHERE id = $1`,
+      [job.id, url]
+    );
+    console.log(`[Vlog] job ${job.id} 완성 → ${url}`);
+    sendPush({
+      userId: job.user_id,
+      title: '🎬 Vlog 완성!',
+      body: `${job.course_name || '나의 오늘'} 영상이 완성됐어요. 앱에서 확인해보세요!`,
+      data: { type: 'vlog_done', jobId: String(job.id) },
+    }).catch(() => {});
+  } catch (err) {
+    console.error(`[Vlog] job ${job.id} 실패:`, err.message);
+    await pgPool.query(
+      `UPDATE vlog_jobs SET status = 'failed', error_msg = $2 WHERE id = $1`,
+      [job.id, String(err.message).slice(0, 500)]
+    ).catch(() => {});
+  } finally {
+    vlogBusy = false;
+  }
+}, 5000);
+
 // ─── 그룹 채팅 기록 ───────────────────────────────────────────────────────────
 // 최근 메시지 조회 (오래된 → 최신 순으로 반환). WebSocket 접속 전 히스토리 로드용.
 app.get('/api/rooms/:roomId/messages', async (req, res) => {
