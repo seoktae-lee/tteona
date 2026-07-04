@@ -663,18 +663,15 @@ extension MainView {
     private func performMapSearch() async {
         let q = searchText.trimmingCharacters(in: .whitespaces)
         guard !q.isEmpty else { return }
-        
-        let request = MKLocalSearch.Request()
-        request.naturalLanguageQuery = q
-        
-        do {
-            let response = try await MKLocalSearch(request: request).start()
-            if let firstItem = response.mapItems.first {
-                let coord = firstItem.placemark.coordinate
-                cameraCommand = gmsCamera(center: coord, latDelta: 0.1)
-            }
-        } catch {
-            print("[Search] Map search failed: \(error.localizedDescription)")
+
+        // 카카오 우선(한국 지명 정확) → 없으면 MapKit 폴백 (PlaceSearchService 내부 처리)
+        let svc = PlaceSearchService()
+        await svc.search(q)
+        if let first = svc.results.first {
+            cameraCommand = gmsCamera(
+                center: CLLocationCoordinate2D(latitude: first.latitude, longitude: first.longitude),
+                latDelta: 0.1
+            )
         }
     }
 }

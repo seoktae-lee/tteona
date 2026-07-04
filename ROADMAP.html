@@ -1113,6 +1113,20 @@ pm2 save</div>
           </div>
         </div>
         <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">홈 검색 정확도 수정 — 카카오 로컬 검색으로 통일 (완료)</div>
+            <div class="task-desc">"신사" 검색 시 서울 신사동 대신 중국 신주시로 이동하던 버그. 원인: RegionSearchView·MainView.performMapSearch가 Apple MKLocalSearch를 사용(한국 편향 없음, 국내 지명 데이터 약함). PlaceSearchService(카카오 로컬 우선 → 해외는 MapKit 폴백, 이미 존재)로 두 검색 경로 통일. 카카오 API로 "신사" 검증 → 신사동 가로수길·압구정로데오 등 정확히 반환. 빌드 통과.</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">코스 상세 동선 지도 — 탭하면 전체화면 인터랙티브 지도 (완료)</div>
+            <div class="task-desc">ExploreDetailView 동선 미니 지도(정적)에 "⤡ 주변 보기" 힌트 배지 추가, 탭 시 CourseFullMapView(신규)가 전체화면으로 열려 자유롭게 팬·줌하며 주변 탐색 가능(번호 핀·경로·내 위치 유지). 스크롤뷰 내 미니 지도는 정적 유지 + 투명 탭 오버레이로 스크롤 제스처와 충돌 방지. 빌드 통과.</div>
+          </div>
+        </div>
+        <div class="task">
           <div class="task-check"></div>
           <div class="task-content">
             <div class="task-title">Xcode 빌드 → TestFlight → App Store 제출</div>

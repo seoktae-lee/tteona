@@ -22,6 +22,7 @@ struct ExploreDetailView: View {
     @State private var isLoadingTransit = true
     @State private var showRoomSelect = false
     @State private var showOtherCourseAlert = false
+    @State private var showFullMap = false
     @State private var selectedRoomIds: Set<String> = []
 
     private let sessionStore = ActiveSessionStore.shared
@@ -59,6 +60,9 @@ struct ExploreDetailView: View {
             isLoadingRoute = false
             transitRoute = await ExploreInfoService.shared.computeTransitRoute(places: course.places)
             isLoadingTransit = false
+        }
+        .fullScreenCover(isPresented: $showFullMap) {
+            CourseFullMapView(course: course)
         }
         .fullScreenCover(isPresented: $showRoomSelect) {
             RoomSelectView(selectedRoomIds: $selectedRoomIds) {
@@ -268,6 +272,19 @@ struct ExploreDetailView: View {
         )
         .frame(height: 200)
         .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(alignment: .topTrailing) {
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.up.left.and.arrow.down.right")
+                Text("주변 보기")
+            }
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundColor(.white)
+            .padding(.horizontal, 9).padding(.vertical, 5)
+            .background(Capsule().fill(Color.black.opacity(0.5)))
+            .padding(8)
+        }
+        // 지도 위 탭 → 전체화면 인터랙티브 지도 (제스처 충돌 방지용 투명 오버레이)
+        .overlay { Color.clear.contentShape(Rectangle()).onTapGesture { showFullMap = true } }
     }
 
     // MARK: - Buttons
@@ -310,6 +327,42 @@ struct ExploreDetailView: View {
                 .allowsHitTesting(false),
             alignment: .bottom
         )
+    }
+}
+
+// MARK: - 전체화면 코스 지도 (주변 탐색)
+
+private struct CourseFullMapView: View {
+    let course: Course
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            GoogleMapView(
+                markers: course.places.enumerated().map { idx, place in
+                    GoogleMapMarker(id: place.id, coordinate: place.coordinate, badgeNumber: idx + 1)
+                },
+                polyline: course.places.count >= 2 ? course.places.map(\.coordinate) : nil,
+                dashedPolyline: true,
+                showsUserLocation: true,
+                initialCamera: GoogleMapView.fittingCamera(for: course.places.map(\.coordinate)),
+                interactive: true
+            )
+            .ignoresSafeArea()
+
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(.tteDarkGray)
+                    .frame(width: 40, height: 40)
+                    .background(Circle().fill(Color.white))
+                    .shadow(color: .black.opacity(0.2), radius: 5, y: 2)
+            }
+            .padding(.leading, 16)
+            .padding(.top, 52)
+        }
     }
 }
 

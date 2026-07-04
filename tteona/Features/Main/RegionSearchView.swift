@@ -1,13 +1,12 @@
 import SwiftUI
-import MapKit
+import CoreLocation
 
 struct RegionSearchView: View {
     @Environment(\.dismiss) private var dismiss
     let onSelect: (String, CLLocationCoordinate2D) -> Void
 
+    @StateObject private var search = PlaceSearchService()
     @State private var query = ""
-    @State private var results: [MKMapItem] = []
-    @State private var isSearching = false
 
     var body: some View {
         NavigationStack {
@@ -32,11 +31,11 @@ struct RegionSearchView: View {
                 .foregroundColor(.tteMediumGray)
             TextField("지역, 동네 검색 (예: 잠실, 홍대, 해운대)", text: $query)
                 .autocorrectionDisabled()
-                .onSubmit { Task { await search() } }
+                .onSubmit { Task { await search.search(query) } }
             if !query.isEmpty {
                 Button {
                     query = ""
-                    results = []
+                    search.results = []
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundColor(.tteMediumGray)
@@ -49,19 +48,16 @@ struct RegionSearchView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .onChange(of: query) { _, newValue in
-            Task {
-                try? await Task.sleep(for: .milliseconds(400))
-                await search()
-            }
+            search.searchDebounced(newValue)
         }
     }
 
     @ViewBuilder
     private var resultList: some View {
-        if isSearching {
+        if search.isSearching {
             ProgressView().padding(.top, 40)
             Spacer()
-        } else if results.isEmpty && !query.isEmpty {
+        } else if search.results.isEmpty && !query.isEmpty {
             VStack(spacing: 12) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 36))
@@ -71,7 +67,7 @@ struct RegionSearchView: View {
             }
             .padding(.top, 60)
             Spacer()
-        } else if results.isEmpty {
+        } else if search.results.isEmpty {
             VStack(spacing: 12) {
                 Image(systemName: "map.fill")
                     .font(.system(size: 36))
@@ -83,12 +79,9 @@ struct RegionSearchView: View {
             .padding(.top, 60)
             Spacer()
         } else {
-            List(results, id: \.self) { item in
+            List(search.results) { item in
                 Button {
-                    let coord = item.placemark.coordinate
-                    let name = [item.name, item.placemark.locality, item.placemark.administrativeArea]
-                        .compactMap { $0 }.first ?? "해당 지역"
-                    onSelect(name, coord)
+                    onSelect(item.name, CLLocationCoordinate2D(latitude: item.latitude, longitude: item.longitude))
                     dismiss()
                 } label: {
                     HStack(spacing: 12) {
@@ -97,13 +90,11 @@ struct RegionSearchView: View {
                             .foregroundColor(.tteOrange)
                             .frame(width: 32)
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(item.name ?? "")
+                            Text(item.name)
                                 .font(.system(size: 15, weight: .medium))
                                 .foregroundColor(.tteDarkGray)
-                            let address = [item.placemark.administrativeArea, item.placemark.locality]
-                                .compactMap { $0 }.joined(separator: " ")
-                            if !address.isEmpty {
-                                Text(address)
+                            if !item.address.isEmpty {
+                                Text(item.address)
                                     .font(.system(size: 13))
                                     .foregroundColor(.tteMediumGray)
                             }
@@ -114,21 +105,5 @@ struct RegionSearchView: View {
             }
             .listStyle(.plain)
         }
-    }
-
-    private func search() async {
-        let q = query.trimmingCharacters(in: .whitespaces)
-        guard !q.isEmpty else { results = []; return }
-        isSearching = true
-        let request = MKLocalSearch.Request()
-        request.naturalLanguageQuery = q
-        request.resultTypes = [.address, .pointOfInterest]
-        do {
-            let response = try await MKLocalSearch(request: request).start()
-            results = response.mapItems
-        } catch {
-            results = []
-        }
-        isSearching = false
     }
 }
