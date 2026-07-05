@@ -10,10 +10,8 @@ struct RootView: View {
         Group {
             if authService.isInitializing {
                 ZStack {
-                    Color.tteBackground.ignoresSafeArea()
-                    Text("tteona")
-                        .font(.system(size: 52, weight: .bold))
-                        .foregroundColor(.tteOrange)
+                    TteonaSplashBackground()
+                    TteonaWordmarkLogo()
                 }
             } else if !authService.isLoggedIn || authService.verificationEmailSent {
                 AuthView()

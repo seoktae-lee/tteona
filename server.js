@@ -869,18 +869,21 @@ const vlogUpload = multer({
   },
 });
 
-// 잡 생성 — body: { userId, courseId?, courseName?, tag?, places: [{order, placeName}] }
+// 잡 생성 — body: { userId, courseId?, courseName?, tag?, formats?: ['reels'|'youtube'|'insta'],
+//                   places: [{order, placeName, shotAt?}] }  (shotAt: 클립 촬영시각 표시 문자열)
 app.post('/api/vlog/jobs', async (req, res) => {
-  const { userId, courseId, courseName, tag, places } = req.body || {};
+  const { userId, courseId, courseName, tag, formats, places } = req.body || {};
   if (!userId || !Array.isArray(places) || places.length === 0) {
     return res.status(400).json({ error: 'userId and places required' });
   }
   try {
+    const wanted = Array.isArray(formats)
+      ? formats.filter(f => ['reels', 'youtube', 'insta'].includes(f)) : [];
     const r = await pgPool.query(
       `INSERT INTO vlog_jobs (user_id, course_id, course_name, status, clips, options)
        VALUES ($1, $2, $3, 'uploading', $4, $5) RETURNING id`,
       [userId, courseId || 'free', courseName || '나의 오늘',
-       JSON.stringify(places), JSON.stringify({ tag: tag || null })]
+       JSON.stringify(places), JSON.stringify({ tag: tag || null, formats: wanted })]
     );
     res.json({ jobId: r.rows[0].id });
   } catch (err) {
@@ -922,7 +925,8 @@ app.get('/api/vlog/jobs/:jobId', async (req, res) => {
     const opts = typeof j.options === 'object' && j.options !== null ? j.options : {};
     res.json({
       status: j.status, progress: j.progress,
-      outputUrl: j.output_url, altUrl: opts.altUrl || null,
+      outputUrl: j.output_url,
+      outputs: opts.outputs || [],   // [{format:'reels'|'youtube'|'insta', url}]
       errorMsg: j.error_msg,
     });
   } catch (err) {
@@ -1029,7 +1033,8 @@ async function composeVlog(job) {
   segments.push(titleOut);
   await setProgress(12);
 
-  // 2) 클립별 정규화 + 장소명 자막 + 페이드
+  // 2) 클립별 정규화 + 자막(장소명·촬영시각, 화면 중앙, 2.5초 표시 후 사라짐) + 페이드
+  //    — 로컬 AVFoundation 합성과 동일 스타일: 오렌지 장소명 + 흰색 날짜, 박스 없음
   for (let i = 0; i < clips.length; i++) {
     const c = clips[i];
     const info = await probeVideo(c.file);
@@ -1038,13 +1043,27 @@ async function composeVlog(job) {
     const isLast = i === clips.length - 1;
     const D = Math.max(info.duration, 0.8);
 
+    // 자막 표시: 클립 시작 후 최대 2.5초, 페이드 인/아웃 0.4초 (알파 커브)
+    const show = Math.min(2.5, D).toFixed(2);
+    const fadeOutStart = Math.max(0.4, Math.min(2.5, D) - 0.4).toFixed(2);
+    const alpha = `'if(lt(t,0.4),t/0.4,if(lt(t,${fadeOutStart}),1,if(lt(t,${show}),(${show}-t)/0.4,0)))'`;
+    const placeSize = Math.round(H * 0.042);   // 1920 기준 80pt
+    const dateSize = Math.round(H * 0.027);    // 1920 기준 52pt
+    const shadow = 'shadowcolor=black@0.35:shadowx=2:shadowy=2';
+
     const vf = [
       `scale=${W}:${H}:force_original_aspect_ratio=decrease`,
       `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black`,
       'setsar=1',
-      `drawtext=fontfile=${VLOG_FONT}:textfile=${subTxt}:fontcolor=white:fontsize=${Math.round(H * 0.038)}:x=(w-text_w)/2:y=h*0.86:box=1:boxcolor=black@0.35:boxborderw=${Math.round(H * 0.012)}`,
-      'fade=t=in:st=0:d=0.4',
+      // 장소명 — 오렌지(#FF6B35), 화면 세로 중앙 바로 위
+      `drawtext=fontfile=${VLOG_FONT}:textfile=${subTxt}:fontcolor=0xFF6B35:fontsize=${placeSize}:x=(w-text_w)/2:y=(h/2)-${Math.round(placeSize * 1.3)}:${shadow}:alpha=${alpha}`,
     ];
+    // 촬영 시각 — 흰색, 장소명 아래 (iOS가 shotAt 전달 시)
+    if (c.shotAt) {
+      const dateTxt = writeTextFile(workDir, `date_${i}.txt`, String(c.shotAt));
+      vf.push(`drawtext=fontfile=${VLOG_FONT}:textfile=${dateTxt}:fontcolor=white:fontsize=${dateSize}:x=(w-text_w)/2:y=(h/2)+${Math.round(dateSize * 0.3)}:${shadow}:alpha=${alpha}`);
+    }
+    vf.push('fade=t=in:st=0:d=0.4');
     if (!isLast) vf.push(`fade=t=out:st=${Math.max(0, D - 0.4).toFixed(2)}:d=0.4`);
 
     let af = 'afade=t=in:st=0:d=0.4';
@@ -1087,28 +1106,38 @@ async function composeVlog(job) {
   }
   await setProgress(92);
 
-  // 5) 멀티 포맷 — 반대 방향 버전(블러 배경 패딩): 릴스 9:16 ↔ 유튜브 16:9
-  let altUrl = null;
-  try {
-    const altW = portrait ? 1920 : 1080, altH = portrait ? 1080 : 1920;
-    const altName = portrait ? 'vlog_wide.mp4' : 'vlog_tall.mp4';
-    const altFile = path.join(jobDir, altName);
-    await runFF([
-      '-i', outFile,
-      '-filter_complex',
-      `[0:v]split=2[bga][fga];[bga]scale=${altW}:${altH}:force_original_aspect_ratio=increase,crop=${altW}:${altH},boxblur=20:3[bgb];[fga]scale=${altW}:${altH}:force_original_aspect_ratio=decrease[fgs];[bgb][fgs]overlay=(W-w)/2:(H-h)/2`,
-      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '22', '-pix_fmt', 'yuv420p',
-      '-c:a', 'copy', '-movflags', '+faststart', altFile,
-    ], 15 * 60 * 1000);
-    altUrl = `https://tteona.kr/uploads/vlog/${job.id}/${altName}`;
-    await pgPool.query(
-      `UPDATE vlog_jobs SET options = options || $2 WHERE id = $1`,
-      [job.id, JSON.stringify({ altUrl })]
-    );
-  } catch (e) {
-    // 멀티포맷은 부가 기능 — 실패해도 메인 결과물은 완성 처리
-    console.error(`[Vlog] job ${job.id} 멀티포맷 실패(무시):`, e.message);
+  // 5) 멀티 포맷 — 유저가 선택한 포맷들(릴스 9:16 / 유튜브 16:9 / 인스타 1:1)을
+  //    블러 배경 패딩으로 생성. 메인(촬영 방향)이 이미 해당 비율이면 재활용.
+  const FORMAT_SPECS = { reels: [1080, 1920], youtube: [1920, 1080], insta: [1080, 1080] };
+  const mainFormat = portrait ? 'reels' : 'youtube';
+  const mainUrl = `https://tteona.kr/uploads/vlog/${job.id}/vlog.mp4`;
+  const outputs = [{ format: mainFormat, url: mainUrl }];
+
+  const opts = typeof job.options === 'object' && job.options !== null
+    ? job.options : JSON.parse(job.options || '{}');
+  const wanted = (opts.formats || []).filter(f => f !== mainFormat && FORMAT_SPECS[f]);
+
+  for (const f of wanted) {
+    try {
+      const [fw, fh] = FORMAT_SPECS[f];
+      const fFile = path.join(jobDir, `vlog_${f}.mp4`);
+      await runFF([
+        '-i', outFile,
+        '-filter_complex',
+        `[0:v]split=2[bga][fga];[bga]scale=${fw}:${fh}:force_original_aspect_ratio=increase,crop=${fw}:${fh},boxblur=20:3[bgb];[fga]scale=${fw}:${fh}:force_original_aspect_ratio=decrease[fgs];[bgb][fgs]overlay=(W-w)/2:(H-h)/2`,
+        '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '22', '-pix_fmt', 'yuv420p',
+        '-c:a', 'copy', '-movflags', '+faststart', fFile,
+      ], 15 * 60 * 1000);
+      outputs.push({ format: f, url: `https://tteona.kr/uploads/vlog/${job.id}/vlog_${f}.mp4` });
+    } catch (e) {
+      // 포맷 변환은 부가 기능 — 실패해도 메인 결과물은 완성 처리
+      console.error(`[Vlog] job ${job.id} 포맷 ${f} 실패(무시):`, e.message);
+    }
   }
+  await pgPool.query(
+    `UPDATE vlog_jobs SET options = options || $2 WHERE id = $1`,
+    [job.id, JSON.stringify({ outputs })]
+  );
   await setProgress(97);
 
   // 중간 산출물 정리 (원본 클립은 보존 — 추후 오래된 잡 정리 크론에서 일괄 삭제)

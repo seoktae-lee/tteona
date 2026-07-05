@@ -22,24 +22,30 @@ actor VlogServerService {
         }
     }
 
+    private struct OutputItem: Decodable {
+        let format: String   // "reels" | "youtube" | "insta"
+        let url: String
+    }
+
     private struct JobStatus: Decodable {
         let status: String
         let progress: Int
         let outputUrl: String?
-        let altUrl: String?
+        let outputs: [OutputItem]?
         let errorMsg: String?
     }
 
     struct GeneratedVlog {
-        let main: URL       // 원본 방향 (촬영 방향)
-        let alt: URL?       // 반대 방향 멀티포맷 (릴스 9:16 ↔ 유튜브 16:9, 블러 배경)
+        let main: URL                          // 촬영 방향 기본 버전
+        let extras: [(format: String, url: URL)]  // 유저가 추가 선택한 포맷들
     }
 
     // MARK: - 전체 오케스트레이션
 
     /// 서버에서 Vlog 합성 후 로컬 임시 파일 URL 반환.
+    /// formats: 추가 생성할 포맷 ("youtube", "insta") — 촬영 방향 기본본은 항상 생성.
     /// onProgress: (0.0~1.0, 단계 설명 텍스트)
-    func generate(course: Course, sessionId: String, userId: String,
+    func generate(course: Course, sessionId: String, userId: String, formats: [String],
                   onProgress: @escaping @MainActor (Double, String) -> Void) async throws -> GeneratedVlog {
 
         // 로컬에 실제 존재하는 클립만 수집
@@ -51,13 +57,20 @@ actor VlogServerService {
 
         await onProgress(0.02, "서버에 편집을 준비하고 있어요")
 
-        // 1) 잡 생성 (태그 → 서버가 BGM 무드 선택)
+        // 1) 잡 생성 (태그 → BGM 무드, formats → 추가 포맷, shotAt → 클립별 촬영시각 자막)
+        let df = DateFormatter()
+        df.dateFormat = "yyyy.MM.dd  HH:mm"
+        let placesPayload: [[String: Any]] = clips.map { clip in
+            let shot = (try? FileManager.default.attributesOfItem(atPath: clip.file.path)[.creationDate] as? Date) ?? Date()
+            return ["order": clip.place.order, "placeName": clip.place.placeName, "shotAt": df.string(from: shot)]
+        }
         let jobId = try await createJob(
             userId: userId,
             courseId: course.courseId,
             courseName: course.courseName,
             tag: course.tag.rawValue,
-            places: clips.map(\.place)
+            formats: formats,
+            placesPayload: placesPayload
         )
 
         // 2) 클립 업로드 (0.05 → 0.45)
@@ -73,14 +86,14 @@ actor VlogServerService {
 
         // 4) 진행률 폴링 (0.45 → 0.88) — 최대 10분
         var outputUrl: String?
-        var altUrl: String?
+        var outputs: [OutputItem] = []
         for _ in 0..<300 {
             try await Task.sleep(for: .seconds(2))
             let st = try await status(jobId: jobId)
             switch st.status {
             case "completed":
                 outputUrl = st.outputUrl
-                altUrl = st.altUrl
+                outputs = st.outputs ?? []
             case "failed":
                 throw ServerVlogError.processingFailed(st.errorMsg ?? "unknown")
             default:
@@ -90,21 +103,26 @@ actor VlogServerService {
         }
         guard let outputUrl else { throw ServerVlogError.processingFailed("timeout") }
 
-        // 5) 완성본 다운로드 (0.88 → 0.98) — 메인 + 멀티포맷(있으면)
+        // 5) 완성본 다운로드 (0.88 → 0.98) — 기본본 + 추가 포맷들
         await onProgress(0.90, "완성본을 받아오고 있어요")
         let mainLocal = try await download(urlString: outputUrl)
-        var altLocal: URL?
-        if let altUrl {
-            await onProgress(0.95, "릴스·유튜브 버전도 받아오고 있어요")
-            altLocal = try? await download(urlString: altUrl)   // 부가 기능 — 실패해도 메인은 유지
+        var extras: [(format: String, url: URL)] = []
+        let extraItems = outputs.filter { $0.url != outputUrl }
+        for (i, item) in extraItems.enumerated() {
+            await onProgress(0.92 + 0.05 * Double(i) / Double(max(extraItems.count, 1)),
+                             "선택한 포맷 버전을 받아오고 있어요")
+            if let local = try? await download(urlString: item.url) {   // 부가 기능 — 실패해도 메인 유지
+                extras.append((item.format, local))
+            }
         }
         await onProgress(0.98, "거의 다 됐어요")
-        return GeneratedVlog(main: mainLocal, alt: altLocal)
+        return GeneratedVlog(main: mainLocal, extras: extras)
     }
 
     // MARK: - API 단계별 호출
 
-    private func createJob(userId: String, courseId: String, courseName: String, tag: String, places: [Place]) async throws -> Int {
+    private func createJob(userId: String, courseId: String, courseName: String, tag: String,
+                           formats: [String], placesPayload: [[String: Any]]) async throws -> Int {
         guard let url = URL(string: "\(baseURL)/jobs") else { throw ServerVlogError.badResponse("bad url") }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -114,7 +132,8 @@ actor VlogServerService {
             "courseId": courseId,
             "courseName": courseName,
             "tag": tag,
-            "places": places.map { ["order": $0.order, "placeName": $0.placeName] },
+            "formats": formats,
+            "places": placesPayload,
         ])
         let (data, resp) = try await URLSession.shared.data(for: req)
         guard (resp as? HTTPURLResponse)?.statusCode == 200,

@@ -78,23 +78,16 @@ struct OnboardingView: View {
         VStack(spacing: 0) {
             Spacer()
 
-            VStack(spacing: 36) {
+            VStack(spacing: 20) {
                 Image("tteona-logo")
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 120, height: 120)
-                    .clipShape(RoundedRectangle(cornerRadius: 28))
-                    .shadow(color: .tteOrange.opacity(0.3), radius: 20, y: 8)
+                    .frame(width: 200)
+                    .shadow(color: .tteOrange.opacity(0.25), radius: 16, y: 6)
 
-                VStack(spacing: 10) {
-                    Text("tteona")
-                        .font(.system(size: 44, weight: .bold))
-                        .foregroundColor(.tteOrange)
-
-                    Text("특별한 순간을 영상으로 기록하세요")
-                        .font(.system(size: 16))
-                        .foregroundColor(.tteMediumGray)
-                }
+                Text("특별한 순간을 영상으로 기록하세요")
+                    .font(.system(size: 16))
+                    .foregroundColor(.tteMediumGray)
             }
 
             Spacer()
@@ -112,16 +105,10 @@ struct OnboardingView: View {
         VStack(spacing: 0) {
             // 상단 로고 헤더
             HStack {
-                HStack(spacing: 8) {
-                    Image("tteona-logo")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 28, height: 28)
-                        .clipShape(RoundedRectangle(cornerRadius: 7))
-                    Text("tteona")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundColor(.tteOrange)
-                }
+                Image("tteona-logo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 22)
                 Spacer()
                 Button("건너뛰기") {
                     withAnimation { step = 2 }

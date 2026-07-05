@@ -22,7 +22,7 @@ struct AuthView: View {
 
     var body: some View {
         ZStack {
-            Color.tteBackground.ignoresSafeArea()
+            TteonaSplashBackground()
 
             if authService.verificationEmailSent {
                 verificationSentView
@@ -271,9 +271,7 @@ struct AuthView: View {
     // MARK: - Logo
     private var logoSection: some View {
         VStack(spacing: 12) {
-            Text("tteona")
-                .font(.system(size: 52, weight: .bold))
-                .foregroundColor(.tteOrange)
+            TteonaWordmarkLogo()
 
             Text("특별한 순간을 영상으로 기록하세요")
                 .font(.system(size: 15))

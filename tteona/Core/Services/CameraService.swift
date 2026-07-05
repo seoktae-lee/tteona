@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import UIKit
 
 class CameraService: NSObject {
     let captureSession = AVCaptureSession()
@@ -145,7 +146,8 @@ class CameraService: NSObject {
 
         guard let writer = try? AVAssetWriter(outputURL: url, fileType: .mp4) else { return }
 
-        // 가로 촬영 고정 — 1920×1080 landscape, transform 없음
+        // 센서 버퍼는 1920×1080 landscape로 받되, 회전 메타(transform)를 기록해
+        // 재생·합성(로컬 AVFoundation/서버 FFmpeg) 시 자동으로 바로 서게 한다.
         let videoSettings: [String: Any] = [
             AVVideoCodecKey: AVVideoCodecType.h264,
             AVVideoWidthKey: 1920,
@@ -153,7 +155,8 @@ class CameraService: NSObject {
         ]
         let videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
         videoInput.expectsMediaDataInRealTime = true
-        // transform 없음: landscape 그대로 저장
+        // 기기 방향 기준 회전 메타 (앱은 세로 UI — 기본 세로 촬영 90°)
+        videoInput.transform = Self.currentVideoTransform()
 
         let audioSettings: [String: Any] = [
             AVFormatIDKey: kAudioFormatMPEG4AAC,
@@ -241,6 +244,16 @@ class CameraService: NSObject {
 
     private func createDirectoryIfNeeded(for url: URL) {
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    }
+
+    // 기기 방향 → 영상 회전 메타. 센서 버퍼가 landscape이므로 세로 촬영이면 90° 회전 기록.
+    private static func currentVideoTransform() -> CGAffineTransform {
+        switch UIDevice.current.orientation {
+        case .landscapeLeft:       return .identity                          // 홈버튼(하단) 오른쪽
+        case .landscapeRight:      return CGAffineTransform(rotationAngle: .pi)
+        case .portraitUpsideDown:  return CGAffineTransform(rotationAngle: -.pi / 2)
+        default:                   return CGAffineTransform(rotationAngle: .pi / 2)  // 세로(기본)
+        }
     }
 }
 
