@@ -26,7 +26,7 @@ struct ProPaywallView: View {
                         dismiss()
                     } label: {
                         Image(systemName: "xmark")
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(.tte(15, .semibold))
                             .foregroundColor(.white.opacity(0.7))
                             .frame(width: 36, height: 36)
                             .background(Circle().fill(Color.white.opacity(0.12)))
@@ -44,7 +44,7 @@ struct ProPaywallView: View {
                                 .aspectRatio(contentMode: .fit)
                                 .frame(height: 34)
                             Text("여행의 순간을 더 길게, 더 자유롭게")
-                                .font(.system(size: 14))
+                                .font(.tte(14))
                                 .foregroundColor(.white.opacity(0.7))
                         }
                         .padding(.top, 12)
@@ -68,12 +68,12 @@ struct ProPaywallView: View {
                         if packages.isEmpty {
                             VStack(spacing: 10) {
                                 Text("요금제를 불러오지 못했어요")
-                                    .font(.system(size: 14))
+                                    .font(.tte(14))
                                     .foregroundColor(.white.opacity(0.7))
                                 Button("다시 시도") {
                                     Task { await pro.loadOfferings() }
                                 }
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(.tte(14, .semibold))
                                 .foregroundColor(.tteOrange)
                             }
                             .padding(.vertical, 12)
@@ -97,14 +97,14 @@ struct ProPaywallView: View {
                                 ProgressView().tint(.white)
                             } else {
                                 Text(ctaTitle)
-                                    .font(.system(size: 17, weight: .bold))
+                                    .font(.tte(17, .bold))
                             }
                         }
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity).frame(height: 56)
                         .background(RoundedRectangle(cornerRadius: 16).fill(Color.tteOrange))
                     }
-                    .disabled(isPurchasing || selectedPackage == nil && packages.isEmpty)
+                    .disabled(isPurchasing || selectedPackage == nil)
                     .padding(.horizontal, 24)
 
                     HStack(spacing: 16) {
@@ -112,7 +112,7 @@ struct ProPaywallView: View {
                         Link("이용약관", destination: URL(string: "https://tteona.kr/terms")!)
                         Link("개인정보처리방침", destination: URL(string: "https://tteona.kr/privacy")!)
                     }
-                    .font(.system(size: 12))
+                    .font(.tte(12))
                     .foregroundColor(.white.opacity(0.5))
                     .padding(.bottom, 24)
                 }
@@ -147,15 +147,15 @@ struct ProPaywallView: View {
     private func featureRow(icon: String, title: String, subtitle: String) -> some View {
         HStack(spacing: 14) {
             Image(systemName: icon)
-                .font(.system(size: 18))
+                .font(.tte(18))
                 .foregroundColor(.tteOrange)
                 .frame(width: 28)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.tte(15, .semibold))
                     .foregroundColor(.white)
                 Text(subtitle)
-                    .font(.system(size: 12))
+                    .font(.tte(12))
                     .foregroundColor(.white.opacity(0.55))
             }
             Spacer(minLength: 0)
@@ -172,30 +172,30 @@ struct ProPaywallView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
                         Text(pkg.packageType == .annual ? "연간" : "월간")
-                            .font(.system(size: 16, weight: .bold))
+                            .font(.tte(16, .bold))
                             .foregroundColor(.white)
                         if let badge = savingsBadge(pkg) {
                             Text(badge)
-                                .font(.system(size: 11, weight: .bold))
+                                .font(.tte(11, .bold))
                                 .foregroundColor(.white)
                                 .padding(.horizontal, 8).padding(.vertical, 3)
                                 .background(Capsule().fill(Color.tteOrange))
                         }
                         if product.introductoryDiscount?.price == 0 {
                             Text("7일 무료")
-                                .font(.system(size: 11, weight: .bold))
+                                .font(.tte(11, .bold))
                                 .foregroundColor(.tteOrange)
                                 .padding(.horizontal, 8).padding(.vertical, 3)
                                 .background(Capsule().fill(Color.tteOrange.opacity(0.18)))
                         }
                     }
                     Text(subtitleText(pkg))
-                        .font(.system(size: 12))
+                        .font(.tte(12))
                         .foregroundColor(.white.opacity(0.55))
                 }
                 Spacer()
                 Text(product.localizedPriceString)
-                    .font(.system(size: 17, weight: .bold))
+                    .font(.tte(17, .bold))
                     .foregroundColor(.white)
             }
             .padding(16)
@@ -238,6 +238,7 @@ struct ProPaywallView: View {
         do {
             let active = try await pro.purchase(pkg)
             if !active { return }   // 유저가 결제 시트를 닫음
+            Haptics.success()
         } catch {
             alertMessage = "결제에 실패했어요. 잠시 후 다시 시도해주세요."
         }

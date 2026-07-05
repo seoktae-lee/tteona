@@ -45,9 +45,11 @@ struct VlogGenerationView: View {
             if let url = vlogURL {
                 VlogPreviewView(vlogURL: url, thumbnailCourseId: thumbnailCourseId,
                                 savedFormatsCount: savedFormatsCount) {
-                    dismiss()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        onDismissToHome?()
+                    // 부모가 전달한 종료 클로저가 화면 닫기까지 책임진다
+                    if let onDismissToHome {
+                        onDismissToHome()
+                    } else {
+                        dismiss()
                     }
                 }
             }
@@ -66,10 +68,10 @@ struct VlogGenerationView: View {
             VStack(spacing: 0) {
                 Spacer()
                 Text("어떤 포맷으로 만들까요?")
-                    .font(.system(size: 22, weight: .bold))
+                    .font(.tte(22, .bold))
                     .foregroundColor(.white)
                 Text("촬영 방향에 딱 맞는 포맷은 기본으로 포함돼요")
-                    .font(.system(size: 13))
+                    .font(.tte(13))
                     .foregroundColor(.white.opacity(0.65))
                     .padding(.top, 6)
 
@@ -95,7 +97,7 @@ struct VlogGenerationView: View {
                     phase = .chooseBgm
                 } label: {
                     Text(selectedFormats.isEmpty ? "Vlog 만들기" : "\(selectedFormats.count + 1)가지 버전으로 만들기")
-                        .font(.system(size: 17, weight: .bold))
+                        .font(.tte(17, .bold))
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity).frame(height: 56)
                         .background(RoundedRectangle(cornerRadius: 16).fill(Color.tteOrange))
@@ -103,7 +105,7 @@ struct VlogGenerationView: View {
                 .padding(.horizontal, 24)
 
                 Button("닫기") { dismiss() }
-                    .font(.system(size: 14))
+                    .font(.tte(14))
                     .foregroundColor(.white.opacity(0.6))
                     .padding(.top, 14)
                     .padding(.bottom, 36)
@@ -148,25 +150,25 @@ struct VlogGenerationView: View {
         } label: {
             HStack(spacing: 14) {
                 Image(systemName: icon)
-                    .font(.system(size: 20))
+                    .font(.tte(20))
                     .foregroundColor(isOn ? .tteOrange : .white.opacity(0.5))
                     .frame(width: 30)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text(title)
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(.tte(16, .semibold))
                             .foregroundColor(.white)
                         Text(ratio)
-                            .font(.system(size: 12, weight: .bold))
+                            .font(.tte(12, .bold))
                             .foregroundColor(.tteOrange)
                             .padding(.horizontal, 7).padding(.vertical, 2)
                             .background(Capsule().fill(Color.tteOrange.opacity(0.18)))
                         if let badge {
                             HStack(spacing: 3) {
                                 Image(systemName: "sparkles")
-                                    .font(.system(size: 9, weight: .bold))
+                                    .font(.tte(9, .bold))
                                 Text(badge)
-                                    .font(.system(size: 11, weight: .bold))
+                                    .font(.tte(11, .bold))
                             }
                             .foregroundColor(.white)
                             .padding(.horizontal, 8).padding(.vertical, 3)
@@ -176,7 +178,7 @@ struct VlogGenerationView: View {
                         }
                     }
                     Text(subtitle)
-                        .font(.system(size: 12))
+                        .font(.tte(12))
                         .foregroundColor(.white.opacity(0.55))
                 }
                 Spacer()
@@ -203,9 +205,9 @@ struct VlogGenerationView: View {
     private var proBadge: some View {
         HStack(spacing: 3) {
             Image(systemName: "crown.fill")
-                .font(.system(size: 8, weight: .bold))
+                .font(.tte(8, .bold))
             Text("PRO")
-                .font(.system(size: 10, weight: .heavy))
+                .font(.tte(10, .heavy))
         }
         .foregroundColor(.white)
         .padding(.horizontal, 7).padding(.vertical, 3)
@@ -230,10 +232,10 @@ struct VlogGenerationView: View {
             VStack(spacing: 0) {
                 Spacer(minLength: 60)
                 Text("어떤 음악과 함께할까요?")
-                    .font(.system(size: 22, weight: .bold))
+                    .font(.tte(22, .bold))
                     .foregroundColor(.white)
                 Text("미리 들어보고 골라도, 그냥 맡겨도 좋아요")
-                    .font(.system(size: 13))
+                    .font(.tte(13))
                     .foregroundColor(.white.opacity(0.65))
                     .padding(.top, 6)
 
@@ -258,7 +260,7 @@ struct VlogGenerationView: View {
                     phase = .generating
                 } label: {
                     Text("Vlog 만들기")
-                        .font(.system(size: 17, weight: .bold))
+                        .font(.tte(17, .bold))
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity).frame(height: 56)
                         .background(RoundedRectangle(cornerRadius: 16).fill(Color.tteOrange))
@@ -269,7 +271,7 @@ struct VlogGenerationView: View {
                     stopBgmPreview()
                     phase = .chooseFormat
                 }
-                .font(.system(size: 14))
+                .font(.tte(14))
                 .foregroundColor(.white.opacity(0.6))
                 .padding(.top, 14)
                 .padding(.bottom, 36)
@@ -292,18 +294,18 @@ struct VlogGenerationView: View {
             HStack(spacing: 14) {
                 Image(systemName: id == "auto" ? "wand.and.stars"
                                 : (id == "none" ? "speaker.slash" : "music.note"))
-                    .font(.system(size: 18))
+                    .font(.tte(18))
                     .foregroundColor(isOn ? .tteOrange : .white.opacity(0.5))
                     .frame(width: 28)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text(name)
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(.tte(16, .semibold))
                             .foregroundColor(.white)
                             .lineLimit(1)
                         if let mood {
                             Text(mood)
-                                .font(.system(size: 11, weight: .bold))
+                                .font(.tte(11, .bold))
                                 .foregroundColor(.tteOrange)
                                 .padding(.horizontal, 7).padding(.vertical, 2)
                                 .background(Capsule().fill(Color.tteOrange.opacity(0.18)))
@@ -312,14 +314,14 @@ struct VlogGenerationView: View {
                     }
                     if let subtitle {
                         Text(subtitle)
-                            .font(.system(size: 12))
+                            .font(.tte(12))
                             .foregroundColor(.white.opacity(0.55))
                     }
                 }
                 Spacer()
                 if locked {
                     Image(systemName: "lock.fill")
-                        .font(.system(size: 18))
+                        .font(.tte(18))
                         .foregroundColor(.white.opacity(0.4))
                 } else {
                     if let previewURL {
@@ -327,13 +329,13 @@ struct VlogGenerationView: View {
                             toggleBgmPreview(id: id, url: previewURL)
                         } label: {
                             Image(systemName: playingTrackId == id ? "pause.circle.fill" : "play.circle")
-                                .font(.system(size: 26))
+                                .font(.tte(26))
                                 .foregroundColor(.white.opacity(0.85))
                         }
                         .buttonStyle(.plain)
                     }
                     Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 22))
+                        .font(.tte(22))
                         .foregroundColor(isOn ? .tteOrange : .white.opacity(0.3))
                 }
             }
@@ -393,17 +395,17 @@ struct VlogGenerationView: View {
                         .rotationEffect(.degrees(-90))
                         .animation(.easeInOut(duration: 0.3), value: progress)
                     Text("\(Int(progress * 100))%")
-                        .font(.system(size: 20, weight: .bold))
+                        .font(.tte(20, .bold))
                         .foregroundColor(.white)
                 }
 
                 VStack(spacing: 8) {
                     Text(stageText)
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.tte(18, .semibold))
                         .foregroundColor(.white)
                         .animation(.easeInOut(duration: 0.2), value: stageText)
                     Text(course.courseName)
-                        .font(.system(size: 14))
+                        .font(.tte(14))
                         .foregroundColor(.white.opacity(0.6))
                 }
 
@@ -473,6 +475,7 @@ struct VlogGenerationView: View {
                 }
                 savedFormatsCount = saved
                 vlogURL = mainURL
+                Haptics.success()
                 phase = .preview
             } catch {
                 errorMessage = error.localizedDescription
@@ -487,12 +490,12 @@ struct VlogGenerationView: View {
             Color.black.ignoresSafeArea()
             VStack(spacing: 20) {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 48)).foregroundColor(.red)
+                    .font(.tte(48)).foregroundColor(.red)
                 Text("Vlog 생성에 실패했어요")
-                    .font(.system(size: 18, weight: .semibold)).foregroundColor(.white)
+                    .font(.tte(18, .semibold)).foregroundColor(.white)
                 if let msg = errorMessage {
                     Text(msg)
-                        .font(.system(size: 13)).foregroundColor(.white.opacity(0.7))
+                        .font(.tte(13)).foregroundColor(.white.opacity(0.7))
                         .multilineTextAlignment(.center).padding(.horizontal, 32)
                 }
                 Button("돌아가기") { dismiss() }
@@ -573,7 +576,7 @@ struct VlogPreviewView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
                         Text(savedFormatsCount > 1 ? "\(savedFormatsCount)가지 버전이 앨범에 저장됨" : "앨범에 저장됨")
-                            .font(.system(size: 14)).foregroundColor(.white.opacity(0.8))
+                            .font(.tte(14)).foregroundColor(.white.opacity(0.8))
                     }
                     .padding(.top, 20)
 
@@ -589,7 +592,7 @@ struct VlogPreviewView: View {
                             Image(systemName: "square.and.arrow.up")
                             Text("공유하기")
                         }
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.tte(16, .semibold))
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity).frame(height: 54)
                         .background(RoundedRectangle(cornerRadius: 14).fill(Color.tteOrange))
@@ -597,7 +600,7 @@ struct VlogPreviewView: View {
                     .padding(.horizontal, 24)
 
                     Button("홈으로 돌아가기") { onDismiss() }
-                        .font(.system(size: 15))
+                        .font(.tte(15))
                         .foregroundColor(.white.opacity(0.7))
                         .padding(.bottom, 40)
                 }
@@ -629,7 +632,7 @@ struct VlogPreviewView: View {
                     Text("업로드 실패 · 다시 시도")
                 }
             }
-            .font(.system(size: 15, weight: .semibold))
+            .font(.tte(15, .semibold))
             .foregroundColor(.white)
             .frame(maxWidth: .infinity).frame(height: 50)
             .background(
@@ -663,7 +666,7 @@ struct VlogPreviewView: View {
 struct TteButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 16, weight: .semibold))
+            .font(.tte(16, .semibold))
             .foregroundColor(.white)
             .frame(maxWidth: .infinity).frame(height: 54)
             .background(

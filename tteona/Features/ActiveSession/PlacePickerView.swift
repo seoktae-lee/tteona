@@ -21,7 +21,7 @@ struct PlacePickerView: View {
                 .padding(.top, 12)
 
             Text("어디서 찍으셨나요?")
-                .font(.system(size: 17, weight: .semibold))
+                .font(.tte(17, .semibold))
                 .foregroundColor(.tteDarkGray)
                 .padding(.top, 16)
                 .padding(.bottom, 12)
@@ -40,15 +40,15 @@ struct PlacePickerView: View {
                             .foregroundColor(.tteOrange)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("정확한 위치가 꺼져 있어요")
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(.tte(13, .semibold))
                                 .foregroundColor(.tteDarkGray)
                             Text("설정에서 켜면 주변 장소를 더 정확하게 찾아요")
-                                .font(.system(size: 12))
+                                .font(.tte(12))
                                 .foregroundColor(.tteMediumGray)
                         }
                         Spacer()
                         Image(systemName: "chevron.right")
-                            .font(.system(size: 12))
+                            .font(.tte(12))
                             .foregroundColor(.tteMediumGray)
                     }
                     .padding(.horizontal, 20)
@@ -64,11 +64,11 @@ struct PlacePickerView: View {
                     if showCustomInput {
                         HStack(spacing: 14) {
                             Image(systemName: "pencil")
-                                .font(.system(size: 16))
+                                .font(.tte(16))
                                 .foregroundColor(.tteOrange)
                                 .frame(width: 28)
                             TextField("장소명 직접 입력", text: $customName)
-                                .font(.system(size: 15))
+                                .font(.tte(15))
                                 .focused($customFocused)
                                 .submitLabel(.done)
                                 .onSubmit {
@@ -83,7 +83,7 @@ struct PlacePickerView: View {
                                     onSelect(name)
                                 } label: {
                                     Image(systemName: "arrow.right.circle.fill")
-                                        .font(.system(size: 22))
+                                        .font(.tte(22))
                                         .foregroundColor(.tteOrange)
                                 }
                             }
@@ -97,11 +97,11 @@ struct PlacePickerView: View {
                         } label: {
                             HStack(spacing: 14) {
                                 Image(systemName: "pencil")
-                                    .font(.system(size: 16))
+                                    .font(.tte(16))
                                     .foregroundColor(.tteOrange)
                                     .frame(width: 28)
                                 Text("직접 입력하기")
-                                    .font(.system(size: 15))
+                                    .font(.tte(15))
                                     .foregroundColor(.tteOrange)
                                 Spacer()
                             }
@@ -194,18 +194,18 @@ struct PlacePickerRow: View {
         Button(action: onTap) {
             HStack(spacing: 14) {
                 Image(systemName: "mappin.circle.fill")
-                    .font(.system(size: 24))
+                    .font(.tte(24))
                     .foregroundColor(.tteOrange)
                     .frame(width: 28)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(name)
-                        .font(.system(size: 15, weight: .medium))
+                        .font(.tte(15, .medium))
                         .foregroundColor(.tteDarkGray)
                         .lineLimit(1)
                     if let cat = category {
                         Text(cat)
-                            .font(.system(size: 12))
+                            .font(.tte(12))
                             .foregroundColor(.tteMediumGray)
                     }
                 }
@@ -214,7 +214,7 @@ struct PlacePickerRow: View {
 
                 if let dist = distance {
                     Text(dist < 1000 ? "\(Int(dist))m" : String(format: "%.1fkm", dist / 1000))
-                        .font(.system(size: 12))
+                        .font(.tte(12))
                         .foregroundColor(.tteMediumGray)
                 }
             }

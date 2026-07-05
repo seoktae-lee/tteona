@@ -61,6 +61,11 @@
 	<key>UIAppFonts</key>
 	<array>
 		<string>GowunBatang-Regular.ttf</string>
+		<string>Pretendard-Regular.otf</string>
+		<string>Pretendard-Medium.otf</string>
+		<string>Pretendard-SemiBold.otf</string>
+		<string>Pretendard-Bold.otf</string>
+		<string>Pretendard-ExtraBold.otf</string>
 	</array>
 	<key>UIBackgroundModes</key>
 	<array>

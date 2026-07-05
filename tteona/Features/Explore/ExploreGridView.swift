@@ -6,7 +6,6 @@ struct ExploreGridView: View {
     @EnvironmentObject private var courseService: CourseService
     @EnvironmentObject private var userService: UserService
     @EnvironmentObject private var roomService: RoomService
-    @EnvironmentObject private var notificationManager: AppNotificationManager
 
     enum SortMode: String, CaseIterable {
         case recommended = "추천순"
@@ -20,8 +19,8 @@ struct ExploreGridView: View {
     @State private var recommendedIds: [String] = []
     @State private var isLoading = false
     @State private var selectedCourse: Course?
-    @State private var showGroups = false
     @State private var courseSessionInfo: CourseSessionInfo?
+    @State private var pendingSessionInfo: CourseSessionInfo?
     @State private var didRefetchWithLocation = false
     @State private var creatorRanking: [CreatorRank] = []
 
@@ -74,24 +73,17 @@ struct ExploreGridView: View {
             }
             .navigationTitle("탐색")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showGroups = true
-                    } label: {
-                        Image(systemName: "person.2.fill")
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(.tteOrange)
-                    }
-                }
-            }
         }
-        .fullScreenCover(item: $selectedCourse) { course in
+        .fullScreenCover(item: $selectedCourse, onDismiss: {
+            // 상세에서 "따라가기" 확정 시 → 닫힘 완료 후 세션 시작 (asyncAfter 타이밍 의존 제거)
+            if let info = pendingSessionInfo {
+                pendingSessionInfo = nil
+                courseSessionInfo = info
+            }
+        }) { course in
             ExploreDetailView(course: course, thumbnailURL: thumbnails[course.courseId]) { roomIds in
+                pendingSessionInfo = CourseSessionInfo(course: course, roomIds: roomIds)
                 selectedCourse = nil
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                    courseSessionInfo = CourseSessionInfo(course: course, roomIds: roomIds)
-                }
             }
             .environmentObject(authService)
             .environmentObject(courseService)
@@ -109,20 +101,6 @@ struct ExploreGridView: View {
             guard !didRefetchWithLocation, loc != nil else { return }
             didRefetchWithLocation = true
             Task { await refetchRecommendations() }
-        }
-        .onAppear {
-            // 채팅 푸시로 진입 시 그룹 시트 자동 오픈
-            if notificationManager.pendingChatRoom != nil { showGroups = true }
-        }
-        .onChange(of: notificationManager.pendingChatRoom) { _, pending in
-            if pending != nil { showGroups = true }
-        }
-        .sheet(isPresented: $showGroups) {
-            FeedTabView()
-                .environmentObject(authService)
-                .environmentObject(userService)
-                .environmentObject(roomService)
-                .environmentObject(notificationManager)
         }
         .fullScreenCover(item: $courseSessionInfo) { info in
             ActiveSessionView(course: info.course, roomIds: info.roomIds)
@@ -143,7 +121,7 @@ struct ExploreGridView: View {
                         withAnimation(.easeInOut(duration: 0.15)) { sortMode = mode }
                     } label: {
                         Text(mode.rawValue)
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.tte(14, .semibold))
                             .foregroundColor(sortMode == mode ? .white : .tteMediumGray)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 8)
@@ -163,7 +141,7 @@ struct ExploreGridView: View {
     private var creatorRankingStrip: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("이번 주 인기 크리에이터")
-                .font(.system(size: 14, weight: .bold))
+                .font(.tte(14, .bold))
                 .foregroundColor(.tteDarkGray)
                 .padding(.horizontal, 16)
 
@@ -182,12 +160,12 @@ struct ExploreGridView: View {
                                                     image.resizable().scaledToFill()
                                                 } placeholder: {
                                                     Text(String(creator.nickname.prefix(1)))
-                                                        .font(.system(size: 20, weight: .bold))
+                                                        .font(.tte(20, .bold))
                                                         .foregroundColor(.tteOrange)
                                                 }
                                             } else {
                                                 Text(String(creator.nickname.prefix(1)))
-                                                    .font(.system(size: 20, weight: .bold))
+                                                    .font(.tte(20, .bold))
                                                     .foregroundColor(.tteOrange)
                                             }
                                         }
@@ -201,7 +179,7 @@ struct ExploreGridView: View {
                                         )
                                     )
                                 Text("\(creator.rank)")
-                                    .font(.system(size: 10, weight: .heavy))
+                                    .font(.tte(10, .heavy))
                                     .foregroundColor(.white)
                                     .frame(width: 18, height: 18)
                                     .background(Circle().fill(creator.rank <= 3 ? Color.tteOrange : Color.tteMediumGray))
@@ -209,17 +187,17 @@ struct ExploreGridView: View {
                             }
                             HStack(spacing: 2) {
                                 Text(creator.nickname)
-                                    .font(.system(size: 12, weight: .semibold))
+                                    .font(.tte(12, .semibold))
                                     .foregroundColor(.tteDarkGray)
                                     .lineLimit(1)
                                 if creator.isVerified {
                                     Image(systemName: "checkmark.seal.fill")
-                                        .font(.system(size: 9))
+                                        .font(.tte(9))
                                         .foregroundColor(.tteOrange)
                                 }
                             }
                             Text("♥ \(creator.likes)")
-                                .font(.system(size: 10))
+                                .font(.tte(10))
                                 .foregroundColor(.tteMediumGray)
                         }
                         .frame(width: 72)
@@ -236,10 +214,10 @@ struct ExploreGridView: View {
         VStack(spacing: 12) {
             Spacer()
             Image(systemName: "square.grid.2x2")
-                .font(.system(size: 44))
+                .font(.tte(44))
                 .foregroundColor(.tteOrange.opacity(0.4))
             Text("아직 등록된 코스가 없어요")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.tte(15, .semibold))
                 .foregroundColor(.tteDarkGray)
             Spacer()
         }
@@ -304,17 +282,29 @@ private struct GridCell: View {
                     .frame(maxWidth: .infinity)
             }
             .overlay(alignment: .bottomLeading) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(course.courseName)
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(.white)
-                        .lineLimit(2)
-                        .shadow(color: .black.opacity(0.4), radius: 3, y: 1)
-                    Text("\(course.region) · \(course.tag.rawValue)")
-                        .font(.system(size: 11))
-                        .foregroundColor(.white.opacity(0.9))
-                        .lineLimit(1)
-                        .shadow(color: .black.opacity(0.4), radius: 3, y: 1)
+                HStack(alignment: .bottom, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(course.courseName)
+                            .font(.tte(14, .bold))
+                            .foregroundColor(.white)
+                            .lineLimit(2)
+                            .shadow(color: .black.opacity(0.4), radius: 3, y: 1)
+                        Text("\(course.region) · \(course.tag.rawValue)")
+                            .font(.tte(11))
+                            .foregroundColor(.white.opacity(0.9))
+                            .lineLimit(1)
+                            .shadow(color: .black.opacity(0.4), radius: 3, y: 1)
+                    }
+                    Spacer(minLength: 0)
+                    // 좋아요 수 — 인기순 정렬의 근거가 카드에서 바로 보이도록
+                    HStack(spacing: 3) {
+                        Image(systemName: "heart.fill")
+                            .font(.tte(10))
+                        Text("\(course.likeCount)")
+                            .font(.tte(11, .semibold))
+                    }
+                    .foregroundColor(.white.opacity(0.95))
+                    .shadow(color: .black.opacity(0.4), radius: 3, y: 1)
                 }
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)

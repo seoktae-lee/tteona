@@ -5,6 +5,7 @@ struct BlockedUsersView: View {
     @EnvironmentObject private var authService: AuthService
     @State private var blockedUsers: [AppUser] = []
     @State private var isLoading = true
+    @State private var showUnblockErrorAlert = false
 
     var body: some View {
         List {
@@ -20,10 +21,10 @@ struct BlockedUsersView: View {
             } else if blockedUsers.isEmpty {
                 VStack(spacing: 12) {
                     Image(systemName: "person.crop.circle.badge.checkmark")
-                        .font(.system(size: 44))
+                        .font(.tte(44))
                         .foregroundColor(.tteMediumGray.opacity(0.4))
                     Text("차단한 사용자가 없습니다.")
-                        .font(.system(size: 15))
+                        .font(.tte(15))
                         .foregroundColor(.tteMediumGray)
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
@@ -35,11 +36,11 @@ struct BlockedUsersView: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(user.nickname)
-                                .font(.system(size: 16, weight: .semibold))
+                                .font(.tte(16, .semibold))
                                 .foregroundColor(.tteDarkGray)
                             if !user.email.isEmpty {
                                 Text(user.email)
-                                    .font(.system(size: 12))
+                                    .font(.tte(12))
                                     .foregroundColor(.tteMediumGray)
                             }
                         }
@@ -47,7 +48,7 @@ struct BlockedUsersView: View {
                         Button("차단 해제") {
                             unblock(userId: user.uid)
                         }
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.tte(13, .semibold))
                         .foregroundColor(.tteOrange)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
@@ -61,6 +62,11 @@ struct BlockedUsersView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await loadBlockedUsers()
+        }
+        .alert("차단 해제 실패", isPresented: $showUnblockErrorAlert) {
+            Button("확인", role: .cancel) {}
+        } message: {
+            Text("잠시 후 다시 시도해주세요.")
         }
     }
 
@@ -91,7 +97,9 @@ struct BlockedUsersView: View {
                 withAnimation {
                     blockedUsers.removeAll { $0.uid == userId }
                 }
-            } catch {}
+            } catch {
+                showUnblockErrorAlert = true
+            }
         }
     }
 }

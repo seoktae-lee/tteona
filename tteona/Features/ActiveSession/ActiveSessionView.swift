@@ -30,6 +30,11 @@ struct ActiveSessionView: View {
     @State private var showIntegrityAlert = false
     @State private var showRatingPrompt = false
     @State private var ratingPlace: Place?
+    @State private var showFarCaptureConfirm = false
+    @State private var farCaptureDistance: Double?
+    @State private var vlogCompleted = false
+    @State private var showExitNotice = false
+    @AppStorage("didShowSessionExitNotice") private var didShowExitNotice = false
 
     private let sessionStore = ActiveSessionStore.shared
 
@@ -122,6 +127,7 @@ struct ActiveSessionView: View {
         .onChange(of: locationService.arrivedAtPlace) { _, place in
             guard let place else { return }
             arrivedPlace = place
+            Haptics.success()
             withAnimation { showArrivalBanner = true }
             DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
                 withAnimation { showArrivalBanner = false }
@@ -158,7 +164,11 @@ struct ActiveSessionView: View {
                 }
             }
         }
-        .fullScreenCover(isPresented: $showVlog, onDismiss: { sessionStore.clear() }) {
+        .fullScreenCover(isPresented: $showVlog, onDismiss: {
+            sessionStore.clear()
+            // Vlog 완료 후에는 세션 화면까지 함께 닫는다
+            if vlogCompleted { dismiss() }
+        }) {
             // orderedPlaces(재정렬 반영)로 course를 재구성해서 Vlog 순서 보장
             let reorderedCourse = Course(
                 courseId: course.courseId,
@@ -171,14 +181,33 @@ struct ActiveSessionView: View {
                 places: orderedPlaces
             )
             VlogGenerationView(course: reorderedCourse, sessionId: course.courseId) {
+                vlogCompleted = true
                 showVlog = false
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    dismiss()
-                }
             }
         }
         .sheet(isPresented: $showResumeSheet) {
             resumeSheet
+        }
+        .alert("진행 상황은 저장돼요", isPresented: $showExitNotice) {
+            Button("닫기") {
+                didShowExitNotice = true
+                closeSession()
+            }
+            Button("계속 진행", role: .cancel) {
+                didShowExitNotice = true
+            }
+        } message: {
+            Text("지금까지의 기록은 자동 저장돼요.\n홈의 '이어하기' 버튼으로 언제든 돌아올 수 있어요.")
+        }
+        .confirmationDialog("아직 도착 전이에요", isPresented: $showFarCaptureConfirm, titleVisibility: .visible) {
+            Button("그래도 촬영하기") { showCamera = true }
+            Button("취소", role: .cancel) {}
+        } message: {
+            if let d = farCaptureDistance, let place = currentPlace {
+                Text("\(place.placeName)까지 \(formatDistance(d)) 남았어요.\nGPS가 부정확하거나 실내라면 지금 촬영해도 괜찮아요.")
+            } else {
+                Text("현재 위치를 확인할 수 없어요. 지금 촬영해도 괜찮아요.")
+            }
         }
         .alert("일부 영상 확인 불가", isPresented: $showIntegrityAlert) {
             Button("확인", role: .cancel) { }
@@ -256,16 +285,19 @@ struct ActiveSessionView: View {
         VStack {
             HStack {
                 Button {
-                    saveSession()
-                    locationService.stopTracking()
-                    dismiss()
+                    if didShowExitNotice {
+                        closeSession()
+                    } else {
+                        showExitNotice = true
+                    }
                 } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 16, weight: .semibold))
+                    Image(systemName: "xmark")
+                        .font(.tte(16, .semibold))
                         .foregroundColor(.white)
                         .frame(width: 40, height: 40)
                         .background(Circle().fill(Color.black.opacity(0.5)))
                 }
+                .accessibilityLabel("세션 닫기")
 
                 Spacer()
 
@@ -273,7 +305,7 @@ struct ActiveSessionView: View {
                     HStack(spacing: 6) {
                         Circle().fill(Color.red).frame(width: 8, height: 8)
                         Text("코스 진행 중")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.tte(13, .semibold))
                             .foregroundColor(.white)
                     }
                     .padding(.horizontal, 14)
@@ -283,9 +315,9 @@ struct ActiveSessionView: View {
                     if !roomIds.isEmpty {
                         HStack(spacing: 4) {
                             Image(systemName: "location.fill")
-                                .font(.system(size: 10))
+                                .font(.tte(10))
                             Text("그룹 위치 공유 중")
-                                .font(.system(size: 11, weight: .medium))
+                                .font(.tte(11, .medium))
                         }
                         .foregroundColor(.white.opacity(0.9))
                         .padding(.horizontal, 10)
@@ -301,10 +333,10 @@ struct ActiveSessionView: View {
                 } label: {
                     VStack(spacing: 1) {
                         Text("\(visitedPlaces.count)/\(orderedPlaces.count)")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.tte(13, .semibold))
                             .foregroundColor(.white)
                         Text("편집")
-                            .font(.system(size: 10))
+                            .font(.tte(10))
                             .foregroundColor(.white.opacity(0.8))
                     }
                     .frame(width: 52, height: 40)
@@ -331,12 +363,12 @@ struct ActiveSessionView: View {
                             ForEach(visitedList) { place in
                                 HStack(spacing: 4) {
                                     Text("\(place.order)")
-                                        .font(.system(size: 11, weight: .bold))
+                                        .font(.tte(11, .bold))
                                         .foregroundColor(.white)
                                         .frame(width: 20, height: 20)
                                         .background(Circle().fill(Color.tteOrange))
                                     Text(place.placeName)
-                                        .font(.system(size: 13, weight: .medium))
+                                        .font(.tte(13, .medium))
                                         .foregroundColor(.tteDarkGray)
                                         .lineLimit(1)
                                 }
@@ -355,20 +387,26 @@ struct ActiveSessionView: View {
                         HStack(spacing: 6) {
                             Image(systemName: "location.fill")
                                 .foregroundColor(.tteOrange)
-                                .font(.system(size: 14))
+                                .font(.tte(14))
                             Text("\(place.placeName)까지 \(formatDistance(distance))")
-                                .font(.system(size: 14))
+                                .font(.tte(14))
                                 .foregroundColor(.tteDarkGray)
                         }
                     }
 
-                    // 도착했어요 버튼 (수동 도착 처리)
-                    let isNearby = locationService.distance(to: place).map { $0 <= 200 } ?? false
+                    // 도착했어요 버튼 — 멀리 있어도 탭 가능 (GPS 오차·실내 대비 수동 촬영 허용)
+                    let distance = locationService.distance(to: place)
+                    let isNearby = distance.map { $0 <= 200 } ?? false
                     Button {
-                        showCamera = true
+                        if isNearby {
+                            showCamera = true
+                        } else {
+                            farCaptureDistance = distance
+                            showFarCaptureConfirm = true
+                        }
                     } label: {
                         Text(isNearby ? "📍 \(place.placeName) 도착! 촬영하기" : "📍 \(place.placeName)으로 이동 중...")
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(.tte(16, .semibold))
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
                             .frame(height: 54)
@@ -377,7 +415,6 @@ struct ActiveSessionView: View {
                                     .fill(isNearby ? Color.tteOrange : Color.gray.opacity(0.4))
                             )
                     }
-                    .disabled(!isNearby)
                 }
 
                 if allVisited {
@@ -390,7 +427,7 @@ struct ActiveSessionView: View {
                             Text("Vlog 만들기")
                                 .fontWeight(.semibold)
                         }
-                        .font(.system(size: 16))
+                        .font(.tte(16))
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .frame(height: 54)
@@ -417,8 +454,15 @@ struct ActiveSessionView: View {
     }
 
     // MARK: - Helpers
+    private func closeSession() {
+        saveSession()
+        locationService.stopTracking()
+        dismiss()
+    }
+
     private func handleCameraDismiss() {
         guard let place = currentPlace else { return }
+        Haptics.success()
         visitedPlaces.insert(place.order)
         if !roomIds.isEmpty, let uid = authService.currentUser?.uid {
             let nickname = userService.currentUser?.nickname ?? "멤버"
@@ -463,17 +507,17 @@ struct ActiveSessionView: View {
                     .fill(Color.tteOrange.opacity(0.12))
                     .frame(width: 72, height: 72)
                 Image(systemName: "clock.arrow.circlepath")
-                    .font(.system(size: 30))
+                    .font(.tte(30))
                     .foregroundColor(.tteOrange)
             }
             .padding(.bottom, 16)
 
             VStack(spacing: 6) {
                 Text("오늘 코스가 남아있어요")
-                    .font(.system(size: 20, weight: .bold))
+                    .font(.tte(20, .bold))
                     .foregroundColor(.tteDarkGray)
                 Text("\(course.courseName) · \(visitedPlaces.count)/\(orderedPlaces.count)곳 완료")
-                    .font(.system(size: 14))
+                    .font(.tte(14))
                     .foregroundColor(.tteMediumGray)
             }
             .padding(.bottom, 32)
@@ -484,8 +528,8 @@ struct ActiveSessionView: View {
                     locationService.startTracking(places: orderedPlaces)
                 } label: {
                     HStack(spacing: 10) {
-                        Image(systemName: "play.fill").font(.system(size: 15))
-                        Text("이어서 하기").font(.system(size: 16, weight: .semibold))
+                        Image(systemName: "play.fill").font(.tte(15))
+                        Text("이어서 하기").font(.tte(16, .semibold))
                     }
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity).frame(height: 56)
@@ -497,8 +541,8 @@ struct ActiveSessionView: View {
                     startNewSession()
                 } label: {
                     HStack(spacing: 10) {
-                        Image(systemName: "arrow.counterclockwise").font(.system(size: 15))
-                        Text("새로 시작하기").font(.system(size: 16, weight: .medium))
+                        Image(systemName: "arrow.counterclockwise").font(.tte(15))
+                        Text("새로 시작하기").font(.tte(16, .medium))
                     }
                     .foregroundColor(.tteDarkGray)
                     .frame(maxWidth: .infinity).frame(height: 56)
@@ -514,6 +558,7 @@ struct ActiveSessionView: View {
     }
 
     private func startNewSession() {
+        Haptics.medium()
         sessionStore.clear()
         orderedPlaces = course.places
         visitedPlaces = []
@@ -611,6 +656,7 @@ struct SessionPlacePin: View {
                 .frame(width: 32, height: 32)
                 .shadow(color: isCurrent ? .tteOrange.opacity(0.5) : .clear, radius: 6)
 
+            // ImageRenderer로 지도 마커에 그려지는 뷰 — Dynamic Type 스케일 없이 고정 크기 유지
             if isVisited {
                 Image(systemName: "checkmark")
                     .font(.system(size: 13, weight: .bold))
@@ -632,13 +678,13 @@ struct ArrivalBanner: View {
         VStack {
             HStack(spacing: 10) {
                 Text("📍")
-                    .font(.system(size: 20))
+                    .font(.tte(20))
                 VStack(alignment: .leading, spacing: 2) {
                     Text("\(placeName)에 도착했어요!")
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.tte(15, .semibold))
                         .foregroundColor(.white)
                     Text("탭하여 촬영 시작")
-                        .font(.system(size: 12))
+                        .font(.tte(12))
                         .foregroundColor(.white.opacity(0.8))
                 }
                 Spacer()
@@ -661,6 +707,7 @@ struct MemberLocationPin: View {
     let nickname: String
 
     var body: some View {
+        // ImageRenderer로 지도 마커에 그려지는 뷰 — Dynamic Type 스케일 없이 고정 크기 유지
         VStack(spacing: 2) {
             ZStack {
                 Circle()
@@ -709,31 +756,31 @@ struct PlaceEditorSheet: View {
                                 .frame(width: 32, height: 32)
                             if isVisited {
                                 Image(systemName: "checkmark")
-                                    .font(.system(size: 12, weight: .bold))
+                                    .font(.tte(12, .bold))
                                     .foregroundColor(.white)
                             } else if isSkipped {
                                 Image(systemName: "forward.fill")
-                                    .font(.system(size: 11, weight: .bold))
+                                    .font(.tte(11, .bold))
                                     .foregroundColor(.white.opacity(0.7))
                             } else {
                                 Text("\(index + 1)")
-                                    .font(.system(size: 13, weight: .bold))
+                                    .font(.tte(13, .bold))
                                     .foregroundColor(isCurrent ? .white : .tteDarkGray)
                             }
                         }
 
                         VStack(alignment: .leading, spacing: 3) {
                             Text(place.placeName)
-                                .font(.system(size: 15, weight: isCurrent ? .semibold : .regular))
+                                .font(.tte(15, isCurrent ? .semibold : .regular))
                                 .foregroundColor(isVisited || isSkipped ? .tteMediumGray : .tteDarkGray)
                                 .strikethrough(isVisited || isSkipped)
                             if isCurrent {
                                 Text("현재 목적지")
-                                    .font(.system(size: 11))
+                                    .font(.tte(11))
                                     .foregroundColor(.tteOrange)
                             } else if isSkipped {
                                 Text("건너뜀")
-                                    .font(.system(size: 11))
+                                    .font(.tte(11))
                                     .foregroundColor(.tteMediumGray)
                             }
                         }
@@ -748,7 +795,7 @@ struct PlaceEditorSheet: View {
                                     updateCurrentIndex()
                                 } label: {
                                     Text("취소")
-                                        .font(.system(size: 12))
+                                        .font(.tte(12))
                                         .foregroundColor(.tteOrange)
                                         .padding(.horizontal, 10)
                                         .padding(.vertical, 5)
@@ -762,7 +809,7 @@ struct PlaceEditorSheet: View {
                                     updateCurrentIndex()
                                 } label: {
                                     Text("건너뛰기")
-                                        .font(.system(size: 12))
+                                        .font(.tte(12))
                                         .foregroundColor(.tteMediumGray)
                                         .padding(.horizontal, 10)
                                         .padding(.vertical, 5)

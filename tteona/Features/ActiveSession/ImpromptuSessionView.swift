@@ -27,6 +27,8 @@ struct ImpromptuSessionView: View {
     @State private var showEndAlert = false
     @State private var showVlog = false
     @State private var showSaveCourse = false
+    @State private var pendingShowVlog = false
+    @State private var pendingShowSaveCourse = false
     @State private var courseName = ""
     @State private var selectedTag: CourseTag = .friends
     @State private var generatedCourse: Course? = nil
@@ -94,9 +96,7 @@ struct ImpromptuSessionView: View {
         // 1단계: 장소 선택
         .sheet(isPresented: $showPlacePicker, onDismiss: {
             guard pendingPlace != nil else { return }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                showCamera = true
-            }
+            showCamera = true
         }) {
             if let loc = resolvedLocation {
                 PlacePickerView(location: loc) { name in
@@ -148,7 +148,16 @@ struct ImpromptuSessionView: View {
         .sheet(isPresented: $showSaveCourse) {
             saveCourseSheet
         }
-        .sheet(isPresented: $showEndAlert) {
+        .sheet(isPresented: $showEndAlert, onDismiss: {
+            // 종료 시트에서 고른 다음 단계를 닫힘 완료 후 실행
+            if pendingShowVlog {
+                pendingShowVlog = false
+                showVlog = true
+            } else if pendingShowSaveCourse {
+                pendingShowSaveCourse = false
+                showSaveCourse = true
+            }
+        }) {
             endSheet
         }
         .alert("일부 영상 확인 불가", isPresented: $showIntegrityAlert) {
@@ -168,7 +177,7 @@ struct ImpromptuSessionView: View {
                     .scaleEffect(1.3)
                     .tint(.white)
                 Text("영상 보관 중...")
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.tte(15, .medium))
                     .foregroundColor(.white)
             }
             .padding(.horizontal, 32)
@@ -203,7 +212,7 @@ struct ImpromptuSessionView: View {
                     dismiss()
                 } label: {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.tte(16, .semibold))
                         .foregroundColor(.white)
                         .frame(width: 40, height: 40)
                         .background(Circle().fill(Color.black.opacity(0.5)))
@@ -213,7 +222,7 @@ struct ImpromptuSessionView: View {
                     HStack(spacing: 6) {
                         Circle().fill(Color.red).frame(width: 8, height: 8)
                         Text("나의 오늘 기록 중")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.tte(13, .semibold))
                             .foregroundColor(.white)
                     }
                     .padding(.horizontal, 14).padding(.vertical, 8)
@@ -222,9 +231,9 @@ struct ImpromptuSessionView: View {
                     if !activeRoomIds.isEmpty {
                         HStack(spacing: 4) {
                             Image(systemName: "location.fill")
-                                .font(.system(size: 10))
+                                .font(.tte(10))
                             Text("그룹 위치 공유 중")
-                                .font(.system(size: 11, weight: .medium))
+                                .font(.tte(11, .medium))
                         }
                         .foregroundColor(.white.opacity(0.9))
                         .padding(.horizontal, 10)
@@ -234,7 +243,7 @@ struct ImpromptuSessionView: View {
                 }
                 Spacer()
                 Text("\(capturedPlaces.count)곳")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.tte(14, .bold))
                     .foregroundColor(.white)
                     .frame(width: 52, height: 40)
                     .background(Circle().fill(Color.tteOrange))
@@ -255,19 +264,19 @@ struct ImpromptuSessionView: View {
                             ForEach(capturedPlaces) { place in
                                 HStack(spacing: 4) {
                                     Text("\(place.order)")
-                                        .font(.system(size: 11, weight: .bold))
+                                        .font(.tte(11, .bold))
                                         .foregroundColor(.white)
                                         .frame(width: 20, height: 20)
                                         .background(Circle().fill(Color.tteOrange))
                                     Text(place.placeName)
-                                        .font(.system(size: 13, weight: .medium))
+                                        .font(.tte(13, .medium))
                                         .foregroundColor(.tteDarkGray)
                                         .lineLimit(1)
                                     Button {
                                         removePlace(place)
                                     } label: {
                                         Image(systemName: "xmark")
-                                            .font(.system(size: 10, weight: .bold))
+                                            .font(.tte(10, .bold))
                                             .foregroundColor(.tteMediumGray)
                                     }
                                 }
@@ -285,10 +294,10 @@ struct ImpromptuSessionView: View {
                             if isResolvingLocation {
                                 ProgressView().tint(.white).scaleEffect(0.8)
                             } else {
-                                Image(systemName: "camera.fill").font(.system(size: 16))
+                                Image(systemName: "camera.fill").font(.tte(16))
                             }
                             Text("여기서 촬영")
-                                .font(.system(size: 16, weight: .semibold))
+                                .font(.tte(16, .semibold))
                         }
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity).frame(height: 54)
@@ -299,7 +308,7 @@ struct ImpromptuSessionView: View {
                     if !capturedPlaces.isEmpty {
                         Button { showEndAlert = true } label: {
                             Text("오늘 종료")
-                                .font(.system(size: 16, weight: .semibold))
+                                .font(.tte(16, .semibold))
                                 .foregroundColor(.tteOrange)
                                 .frame(height: 54).frame(maxWidth: 110)
                                 .background(RoundedRectangle(cornerRadius: 14)
@@ -330,10 +339,10 @@ struct ImpromptuSessionView: View {
             // 헤더
             VStack(spacing: 6) {
                 Text("오늘을 마칠까요?")
-                    .font(.system(size: 20, weight: .bold))
+                    .font(.tte(20, .bold))
                     .foregroundColor(.tteDarkGray)
                 Text("방문한 장소 \(capturedPlaces.count)곳이 기록됐어요")
-                    .font(.system(size: 14))
+                    .font(.tte(14))
                     .foregroundColor(.tteMediumGray)
             }
             .padding(.bottom, 28)
@@ -341,23 +350,23 @@ struct ImpromptuSessionView: View {
             VStack(spacing: 12) {
                 // Vlog 만들기 — 메인 액션
                 Button {
-                    showEndAlert = false
                     buildCourseAndEnd(saveToFirestore: false)
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { showVlog = true }
+                    pendingShowVlog = true
+                    showEndAlert = false
                 } label: {
                     HStack(spacing: 10) {
                         Image(systemName: "film.fill")
-                            .font(.system(size: 16))
+                            .font(.tte(16))
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Vlog 만들기")
-                                .font(.system(size: 16, weight: .semibold))
+                                .font(.tte(16, .semibold))
                             Text("영상을 이어 붙여 추억을 만들어요")
-                                .font(.system(size: 12))
+                                .font(.tte(12))
                                 .opacity(0.8)
                         }
                         Spacer()
                         Image(systemName: "chevron.right")
-                            .font(.system(size: 13, weight: .medium))
+                            .font(.tte(13, .medium))
                             .opacity(0.7)
                     }
                     .foregroundColor(.white)
@@ -368,22 +377,22 @@ struct ImpromptuSessionView: View {
 
                 // 코스로 저장 후 Vlog
                 Button {
+                    pendingShowSaveCourse = true
                     showEndAlert = false
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { showSaveCourse = true }
                 } label: {
                     HStack(spacing: 10) {
                         Image(systemName: "mappin.and.ellipse")
-                            .font(.system(size: 16))
+                            .font(.tte(16))
                         VStack(alignment: .leading, spacing: 2) {
                             Text("코스로 저장하고 Vlog 만들기")
-                                .font(.system(size: 16, weight: .semibold))
+                                .font(.tte(16, .semibold))
                             Text("이 경로를 나중에도 사용할 수 있어요")
-                                .font(.system(size: 12))
+                                .font(.tte(12))
                                 .opacity(0.7)
                         }
                         Spacer()
                         Image(systemName: "chevron.right")
-                            .font(.system(size: 13, weight: .medium))
+                            .font(.tte(13, .medium))
                             .opacity(0.5)
                     }
                     .foregroundColor(.tteDarkGray)
@@ -397,7 +406,7 @@ struct ImpromptuSessionView: View {
                 HStack {
                     Rectangle().fill(Color.secondary.opacity(0.15)).frame(height: 1)
                     Text("또는")
-                        .font(.system(size: 12))
+                        .font(.tte(12))
                         .foregroundColor(.secondary)
                         .padding(.horizontal, 10)
                     Rectangle().fill(Color.secondary.opacity(0.15)).frame(height: 1)
@@ -409,7 +418,7 @@ struct ImpromptuSessionView: View {
                     showEndAlert = false
                 } label: {
                     Text("계속 기록할게요")
-                        .font(.system(size: 15, weight: .medium))
+                        .font(.tte(15, .medium))
                         .foregroundColor(.tteOrange)
                         .frame(maxWidth: .infinity)
                         .frame(height: 48)
@@ -432,20 +441,20 @@ struct ImpromptuSessionView: View {
             VStack(spacing: 20) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("코스 이름")
-                        .font(.system(size: 14, weight: .medium)).foregroundColor(.tteMediumGray)
+                        .font(.tte(14, .medium)).foregroundColor(.tteMediumGray)
                     TextField("이번 여행의 이름을 지어주세요", text: $courseName)
-                        .font(.system(size: 17)).padding(14)
+                        .font(.tte(17)).padding(14)
                         .background(RoundedRectangle(cornerRadius: 12)
                             .fill(Color(UIColor.secondarySystemBackground)))
                 }
                 VStack(alignment: .leading, spacing: 8) {
                     Text("태그")
-                        .font(.system(size: 14, weight: .medium)).foregroundColor(.tteMediumGray)
+                        .font(.tte(14, .medium)).foregroundColor(.tteMediumGray)
                     HStack(spacing: 10) {
                         ForEach(CourseTag.allCases, id: \.self) { tag in
                             Button { selectedTag = tag } label: {
                                 Text(tag.rawValue)
-                                    .font(.system(size: 14, weight: .medium))
+                                    .font(.tte(14, .medium))
                                     .foregroundColor(selectedTag == tag ? .white : .tteDarkGray)
                                     .padding(.horizontal, 14).padding(.vertical, 8)
                                     .background(Capsule().fill(
@@ -462,7 +471,7 @@ struct ImpromptuSessionView: View {
                     showVlog = true
                 } label: {
                     Text("저장하고 Vlog 만들기")
-                        .font(.system(size: 17, weight: .semibold)).foregroundColor(.white)
+                        .font(.tte(17, .semibold)).foregroundColor(.white)
                         .frame(maxWidth: .infinity).frame(height: 54)
                         .background(RoundedRectangle(cornerRadius: 14)
                             .fill(courseName.trimmingCharacters(in: .whitespaces).isEmpty
@@ -501,6 +510,7 @@ struct ImpromptuSessionView: View {
 
     private func handleCameraSaved() {
         guard let place = pendingPlace else { return }
+        Haptics.success()
         capturedPlaces.append(place)
         reorderPlaces()
         sessionStore.save(places: capturedPlaces, roomIds: Array(activeRoomIds))
@@ -671,18 +681,18 @@ struct ImpromptuSessionView: View {
                     .fill(Color.tteOrange.opacity(0.12))
                     .frame(width: 72, height: 72)
                 Image(systemName: "clock.arrow.circlepath")
-                    .font(.system(size: 30))
+                    .font(.tte(30))
                     .foregroundColor(.tteOrange)
             }
             .padding(.bottom, 16)
 
             VStack(spacing: 6) {
                 Text("오늘 기록이 남아있어요")
-                    .font(.system(size: 20, weight: .bold))
+                    .font(.tte(20, .bold))
                     .foregroundColor(.tteDarkGray)
                 if let saved = savedSession {
                     Text("장소 \(saved.places.count)곳 · \(Self.timeString(saved.date))")
-                        .font(.system(size: 14))
+                        .font(.tte(14))
                         .foregroundColor(.tteMediumGray)
                 }
             }
@@ -696,9 +706,9 @@ struct ImpromptuSessionView: View {
                 } label: {
                     HStack(spacing: 10) {
                         Image(systemName: "play.fill")
-                            .font(.system(size: 15))
+                            .font(.tte(15))
                         Text("이어서 기록하기")
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(.tte(16, .semibold))
                     }
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
@@ -712,17 +722,17 @@ struct ImpromptuSessionView: View {
                     sessionStore.clear()
                     showResumeSheet = false
                     if let restart = onRestartWithRoomSelect {
-                        dismiss()
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { restart() }
+                        // 부모가 이 화면을 닫고 onDismiss에서 방 선택을 다시 연다
+                        restart()
                     } else {
                         startNewSession()
                     }
                 } label: {
                     HStack(spacing: 10) {
                         Image(systemName: "arrow.counterclockwise")
-                            .font(.system(size: 15))
+                            .font(.tte(15))
                         Text("새로 시작하기")
-                            .font(.system(size: 16, weight: .medium))
+                            .font(.tte(16, .medium))
                     }
                     .foregroundColor(.tteDarkGray)
                     .frame(maxWidth: .infinity)
@@ -756,7 +766,7 @@ struct FreeSessionPin: View {
         ZStack {
             Circle().fill(Color.tteOrange).frame(width: 32, height: 32)
                 .shadow(color: .tteOrange.opacity(0.4), radius: 4)
-            Text("\(order)").font(.system(size: 13, weight: .bold)).foregroundColor(.white)
+            Text("\(order)").font(.tte(13, .bold)).foregroundColor(.white)
         }
     }
 }

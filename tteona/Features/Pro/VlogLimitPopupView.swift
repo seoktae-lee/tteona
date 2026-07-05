@@ -25,7 +25,7 @@ struct VlogLimitPopupView: View {
                         )
                         .frame(width: 72, height: 72)
                     Image(systemName: isPro ? "checkmark.seal.fill" : "timer")
-                        .font(.system(size: 30, weight: .semibold))
+                        .font(.tte(30, .semibold))
                         .foregroundStyle(
                             LinearGradient(colors: [Color(red: 1, green: 0.85, blue: 0.45), .tteOrange],
                                            startPoint: .top, endPoint: .bottom)
@@ -34,14 +34,14 @@ struct VlogLimitPopupView: View {
                 .padding(.top, 28)
 
                 Text("촬영 한도에 도달했어요")
-                    .font(.system(size: 20, weight: .bold))
+                    .font(.tte(20, .bold))
                     .foregroundColor(.white)
                     .padding(.top, 16)
 
                 Text(isPro
                      ? "브이로그 영상은 최대 5분까지 담을 수 있어요.\n지금까지 담은 순간들로 멋진 영상을 만들어드릴게요."
                      : "무료로는 장소당 5초, 총 30초까지 담을 수 있어요.")
-                    .font(.system(size: 14))
+                    .font(.tte(14))
                     .foregroundColor(.white.opacity(0.7))
                     .multilineTextAlignment(.center)
                     .lineSpacing(3)
@@ -57,7 +57,7 @@ struct VlogLimitPopupView: View {
                             .aspectRatio(contentMode: .fit)
                             .frame(height: 20)
                         Text("장소당 제한 없이 최대 5분까지 자유롭게")
-                            .font(.system(size: 12))
+                            .font(.tte(12))
                             .foregroundColor(.white.opacity(0.6))
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -72,7 +72,7 @@ struct VlogLimitPopupView: View {
 
                     Button(action: onUpgrade) {
                         Text("tteona PRO 알아보기")
-                            .font(.system(size: 16, weight: .bold))
+                            .font(.tte(16, .bold))
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
                             .frame(height: 52)
@@ -84,7 +84,7 @@ struct VlogLimitPopupView: View {
 
                 Button(action: onDismiss) {
                     Text("확인")
-                        .font(.system(size: 15, weight: .medium))
+                        .font(.tte(15, .medium))
                         .foregroundColor(.white.opacity(0.65))
                         .frame(maxWidth: .infinity)
                         .frame(height: 44)

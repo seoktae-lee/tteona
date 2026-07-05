@@ -49,7 +49,7 @@ struct AuthView: View {
                                 showResetAlert = true
                             } label: {
                                 Text("비밀번호를 잊으셨나요?")
-                                    .font(.system(size: 13))
+                                    .font(.tte(13))
                                     .foregroundColor(.tteMediumGray)
                                     .underline()
                             }
@@ -105,22 +105,22 @@ struct AuthView: View {
                     .fill(Color.tteOrange.opacity(0.14))
                     .frame(width: 120, height: 120)
                 Image(systemName: "envelope.badge.fill")
-                    .font(.system(size: 48, weight: .medium))
+                    .font(.tte(48, .medium))
                     .foregroundColor(.tteOrange)
             }
             .padding(.bottom, 40)
 
             VStack(spacing: 12) {
                 Text("이메일을 확인해주세요")
-                    .font(.system(size: 24, weight: .bold))
+                    .font(.tte(24, .bold))
                     .foregroundColor(.tteDarkGray)
                 Text("가입하신 이메일로 인증 링크를 보냈어요.\n링크를 클릭한 후 아래 버튼을 눌러주세요.")
-                    .font(.system(size: 15))
+                    .font(.tte(15))
                     .foregroundColor(.tteMediumGray)
                     .multilineTextAlignment(.center)
                     .lineSpacing(5)
                 Text("메일이 보이지 않으면 스팸함도 확인해주세요.")
-                    .font(.system(size: 12))
+                    .font(.tte(12))
                     .foregroundColor(Color(UIColor.tertiaryLabel))
                     .padding(.top, 4)
             }
@@ -130,7 +130,7 @@ struct AuthView: View {
             VStack(spacing: 12) {
                 if let error = authService.errorMessage {
                     Text(error)
-                        .font(.system(size: 13))
+                        .font(.tte(13))
                         .foregroundColor(.red)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 4)
@@ -141,9 +141,9 @@ struct AuthView: View {
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 13, weight: .medium))
+                            .font(.tte(13, .medium))
                         Text(resendCooldown > 0 ? "재전송 \(resendCooldown)초 후 가능" : "인증 메일 재전송")
-                            .font(.system(size: 14, weight: .medium))
+                            .font(.tte(14, .medium))
                     }
                     .foregroundColor(resendCooldown > 0 ? Color(UIColor.tertiaryLabel) : .tteOrange)
                 }
@@ -161,7 +161,7 @@ struct AuthView: View {
                             ProgressView().tint(.white)
                         } else {
                             Text("인증 완료 후 시작하기")
-                                .font(.system(size: 17, weight: .semibold))
+                                .font(.tte(17, .semibold))
                                 .foregroundColor(.white)
                         }
                     }
@@ -274,7 +274,7 @@ struct AuthView: View {
             TteonaWordmarkLogo()
 
             Text("특별한 순간을 영상으로 기록하세요")
-                .font(.system(size: 15))
+                .font(.tte(15))
                 .foregroundColor(.tteMediumGray)
         }
     }
@@ -283,7 +283,7 @@ struct AuthView: View {
     private var socialLoginSection: some View {
         VStack(spacing: 16) {
             Text("소셜 계정으로 로그인")
-                .font(.system(size: 13))
+                .font(.tte(13))
                 .foregroundColor(.tteMediumGray)
 
             HStack(spacing: 24) {
@@ -297,7 +297,7 @@ struct AuthView: View {
                     Task { await authService.signInWithGoogle(presenting: vc) }
                 } label: {
                     Text("G")
-                        .font(.system(size: 22, weight: .bold))
+                        .font(.tte(22, .bold))
                         .foregroundStyle(
                             LinearGradient(
                                 colors: [.blue, .red, .yellow, .green],
@@ -316,7 +316,7 @@ struct AuthView: View {
                     AppleSignInCoordinator.shared.signIn(authService: authService)
                 } label: {
                     Image(systemName: "apple.logo")
-                        .font(.system(size: 22, weight: .medium))
+                        .font(.tte(22, .medium))
                         .foregroundColor(.white)
                 }
                 .disabled(authService.isLoading)
@@ -329,7 +329,7 @@ struct AuthView: View {
                     Task { await authService.signInWithKakao() }
                 } label: {
                     Image(systemName: "message.fill")
-                        .font(.system(size: 20))
+                        .font(.tte(20))
                         .foregroundColor(Color(hex: "#3A1D1D"))
                 }
                 .disabled(authService.isLoading)
@@ -344,7 +344,7 @@ struct AuthView: View {
                 .fill(Color(UIColor.separator))
                 .frame(height: 1)
             Text("또는 이메일로 계속하기")
-                .font(.system(size: 12))
+                .font(.tte(12))
                 .foregroundColor(.tteMediumGray)
                 .fixedSize()
             Rectangle()
@@ -369,7 +369,7 @@ struct AuthView: View {
                     else { Task { await submit() } }
                 }
             Text("6자 이상 입력해주세요")
-                .font(.system(size: 12))
+                .font(.tte(12))
                 .foregroundColor(.tteMediumGray)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 4)
@@ -385,7 +385,7 @@ struct AuthView: View {
 
             if let error = authService.errorMessage {
                 Text(error)
-                    .font(.system(size: 13))
+                    .font(.tte(13))
                     .foregroundColor(.red)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 4)
@@ -408,7 +408,7 @@ struct AuthView: View {
                     ProgressView().tint(.white)
                 } else {
                     Text(isSignUp ? "회원가입" : "로그인")
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.tte(17, .semibold))
                         .foregroundColor(.white)
                 }
             }
@@ -430,7 +430,7 @@ struct AuthView: View {
                     .foregroundColor(.tteOrange)
                     .fontWeight(.semibold)
             }
-            .font(.system(size: 14))
+            .font(.tte(14))
         }
     }
 
@@ -489,7 +489,7 @@ struct TteTextField: View {
                     .autocorrectionDisabled()
             }
         }
-        .font(.system(size: 16))
+        .font(.tte(16))
         .foregroundColor(.tteDarkGray)
         .padding(.horizontal, 16)
         .padding(.vertical, 16)

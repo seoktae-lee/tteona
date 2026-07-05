@@ -60,7 +60,7 @@ struct RegionSearchView: View {
         } else if search.results.isEmpty && !query.isEmpty {
             VStack(spacing: 12) {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 36))
+                    .font(.tte(36))
                     .foregroundColor(.tteMediumGray.opacity(0.4))
                 Text("검색 결과가 없어요")
                     .foregroundColor(.tteMediumGray)
@@ -70,10 +70,10 @@ struct RegionSearchView: View {
         } else if search.results.isEmpty {
             VStack(spacing: 12) {
                 Image(systemName: "map.fill")
-                    .font(.system(size: 36))
+                    .font(.tte(36))
                     .foregroundColor(.tteOrange.opacity(0.4))
                 Text("동네나 지역을 검색해보세요")
-                    .font(.system(size: 15))
+                    .font(.tte(15))
                     .foregroundColor(.tteMediumGray)
             }
             .padding(.top, 60)
@@ -86,16 +86,16 @@ struct RegionSearchView: View {
                 } label: {
                     HStack(spacing: 12) {
                         Image(systemName: "location.fill")
-                            .font(.system(size: 20))
+                            .font(.tte(20))
                             .foregroundColor(.tteOrange)
                             .frame(width: 32)
                         VStack(alignment: .leading, spacing: 4) {
                             Text(item.name)
-                                .font(.system(size: 15, weight: .medium))
+                                .font(.tte(15, .medium))
                                 .foregroundColor(.tteDarkGray)
                             if !item.address.isEmpty {
                                 Text(item.address)
-                                    .font(.system(size: 13))
+                                    .font(.tte(13))
                                     .foregroundColor(.tteMediumGray)
                             }
                         }

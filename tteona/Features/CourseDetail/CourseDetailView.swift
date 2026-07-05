@@ -22,6 +22,7 @@ struct CourseDetailView: View {
     @State private var showBlockAlert = false
     @State private var showReportSuccessAlert = false
     @State private var showBlockSuccessAlert = false
+    @State private var actionErrorMessage: String?
 
     private let sessionStore = ActiveSessionStore.shared
 
@@ -49,9 +50,10 @@ struct CourseDetailView: View {
                         dismiss()
                     } label: {
                         Image(systemName: "xmark")
-                            .font(.system(size: 16, weight: .medium))
+                            .font(.tte(16, .medium))
                             .foregroundColor(.tteDarkGray)
                     }
+                    .accessibilityLabel("닫기")
                 }
 
                 ToolbarItem(placement: .topBarTrailing) {
@@ -70,7 +72,7 @@ struct CourseDetailView: View {
                                 }
                             } label: {
                                 Image(systemName: "ellipsis")
-                                    .font(.system(size: 16, weight: .medium))
+                                    .font(.tte(16, .medium))
                                     .foregroundColor(.tteDarkGray)
                             }
                         } else {
@@ -87,7 +89,7 @@ struct CourseDetailView: View {
                                 }
                             } label: {
                                 Image(systemName: "ellipsis")
-                                    .font(.system(size: 16, weight: .medium))
+                                    .font(.tte(16, .medium))
                                     .foregroundColor(.tteDarkGray)
                             }
                         }
@@ -102,24 +104,16 @@ struct CourseDetailView: View {
         }
         .fullScreenCover(isPresented: $showRoomSelect) {
             RoomSelectView(selectedRoomIds: $selectedRoomIds) {
-                let confirmed = selectedRoomIds
+                // 부모가 상세 시트를 닫고 onDismiss에서 세션을 시작한다
                 showRoomSelect = false
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    dismiss()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                        onStartSession?(confirmed)
-                    }
-                }
+                onStartSession?(selectedRoomIds)
             }
             .environmentObject(roomService)
         }
         .confirmationDialog("진행 중인 코스가 있어요", isPresented: $showOtherCourseAlert, titleVisibility: .visible) {
             Button("이어서 하기") {
                 if let saved = sessionStore.loadTodaySession() {
-                    dismiss()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                        onStartSession?(Set(saved.roomIds))
-                    }
+                    onStartSession?(Set(saved.roomIds))
                 }
             }
             Button("새로 시작", role: .destructive) {
@@ -169,6 +163,12 @@ struct CourseDetailView: View {
         } message: {
             Text("작성자가 차단되었습니다. 목록에서 제외하기 위해 화면을 닫습니다.")
         }
+        .alert("처리 실패", isPresented: Binding(get: { actionErrorMessage != nil },
+                                              set: { if !$0 { actionErrorMessage = nil } })) {
+            Button("확인", role: .cancel) {}
+        } message: {
+            Text(actionErrorMessage ?? "")
+        }
     }
 
     private func submitCourseReport(reason: String) {
@@ -183,7 +183,9 @@ struct CourseDetailView: View {
                     reason: reason
                 )
                 showReportSuccessAlert = true
-            } catch {}
+            } catch {
+                actionErrorMessage = "신고 접수에 실패했어요. 잠시 후 다시 시도해주세요."
+            }
         }
     }
 
@@ -193,7 +195,9 @@ struct CourseDetailView: View {
             do {
                 try await userService.blockUser(uid: currentUid, blockedUid: course.authorId)
                 showBlockSuccessAlert = true
-            } catch {}
+            } catch {
+                actionErrorMessage = "차단에 실패했어요. 잠시 후 다시 시도해주세요."
+            }
         }
     }
 
@@ -230,11 +234,11 @@ struct CourseDetailView: View {
                     HStack(spacing: 5) {
                         VerifiedBadge(creatorLabel: author.creatorLabel)
                         Text("크리에이터 코스")
-                            .font(.system(size: 11))
+                            .font(.tte(11))
                             .foregroundColor(.tteOrange.opacity(0.8))
                         Spacer()
                         Text(author.nickname)
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.tte(11, .medium))
                             .foregroundColor(.tteOrange.opacity(0.8))
                     }
                     .padding(.horizontal, 20)
@@ -276,14 +280,14 @@ struct CourseDetailView: View {
                 HStack {
                     HStack(spacing: 6) {
                         Text(course.tag.rawValue)
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.tte(12, .medium))
                             .foregroundColor(.tteOrange)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 4)
                             .background(Capsule().fill(Color.tteOrange.opacity(0.12)))
 
                         Text(course.region)
-                            .font(.system(size: 12))
+                            .font(.tte(12))
                             .foregroundColor(.tteMediumGray)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 4)
@@ -293,9 +297,9 @@ struct CourseDetailView: View {
                     HStack(spacing: 4) {
                         Image(systemName: "heart.fill")
                             .foregroundColor(isLiked ? .red : .tteMediumGray)
-                            .font(.system(size: 14))
+                            .font(.tte(14))
                         Text("\(course.likeCount)")
-                            .font(.system(size: 14))
+                            .font(.tte(14))
                             .foregroundColor(.tteMediumGray)
                     }
                 }
@@ -303,7 +307,7 @@ struct CourseDetailView: View {
                 .padding(.vertical, 10)
 
                 Text("장소 목록")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.tte(14, .semibold))
                     .foregroundColor(.tteDarkGray)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 20)
@@ -329,11 +333,8 @@ struct CourseDetailView: View {
         Button {
             if let saved = sessionStore.loadTodaySession() {
                 if saved.course.courseId == course.courseId {
-                    // 같은 코스 → MainView에서 직접 열기
-                    dismiss()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                        onStartSession?(Set(saved.roomIds))
-                    }
+                    // 같은 코스 → 부모가 시트를 닫고 onDismiss에서 세션을 연다
+                    onStartSession?(Set(saved.roomIds))
                 } else {
                     // 다른 코스 진행 중 → 막기
                     showOtherCourseAlert = true
@@ -344,7 +345,7 @@ struct CourseDetailView: View {
             }
         } label: {
             Text("이 코스로 떠나기")
-                .font(.system(size: 17, weight: .semibold))
+                .font(.tte(17, .semibold))
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
                 .frame(height: 54)
@@ -358,6 +359,7 @@ struct CourseDetailView: View {
     private var likeButton: some View {
         Button {
             guard !isLikeProcessing else { return }
+            Haptics.light()
             isLikeProcessing = true
             Task {
                 let uid = authService.currentUser?.uid ?? ""
@@ -372,10 +374,11 @@ struct CourseDetailView: View {
             }
         } label: {
             Image(systemName: isLiked ? "heart.fill" : "heart")
-                .font(.system(size: 20))
+                .font(.tte(20))
                 .foregroundColor(isLiked ? .red : .tteDarkGray)
         }
         .disabled(isLikeProcessing)
+        .accessibilityLabel(isLiked ? "좋아요 취소" : "좋아요")
     }
 
     private var shareButton: some View {
@@ -383,9 +386,10 @@ struct CourseDetailView: View {
             shareCourse()
         } label: {
             Image(systemName: "square.and.arrow.up")
-                .font(.system(size: 18, weight: .medium))
+                .font(.tte(18, .medium))
                 .foregroundColor(.tteDarkGray)
         }
+        .accessibilityLabel("코스 공유")
     }
 
     private func shareCourse() {
@@ -431,7 +435,7 @@ struct PlacePagePhoto: View {
 
             HStack(alignment: .bottom) {
                 Text("\(place.order). \(place.placeName)")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.tte(14, .semibold))
                     .foregroundColor(.white)
                     .lineLimit(1)
                 Spacer()
@@ -439,9 +443,9 @@ struct PlacePagePhoto: View {
                     Button(action: onDetail) {
                         HStack(spacing: 4) {
                             Image(systemName: "photo.stack.fill")
-                                .font(.system(size: 10))
+                                .font(.tte(10))
                             Text("사진·리뷰")
-                                .font(.system(size: 11, weight: .semibold))
+                                .font(.tte(11, .semibold))
                         }
                         .foregroundColor(.white)
                         .padding(.horizontal, 9)
@@ -554,11 +558,11 @@ struct PlaceRow: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(place.placeName)
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.tte(15, .medium))
                     .foregroundColor(.tteDarkGray)
                 if let category {
                     Text(category)
-                        .font(.system(size: 12))
+                        .font(.tte(12))
                         .foregroundColor(.tteMediumGray)
                 }
             }
@@ -568,11 +572,11 @@ struct PlaceRow: View {
 
             HStack(spacing: 3) {
                 Image(systemName: "star.fill")
-                    .font(.system(size: 9))
+                    .font(.tte(9))
                 Text("리뷰 보기")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.tte(11, .medium))
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.tte(9, .semibold))
             }
             .foregroundColor(.tteOrange)
             .padding(.horizontal, 8)

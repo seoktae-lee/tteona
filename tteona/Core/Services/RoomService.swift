@@ -6,6 +6,7 @@ import CoreLocation
 @MainActor
 class RoomService: ObservableObject {
     @Published var myRooms: [Room] = []
+    @Published var unreadRoomIds: Set<String> = []
     @Published var currentRoomMembers: [RoomMember] = []
     @Published var memberLocations: [MemberLocation] = []
     @Published var feedItems: [FeedItem] = []
@@ -419,9 +420,34 @@ class RoomService: ObservableObject {
 
     // MARK: - 읽음 처리
     func markRoomAsRead(roomId: String, userId: String) {
+        unreadRoomIds.remove(roomId)
         db.collection("rooms").document(roomId)
             .collection("members").document(userId)
             .setData(["lastReadAt": FieldValue.serverTimestamp()], merge: true)
+    }
+
+    // 방별 마지막 읽음 시각과 최신 피드 시각을 비교해 안읽음 방 집합 갱신 (채팅 탭 배지·피드 목록 공용)
+    func refreshUnreadStatus(userId: String) async {
+        let rooms = myRooms
+        var unread: Set<String> = []
+        await withTaskGroup(of: (String, Bool).self) { group in
+            for room in rooms {
+                group.addTask {
+                    async let memberDoc = self.fetchMyMemberDoc(roomId: room.roomId, userId: userId)
+                    async let latestFeeds = self.fetchLatestFeedPerMember(roomId: room.roomId, memberIds: room.memberIds)
+                    guard let latestDate = await latestFeeds.values.map(\.createdAt).max() else {
+                        return (room.roomId, false)
+                    }
+                    guard let readAt = await memberDoc?.lastReadAt else { return (room.roomId, true) }
+                    return (room.roomId, latestDate > readAt)
+                }
+            }
+            for await (roomId, isUnread) in group where isUnread {
+                unread.insert(roomId)
+            }
+        }
+        let result = unread
+        await MainActor.run { self.unreadRoomIds = result }
     }
 
     func markMemberFeedAsRead(roomId: String, userId: String, memberUserId: String) {

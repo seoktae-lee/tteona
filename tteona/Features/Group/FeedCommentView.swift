@@ -53,10 +53,10 @@ struct MemberChatView: View {
                     Spacer()
                     VStack(spacing: 10) {
                         Image(systemName: "bubble.left.and.bubble.right")
-                            .font(.system(size: 36))
+                            .font(.tte(36))
                             .foregroundColor(.tteMediumGray.opacity(0.4))
                         Text("아직 활동이 없어요")
-                            .font(.system(size: 14))
+                            .font(.tte(14))
                             .foregroundColor(.tteMediumGray)
                     }
                     Spacer()
@@ -125,10 +125,10 @@ struct MemberChatView: View {
                 .frame(width: 3)
             VStack(alignment: .leading, spacing: 2) {
                 Text(replyTarget?.nickname ?? "")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.tte(12, .semibold))
                     .foregroundColor(.tteOrange)
                 Text(replyTarget?.text ?? "")
-                    .font(.system(size: 12))
+                    .font(.tte(12))
                     .foregroundColor(.tteMediumGray)
                     .lineLimit(1)
             }
@@ -137,7 +137,7 @@ struct MemberChatView: View {
                 replyTarget = nil
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.tte(12, .medium))
                     .foregroundColor(.tteMediumGray)
             }
         }
@@ -150,7 +150,7 @@ struct MemberChatView: View {
     private var inputBar: some View {
         HStack(spacing: 10) {
             TextField("댓글 달기...", text: $commentText, axis: .vertical)
-                .font(.system(size: 15))
+                .font(.tte(15))
                 .lineLimit(1...4)
                 .focused($isInputFocused)
                 .padding(.horizontal, 14)
@@ -162,7 +162,7 @@ struct MemberChatView: View {
                 Task { await postComment() }
             } label: {
                 Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: 32))
+                    .font(.tte(32))
                     .foregroundColor(commentText.trimmingCharacters(in: .whitespaces).isEmpty
                                      ? .tteMediumGray.opacity(0.4) : .tteOrange)
             }
@@ -256,7 +256,7 @@ struct FeedEventRow: View {
                         Annotation("", coordinate: coord) {
                             ZStack {
                                 Circle().fill(Color.tteOrange).frame(width: 28, height: 28)
-                                Text("🎬").font(.system(size: 13))
+                                Text("🎬").font(.tte(13))
                             }
                         }
                     }
@@ -266,13 +266,13 @@ struct FeedEventRow: View {
 
                     HStack(spacing: 6) {
                         Text("🎬")
-                            .font(.system(size: 12))
+                            .font(.tte(12))
                         Text(message)
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.tte(12, .medium))
                             .foregroundColor(.tteDarkGray)
                         Spacer()
                         Text(item.createdAt.relativeDescription)
-                            .font(.system(size: 11))
+                            .font(.tte(11))
                             .foregroundColor(.tteMediumGray.opacity(0.7))
                     }
                     .padding(.horizontal, 12)
@@ -290,14 +290,14 @@ struct FeedEventRow: View {
                 Spacer()
                 HStack(spacing: 6) {
                     Text(icon)
-                        .font(.system(size: 13))
+                        .font(.tte(13))
                     Text(message)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.tte(12, .medium))
                         .foregroundColor(.tteMediumGray)
                     Text("·")
                         .foregroundColor(.tteMediumGray.opacity(0.5))
                     Text(item.createdAt.relativeDescription)
-                        .font(.system(size: 11))
+                        .font(.tte(11))
                         .foregroundColor(.tteMediumGray.opacity(0.7))
                 }
                 .padding(.horizontal, 12)
@@ -340,7 +340,7 @@ struct CommentRow: View {
                         .fill(Color.tteMediumGray.opacity(0.15))
                         .frame(width: 34, height: 34)
                     Text(String(comment.nickname.prefix(1)))
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.tte(13, .semibold))
                         .foregroundColor(.tteDarkGray)
                 }
             }
@@ -348,7 +348,7 @@ struct CommentRow: View {
             VStack(alignment: isMe ? .trailing : .leading, spacing: 3) {
                 if !isMe {
                     Text(comment.nickname)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.tte(12, .medium))
                         .foregroundColor(.tteMediumGray)
                 }
 
@@ -362,10 +362,10 @@ struct CommentRow: View {
                                 .frame(width: 3)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(rn)
-                                    .font(.system(size: 11, weight: .semibold))
+                                    .font(.tte(11, .semibold))
                                     .foregroundColor(isMe ? .white : .tteOrange)
                                 Text(rt)
-                                    .font(.system(size: 11))
+                                    .font(.tte(11))
                                     .foregroundColor(isMe ? .white.opacity(0.8) : .tteMediumGray)
                                     .lineLimit(1)
                             }
@@ -382,7 +382,7 @@ struct CommentRow: View {
 
                     // 본문
                     Text(comment.text)
-                        .font(.system(size: 14))
+                        .font(.tte(14))
                         .foregroundColor(isMe ? .white : .tteDarkGray)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
@@ -402,7 +402,7 @@ struct CommentRow: View {
                 }
 
                 Text(comment.createdAt.relativeDescription)
-                    .font(.system(size: 11))
+                    .font(.tte(11))
                     .foregroundColor(.tteMediumGray.opacity(0.7))
             }
 

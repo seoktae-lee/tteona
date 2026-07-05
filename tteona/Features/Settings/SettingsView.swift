@@ -70,7 +70,7 @@ struct SettingsView: View {
                     VStack(spacing: 14) {
                         ProgressView().tint(.white).scaleEffect(1.3)
                         Text("탈퇴 처리 중...")
-                            .font(.system(size: 14))
+                            .font(.tte(14))
                             .foregroundColor(.white)
                     }
                     .padding(28)
@@ -93,14 +93,14 @@ struct SettingsView: View {
                                 image.resizable().scaledToFill()
                             } placeholder: {
                                 Text(String(userService.currentUser?.nickname.prefix(1) ?? "?"))
-                                    .font(.system(size: 22, weight: .semibold))
+                                    .font(.tte(22, .semibold))
                                     .foregroundColor(.tteOrange)
                             }
                             .frame(width: 56, height: 56)
                             .clipShape(Circle())
                         } else {
                             Text(String(userService.currentUser?.nickname.prefix(1) ?? "?"))
-                                .font(.system(size: 22, weight: .semibold))
+                                .font(.tte(22, .semibold))
                                 .foregroundColor(.tteOrange)
                         }
                         if isUploadingAvatar {
@@ -110,7 +110,7 @@ struct SettingsView: View {
                             ProgressView().tint(.white)
                         }
                         Image(systemName: "camera.fill")
-                            .font(.system(size: 11, weight: .bold))
+                            .font(.tte(11, .bold))
                             .foregroundColor(.white)
                             .frame(width: 20, height: 20)
                             .background(Circle().fill(Color.tteOrange))
@@ -125,10 +125,10 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(userService.currentUser?.nickname.isEmpty == false
                          ? userService.currentUser!.nickname : "닉네임 없음")
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.tte(17, .semibold))
                         .foregroundColor(.tteDarkGray)
                     Text(authService.currentUser?.email ?? "")
-                        .font(.system(size: 13))
+                        .font(.tte(13))
                         .foregroundColor(.tteMediumGray)
                 }
             }
@@ -150,7 +150,7 @@ struct SettingsView: View {
             } label: {
                 HStack(spacing: 14) {
                     Image(systemName: "crown.fill")
-                        .font(.system(size: 20))
+                        .font(.tte(20))
                         .foregroundStyle(
                             LinearGradient(colors: [Color(red: 1, green: 0.7, blue: 0.3), .tteOrange],
                                            startPoint: .top, endPoint: .bottom)
@@ -158,12 +158,12 @@ struct SettingsView: View {
                         .frame(width: 28)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(pro.isPro ? "tteona PRO 이용 중" : "tteona PRO")
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(.tte(16, .semibold))
                             .foregroundColor(.tteDarkGray)
                         Text(pro.isPro
                              ? "모든 프리미엄 기능이 켜져 있어요"
                              : "워터마크 제거 · 멀티포맷 · 5분 영상 · 우선 렌더링")
-                            .font(.system(size: 12))
+                            .font(.tte(12))
                             .foregroundColor(.tteMediumGray)
                     }
                     Spacer()
@@ -172,7 +172,7 @@ struct SettingsView: View {
                             .foregroundColor(.tteOrange)
                     } else {
                         Image(systemName: "chevron.right")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.tte(13, .semibold))
                             .foregroundColor(.tteMediumGray)
                     }
                 }
@@ -205,7 +205,7 @@ struct SettingsView: View {
                             .foregroundColor(granted ? .tteMediumGray : .red)
                     }
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.tte(12, .medium))
                         .foregroundColor(Color(UIColor.tertiaryLabel))
                 }
             }
@@ -221,7 +221,7 @@ struct SettingsView: View {
                     Text("한국어")
                         .foregroundColor(.tteMediumGray)
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.tte(12, .medium))
                         .foregroundColor(Color(UIColor.tertiaryLabel))
                 }
             }

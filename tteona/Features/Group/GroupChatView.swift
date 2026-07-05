@@ -123,7 +123,7 @@ struct GroupChatView: View {
             HStack(spacing: 10) {
                 TextField("메시지 입력...", text: $draft, axis: .vertical)
                     .lineLimit(1...4)
-                    .font(.system(size: 15))
+                    .font(.tte(15))
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
                     .background(RoundedRectangle(cornerRadius: 20).fill(Color(UIColor.secondarySystemBackground)))
@@ -133,7 +133,7 @@ struct GroupChatView: View {
                     send()
                 } label: {
                     Image(systemName: "arrow.up")
-                        .font(.system(size: 16, weight: .bold))
+                        .font(.tte(16, .bold))
                         .foregroundColor(.white)
                         .frame(width: 38, height: 38)
                         .background(Circle().fill(canSend ? Color.tteOrange : Color.tteMediumGray.opacity(0.4)))
@@ -155,10 +155,10 @@ struct GroupChatView: View {
             Rectangle().fill(Color.tteOrange).frame(width: 3).cornerRadius(2)
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(reply.nickname)님에게 답장")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.tte(12, .semibold))
                     .foregroundColor(.tteOrange)
                 Text(reply.text)
-                    .font(.system(size: 12))
+                    .font(.tte(12))
                     .foregroundColor(.tteMediumGray)
                     .lineLimit(1)
             }
@@ -167,7 +167,7 @@ struct GroupChatView: View {
                 replyingTo = nil
             } label: {
                 Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 18))
+                    .font(.tte(18))
                     .foregroundColor(.tteMediumGray.opacity(0.6))
             }
         }
@@ -230,7 +230,7 @@ private struct ChatBubble: View {
             VStack(alignment: isMine ? .trailing : .leading, spacing: 3) {
                 if !isMine {
                     Text(message.nickname)
-                        .font(.system(size: 11))
+                        .font(.tte(11))
                         .foregroundColor(.tteMediumGray)
                         .padding(.leading, 4)
                 }
@@ -251,10 +251,10 @@ private struct ChatBubble: View {
             if message.hasReply {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(message.replyToNickname ?? "")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.tte(11, .semibold))
                         .foregroundColor(isMine ? .white.opacity(0.9) : .tteOrange)
                     Text(message.replyToText ?? "")
-                        .font(.system(size: 12))
+                        .font(.tte(12))
                         .foregroundColor(isMine ? .white.opacity(0.75) : .tteMediumGray)
                         .lineLimit(2)
                 }
@@ -270,7 +270,7 @@ private struct ChatBubble: View {
                 .onTapGesture { onQuoteTap() }
             }
             Text(message.text)
-                .font(.system(size: 15))
+                .font(.tte(15))
                 .foregroundColor(isMine ? .white : .tteDarkGray)
         }
         .padding(.horizontal, 13)
@@ -304,9 +304,9 @@ private struct ChatBubble: View {
                 ForEach(chips, id: \.emoji) { chip in
                     Button { onReact(chip.emoji) } label: {
                         HStack(spacing: 3) {
-                            Text(chip.emoji).font(.system(size: 12))
+                            Text(chip.emoji).font(.tte(12))
                             Text("\(chip.count)")
-                                .font(.system(size: 11, weight: .semibold))
+                                .font(.tte(11, .semibold))
                                 .foregroundColor(chip.mine ? .tteOrange : .tteMediumGray)
                         }
                         .padding(.horizontal, 7)
@@ -328,7 +328,7 @@ private struct ChatBubble: View {
 
     private var timeLabel: some View {
         Text(message.createdAt.formatted(date: .omitted, time: .shortened))
-            .font(.system(size: 10))
+            .font(.tte(10))
             .foregroundColor(.tteMediumGray.opacity(0.7))
     }
 }
@@ -339,7 +339,7 @@ private struct SystemMessageRow: View {
     let text: String
     var body: some View {
         Text(text)
-            .font(.system(size: 12))
+            .font(.tte(12))
             .foregroundColor(.tteMediumGray)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)

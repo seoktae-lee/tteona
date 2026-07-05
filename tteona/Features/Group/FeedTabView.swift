@@ -12,31 +12,20 @@ struct FeedTabView: View {
     @State private var pendingMemberChat: FeedMember? = nil
 
     private var uid: String { authService.currentUser?.uid ?? "" }
-    @State private var roomLastReadAt: [String: Date] = [:]
-    @State private var roomLatestFeedAt: [String: Date] = [:]
-    @State private var isLoadingStatus = false
 
     var body: some View {
         NavigationStack {
             Group {
-                if isLoadingStatus && roomService.myRooms.isEmpty {
-                    VStack {
-                        Spacer()
-                        ProgressView()
-                            .tint(.tteOrange)
-                        Spacer()
-                    }
-                } else if roomService.myRooms.isEmpty {
+                if roomService.myRooms.isEmpty {
                     emptyState
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 12) {
                             ForEach(roomService.myRooms) { room in
-                                let hasNew = hasNewFeed(room: room)
+                                let hasNew = roomService.unreadRoomIds.contains(room.roomId)
                                 RoomCard(room: room, hasNewFeed: hasNew)
                                     .onTapGesture {
                                         roomService.markRoomAsRead(roomId: room.roomId, userId: uid)
-                                        roomLastReadAt[room.roomId] = Date()
                                         selectedRoom = room
                                     }
                             }
@@ -45,7 +34,7 @@ struct FeedTabView: View {
                     }
                 }
             }
-            .navigationTitle("피드")
+            .navigationTitle("채팅")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -62,9 +51,10 @@ struct FeedTabView: View {
                         }
                     } label: {
                         Image(systemName: "plus")
-                            .font(.system(size: 17, weight: .semibold))
+                            .font(.tte(17, .semibold))
                             .foregroundColor(.tteOrange)
                     }
+                    .accessibilityLabel("방 만들기 또는 참여")
                 }
             }
             .navigationDestination(item: $selectedRoom) { room in
@@ -105,38 +95,10 @@ struct FeedTabView: View {
                 .environmentObject(userService)
                 .environmentObject(roomService)
         }
-        .task { await loadReadStatus() }
-        .onChange(of: roomService.myRooms) { _, _ in
-            Task { await loadReadStatus() }
+        .task {
+            guard !uid.isEmpty else { return }
+            await roomService.refreshUnreadStatus(userId: uid)
         }
-    }
-
-    private func loadReadStatus() async {
-        isLoadingStatus = true
-        defer { isLoadingStatus = false }
-        await withTaskGroup(of: Void.self) { group in
-            for room in roomService.myRooms {
-                group.addTask {
-                    guard let member = await roomService.fetchMyMemberDoc(roomId: room.roomId, userId: uid) else { return }
-                    await MainActor.run {
-                        roomLastReadAt[room.roomId] = member.lastReadAt
-                    }
-                    // 해당 방의 최신 피드 createdAt 계산
-                    let memberIds = room.memberIds
-                    let latest = await roomService.fetchLatestFeedPerMember(roomId: room.roomId, memberIds: memberIds)
-                    let latestDate = latest.values.map(\.createdAt).max()
-                    await MainActor.run {
-                        roomLatestFeedAt[room.roomId] = latestDate
-                    }
-                }
-            }
-        }
-    }
-
-    private func hasNewFeed(room: Room) -> Bool {
-        guard let latestAt = roomLatestFeedAt[room.roomId] else { return false }
-        guard let readAt = roomLastReadAt[room.roomId] else { return true }
-        return latestAt > readAt
     }
 
     private func openChatRoom(_ pending: PendingChatRoom) async {
@@ -153,13 +115,13 @@ struct FeedTabView: View {
         VStack(spacing: 20) {
             Spacer()
             Image(systemName: "person.3.fill")
-                .font(.system(size: 52))
+                .font(.tte(52))
                 .foregroundColor(.tteOrange.opacity(0.4))
             Text("아직 참여한 그룹이 없어요")
-                .font(.system(size: 17, weight: .semibold))
+                .font(.tte(17, .semibold))
                 .foregroundColor(.tteDarkGray)
             Text("친구들과 함께 오늘을 공유해보세요!")
-                .font(.system(size: 14))
+                .font(.tte(14))
                 .foregroundColor(.tteMediumGray)
             HStack(spacing: 12) {
                 Button { showCreateRoom = true } label: {
@@ -167,7 +129,7 @@ struct FeedTabView: View {
                         Image(systemName: "plus.circle.fill")
                         Text("방 만들기").fontWeight(.semibold)
                     }
-                    .font(.system(size: 15))
+                    .font(.tte(15))
                     .foregroundColor(.white)
                     .frame(height: 48).frame(maxWidth: .infinity)
                     .background(RoundedRectangle(cornerRadius: 12).fill(Color.tteOrange))
@@ -177,7 +139,7 @@ struct FeedTabView: View {
                         Image(systemName: "key.horizontal.fill")
                         Text("코드 입력").fontWeight(.semibold)
                     }
-                    .font(.system(size: 15))
+                    .font(.tte(15))
                     .foregroundColor(.tteOrange)
                     .frame(height: 48).frame(maxWidth: .infinity)
                     .background(RoundedRectangle(cornerRadius: 12).stroke(Color.tteOrange, lineWidth: 1.5))

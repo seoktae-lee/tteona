@@ -21,10 +21,10 @@ struct PlaceRatingPromptView: View {
             VStack(spacing: 16) {
                 VStack(spacing: 4) {
                     Text("방금 방문한 장소 어떠셨나요?")
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.tte(15, .semibold))
                         .foregroundColor(.tteDarkGray)
                     Text(place.placeName)
-                        .font(.system(size: 13))
+                        .font(.tte(13))
                         .foregroundColor(.tteMediumGray)
                 }
                 .padding(.top, 16)
@@ -37,7 +37,7 @@ struct PlaceRatingPromptView: View {
                             }
                         } label: {
                             Image(systemName: i <= selectedRating ? "star.fill" : "star")
-                                .font(.system(size: 30))
+                                .font(.tte(30))
                                 .foregroundColor(i <= selectedRating ? .tteOrange : .tteMediumGray.opacity(0.3))
                                 .scaleEffect(i == selectedRating ? 1.15 : 1.0)
                                 .animation(.spring(response: 0.2, dampingFraction: 0.5), value: selectedRating)
@@ -47,7 +47,7 @@ struct PlaceRatingPromptView: View {
 
                 if selectedRating > 0 {
                     TextField("한 줄 후기 (선택)", text: $comment)
-                        .font(.system(size: 14))
+                        .font(.tte(14))
                         .padding(12)
                         .background(RoundedRectangle(cornerRadius: 10)
                             .fill(Color(UIColor.secondarySystemBackground)))
@@ -61,7 +61,7 @@ struct PlaceRatingPromptView: View {
                 HStack(spacing: 12) {
                     Button { onDismiss() } label: {
                         Text("나중에")
-                            .font(.system(size: 15))
+                            .font(.tte(15))
                             .foregroundColor(.tteMediumGray)
                             .frame(maxWidth: .infinity).frame(height: 48)
                             .background(RoundedRectangle(cornerRadius: 12)
@@ -74,7 +74,7 @@ struct PlaceRatingPromptView: View {
                                 ProgressView().tint(.white)
                             } else {
                                 Text(selectedRating > 0 ? "등록" : "건너뛰기")
-                                    .font(.system(size: 15, weight: .semibold))
+                                    .font(.tte(15, .semibold))
                                     .foregroundColor(.white)
                             }
                         }

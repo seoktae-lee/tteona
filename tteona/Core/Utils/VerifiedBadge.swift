@@ -14,11 +14,11 @@ struct VerifiedBadge: View {
     var body: some View {
         HStack(spacing: 3) {
             Image(systemName: "checkmark.seal.fill")
-                .font(.system(size: 11, weight: .semibold))
+                .font(.tte(11, .semibold))
                 .foregroundColor(.tteOrange)
             if let label = creatorLabel, !label.isEmpty {
                 Text(label)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.tte(11, .medium))
                     .foregroundColor(.tteOrange)
             }
         }

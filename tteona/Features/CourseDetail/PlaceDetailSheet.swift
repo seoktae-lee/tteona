@@ -122,16 +122,16 @@ struct PlaceDetailSheet: View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 5) {
                 Text(place.placeName)
-                    .font(.system(size: 19, weight: .semibold))
+                    .font(.tte(19, .semibold))
                     .foregroundColor(.tteDarkGray)
                 if let detail, let rating = detail.rating {
                     HStack(spacing: 5) {
                         starRow(rating: rating, color: .yellow, size: 12)
                         Text(String(format: "%.1f", rating))
-                            .font(.system(size: 13, weight: .medium))
+                            .font(.tte(13, .medium))
                             .foregroundColor(.tteDarkGray)
                         Text("리뷰 \(detail.reviewCount)개")
-                            .font(.system(size: 12))
+                            .font(.tte(12))
                             .foregroundColor(.tteMediumGray)
                     }
                 }
@@ -140,10 +140,10 @@ struct PlaceDetailSheet: View {
             if visitCount > 0 {
                 VStack(spacing: 3) {
                     Image(systemName: "mappin.circle.fill")
-                        .font(.system(size: 22))
+                        .font(.tte(22))
                         .foregroundColor(.tteOrange)
                     Text("떠나 \(visitCount)명")
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.tte(10, .medium))
                         .foregroundColor(.tteMediumGray)
                 }
             }
@@ -202,7 +202,7 @@ struct PlaceDetailSheet: View {
         } label: {
             VStack(spacing: 6) {
                 Text(title)
-                    .font(.system(size: 14, weight: selectedTab == tab ? .semibold : .regular))
+                    .font(.tte(14, selectedTab == tab ? .semibold : .regular))
                     .foregroundColor(selectedTab == tab ? .tteDarkGray : .tteMediumGray)
                 Rectangle()
                     .fill(selectedTab == tab ? Color.tteOrange : Color.clear)
@@ -269,10 +269,10 @@ struct PlaceDetailSheet: View {
     private func emptyState(icon: String, message: String) -> some View {
         VStack(spacing: 12) {
             Image(systemName: icon)
-                .font(.system(size: 36))
+                .font(.tte(36))
                 .foregroundColor(.tteMediumGray.opacity(0.35))
             Text(message)
-                .font(.system(size: 14))
+                .font(.tte(14))
                 .foregroundColor(.tteMediumGray)
                 .multilineTextAlignment(.center)
         }
@@ -304,25 +304,25 @@ struct GoogleReviewRow: View {
                     .frame(width: 36, height: 36)
                     .overlay(
                         Text(String(review.authorName.prefix(1)))
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.tte(14, .semibold))
                             .foregroundColor(.tteDarkGray)
                     )
                 VStack(alignment: .leading, spacing: 3) {
                     Text(review.authorName)
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.tte(14, .medium))
                         .foregroundColor(.tteDarkGray)
                     HStack(spacing: 4) {
                         HStack(spacing: 2) {
                             ForEach(1...5, id: \.self) { i in
                                 Image(systemName: i <= review.rating ? "star.fill" : "star")
-                                    .font(.system(size: 10))
+                                    .font(.tte(10))
                                     .foregroundColor(.yellow)
                             }
                         }
                         if !review.publishTime.isEmpty {
                             Text("·").foregroundColor(.tteMediumGray)
                             Text(review.publishTime)
-                                .font(.system(size: 11))
+                                .font(.tte(11))
                                 .foregroundColor(.tteMediumGray)
                         }
                     }
@@ -330,7 +330,7 @@ struct GoogleReviewRow: View {
             }
             if !review.text.isEmpty {
                 Text(review.text)
-                    .font(.system(size: 13))
+                    .font(.tte(13))
                     .foregroundColor(.tteDarkGray)
                     .lineLimit(4)
             }
@@ -355,17 +355,17 @@ struct TteonaReviewRow: View {
                     .frame(width: 36, height: 36)
                     .overlay(
                         Text(String(review.nickname.prefix(1)))
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.tte(14, .semibold))
                             .foregroundColor(.tteOrange)
                     )
                 VStack(alignment: .leading, spacing: 3) {
                     Text(review.nickname)
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.tte(14, .medium))
                         .foregroundColor(.tteDarkGray)
                     HStack(spacing: 2) {
                         ForEach(1...5, id: \.self) { i in
                             Image(systemName: i <= review.rating ? "star.fill" : "star")
-                                .font(.system(size: 10))
+                                .font(.tte(10))
                                 .foregroundColor(.tteOrange)
                         }
                     }
@@ -373,7 +373,7 @@ struct TteonaReviewRow: View {
                 Spacer()
                 VStack(alignment: .trailing, spacing: 4) {
                     Text(review.createdAt, style: .relative)
-                        .font(.system(size: 11))
+                        .font(.tte(11))
                         .foregroundColor(.tteMediumGray)
                     if let currentUserId, review.userId != currentUserId {
                         Menu {
@@ -389,7 +389,7 @@ struct TteonaReviewRow: View {
                             }
                         } label: {
                             Image(systemName: "ellipsis")
-                                .font(.system(size: 14))
+                                .font(.tte(14))
                                 .foregroundColor(.tteMediumGray)
                         }
                     }
@@ -397,7 +397,7 @@ struct TteonaReviewRow: View {
             }
             if let comment = review.comment {
                 Text(comment)
-                    .font(.system(size: 13))
+                    .font(.tte(13))
                     .foregroundColor(.tteDarkGray)
             }
         }

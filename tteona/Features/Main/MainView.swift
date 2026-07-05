@@ -12,6 +12,9 @@ struct MainView: View {
     @ObservedObject private var activeSessionStore = ActiveSessionStore.shared
     @ObservedObject private var impromptuSessionStore = ImpromptuSessionStore.shared
     @State private var selectedCourse: Course?
+    @State private var pendingSessionInfo: CourseSessionInfo? = nil
+    @State private var pendingImpromptuRoomIds: Set<String>? = nil
+    @State private var pendingReselectRooms = false
     @State private var impromptuRoomIds: Set<String>? = nil
     @State private var resumeActiveSession: Set<String>? = nil
     @State private var courseSessionInfo: CourseSessionInfo? = nil
@@ -101,7 +104,7 @@ struct MainView: View {
                         ProgressView()
                             .tint(.white)
                         Text("코스 불러오는 중...")
-                            .font(.system(size: 13))
+                            .font(.tte(13))
                             .foregroundColor(.white)
                     }
                     .padding(.horizontal, 16)
@@ -120,11 +123,8 @@ struct MainView: View {
             }
             if let course = previewCourse {
                 CoursePreviewCard(course: course) {
-                    let c = course
                     withAnimation(.spring(response: 0.3)) { previewCourse = nil }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                        selectedCourse = c
-                    }
+                    selectedCourse = course
                 } onDismiss: {
                     withAnimation(.spring(response: 0.3)) { previewCourse = nil }
                 }
@@ -152,12 +152,16 @@ struct MainView: View {
             guard !didMoveToUser, let coord = location?.coordinate else { return }
             Task { await moveToCountry(coord: coord) }
         }
-        .sheet(item: $selectedCourse) { course in
+        .sheet(item: $selectedCourse, onDismiss: {
+            // 상세에서 "떠나기" 확정 시 → 시트 닫힘 완료 후 세션 시작 (asyncAfter 타이밍 의존 제거)
+            if let info = pendingSessionInfo {
+                pendingSessionInfo = nil
+                courseSessionInfo = info
+            }
+        }) { course in
             CourseDetailView(course: course) { roomIds in
+                pendingSessionInfo = CourseSessionInfo(course: course, roomIds: roomIds)
                 selectedCourse = nil
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                    courseSessionInfo = CourseSessionInfo(course: course, roomIds: roomIds)
-                }
             }
             .environmentObject(authService)
             .environmentObject(courseService)
@@ -173,35 +177,39 @@ struct MainView: View {
         .sheet(isPresented: $showCourseResumeSheet, onDismiss: {
             guard pendingCourseResume else { return }
             pendingCourseResume = false
-            courseSessionInfo = nil
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                if let session = ActiveSessionStore.shared.loadTodaySession() {
-                    courseSessionInfo = CourseSessionInfo(
-                        course: session.course.toCourse(),
-                        roomIds: Set(session.roomIds),
-                        isResuming: true
-                    )
-                }
+            if let session = ActiveSessionStore.shared.loadTodaySession() {
+                courseSessionInfo = CourseSessionInfo(
+                    course: session.course.toCourse(),
+                    roomIds: Set(session.roomIds),
+                    isResuming: true
+                )
             }
         }) {
             courseResumeSheet()
         }
-        .fullScreenCover(isPresented: $showRoomSelect) {
+        .fullScreenCover(isPresented: $showRoomSelect, onDismiss: {
+            // 방 선택 확정 시 → 닫힘 완료 후 '나의 오늘' 세션 시작
+            if let confirmed = pendingImpromptuRoomIds {
+                pendingImpromptuRoomIds = nil
+                impromptuRoomIds = confirmed
+            }
+        }) {
             RoomSelectView(selectedRoomIds: $selectedRoomIds) {
-                let confirmed = selectedRoomIds
+                pendingImpromptuRoomIds = selectedRoomIds
                 showRoomSelect = false
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    impromptuRoomIds = confirmed
-                }
             }
             .environmentObject(roomService)
         }
-        .fullScreenCover(item: $impromptuRoomIds) { roomIds in
+        .fullScreenCover(item: $impromptuRoomIds, onDismiss: {
+            // 세션에서 "방 다시 선택" 요청 시 → 닫힘 완료 후 방 선택 화면 재오픈
+            if pendingReselectRooms {
+                pendingReselectRooms = false
+                showRoomSelect = true
+            }
+        }) { roomIds in
             ImpromptuSessionView(selectedRoomIds: roomIds) {
+                pendingReselectRooms = true
                 impromptuRoomIds = nil
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    showRoomSelect = true
-                }
             }
             .environmentObject(authService)
             .environmentObject(userService)
@@ -254,11 +262,11 @@ struct MainView: View {
                     // 검색 바
                     HStack(spacing: 8) {
                         Image(systemName: "magnifyingglass")
-                            .font(.system(size: 14, weight: .medium))
+                            .font(.tte(14, .medium))
                             .foregroundColor(.tteMediumGray)
                         
-                        TextField("코스명, 지역 검색", text: $searchText)
-                            .font(.system(size: 14))
+                        TextField("코스 검색 · 엔터로 지역 이동", text: $searchText)
+                            .font(.tte(14))
                             .foregroundColor(.tteDarkGray)
                             .autocorrectionDisabled()
                             .onSubmit {
@@ -272,19 +280,21 @@ struct MainView: View {
                                 Image(systemName: "xmark.circle.fill")
                                     .foregroundColor(.tteMediumGray)
                             }
+                            .accessibilityLabel("검색어 지우기")
                         }
-                        
+
                         Divider()
                             .frame(height: 16)
                             .padding(.horizontal, 4)
-                        
+
                         Button {
                             showRegionSearch = true
                         } label: {
                             Image(systemName: "map.fill")
-                                .font(.system(size: 14))
+                                .font(.tte(14))
                                 .foregroundColor(.tteOrange)
                         }
+                        .accessibilityLabel("지역 검색")
                     }
                     .padding(.horizontal, 12)
                     .frame(height: buttonSize)
@@ -294,19 +304,20 @@ struct MainView: View {
                     // 코스 필터
                     HStack(spacing: 0) {
                         ForEach([
-                            ("square.grid.2x2.fill", CourseFilter.all),
-                            ("heart.fill",            .liked),
-                            ("person.fill",           .mine)
-                        ], id: \.0) { icon, filter in
+                            ("square.grid.2x2.fill", CourseFilter.all,   "전체 코스"),
+                            ("heart.fill",            .liked, "찜한 코스"),
+                            ("person.fill",           .mine,  "내 코스")
+                        ], id: \.0) { icon, filter, label in
                             Button {
                                 withAnimation(.easeInOut(duration: 0.2)) { courseFilter = filter }
                             } label: {
                                 Image(systemName: icon)
-                                    .font(.system(size: 14))
+                                    .font(.tte(14))
                                     .foregroundColor(courseFilter == filter ? .white : .tteOrange)
                                     .frame(width: buttonSize, height: buttonSize)
                                     .background(Circle().fill(courseFilter == filter ? Color.tteOrange : Color.clear))
                             }
+                            .accessibilityLabel(label)
                         }
                     }
                     .background(.ultraThinMaterial, in: Capsule())
@@ -378,18 +389,18 @@ struct MainView: View {
                     .fill(Color.tteOrange.opacity(0.12))
                     .frame(width: 72, height: 72)
                 Image(systemName: "clock.arrow.circlepath")
-                    .font(.system(size: 30))
+                    .font(.tte(30))
                     .foregroundColor(.tteOrange)
             }
             .padding(.bottom, 16)
 
             VStack(spacing: 6) {
                 Text("진행 중인 코스가 있어요")
-                    .font(.system(size: 20, weight: .bold))
+                    .font(.tte(20, .bold))
                     .foregroundColor(.tteDarkGray)
                 if let saved {
                     Text("\(saved.course.courseName) · \(saved.visitedPlaceOrders.count)/\(saved.orderedPlaces.count)곳 완료")
-                        .font(.system(size: 14))
+                        .font(.tte(14))
                         .foregroundColor(.tteMediumGray)
                 }
             }
@@ -403,8 +414,8 @@ struct MainView: View {
                     showCourseResumeSheet = false
                 } label: {
                     HStack(spacing: 10) {
-                        Image(systemName: "play.fill").font(.system(size: 15))
-                        Text("이어서 기록하기").font(.system(size: 16, weight: .semibold))
+                        Image(systemName: "play.fill").font(.tte(15))
+                        Text("이어서 기록하기").font(.tte(16, .semibold))
                     }
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity).frame(height: 56)
@@ -418,9 +429,9 @@ struct MainView: View {
                     ActiveSessionStore.shared.clear()
                 } label: {
                     HStack(spacing: 10) {
-                        Image(systemName: "arrow.counterclockwise").font(.system(size: 15))
+                        Image(systemName: "arrow.counterclockwise").font(.tte(15))
                         Text("새로 시작하기")
-                            .font(.system(size: 16, weight: .medium))
+                            .font(.tte(16, .medium))
                     }
                     .foregroundColor(.tteDarkGray)
                     .frame(maxWidth: .infinity).frame(height: 56)
@@ -448,9 +459,9 @@ struct MainView: View {
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "figure.walk")
-                            .font(.system(size: 17, weight: .semibold))
+                            .font(.tte(17, .semibold))
                         Text("나의 오늘")
-                            .font(.system(size: 17, weight: .bold))
+                            .font(.tte(17, .bold))
                     }
                     .foregroundColor(.white)
                     .padding(.horizontal, 32)
@@ -474,9 +485,9 @@ struct MainView: View {
                             } label: {
                                 VStack(spacing: 3) {
                                     Image(systemName: "figure.walk")
-                                        .font(.system(size: 16, weight: .semibold))
+                                        .font(.tte(16, .semibold))
                                     Text("이어하기")
-                                        .font(.system(size: 9, weight: .medium))
+                                        .font(.tte(9, .medium))
                                 }
                                 .foregroundColor(.tteOrange)
                                 .frame(width: 48, height: 48)
@@ -492,9 +503,9 @@ struct MainView: View {
                             } label: {
                                 VStack(spacing: 3) {
                                     Image(systemName: "map.fill")
-                                        .font(.system(size: 16, weight: .semibold))
+                                        .font(.tte(16, .semibold))
                                     Text("코스")
-                                        .font(.system(size: 9, weight: .medium))
+                                        .font(.tte(9, .medium))
                                 }
                                 .foregroundColor(.tteOrange)
                                 .frame(width: 48, height: 48)
@@ -514,11 +525,12 @@ struct MainView: View {
                         cameraCommand = gmsCamera(center: coord, latDelta: 0.05)
                     } label: {
                         Image(systemName: "location.fill")
-                            .font(.system(size: 18, weight: .medium))
+                            .font(.tte(18, .medium))
                             .foregroundColor(.tteOrange)
                             .frame(width: 48, height: 48)
                             .background(Circle().fill(Color.tteBackground).shadow(color: .black.opacity(0.15), radius: 8, y: 2))
                     }
+                    .accessibilityLabel("현재 위치로 이동")
                     .padding(.trailing, 24)
                 }
             }
@@ -587,36 +599,36 @@ struct CourseCardView: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
                     Text(course.tag.rawValue)
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.tte(11, .semibold))
                         .foregroundColor(.white)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
                         .background(Capsule().fill(Color.tteOrange))
                     Text(course.region)
-                        .font(.system(size: 11))
+                        .font(.tte(11))
                         .foregroundColor(.white.opacity(0.85))
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
                         .background(Capsule().fill(Color.white.opacity(0.2)))
                 }
                 Text(course.courseName)
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.tte(15, .bold))
                     .foregroundColor(.white)
                     .lineLimit(2)
                 HStack(spacing: 8) {
                     HStack(spacing: 3) {
                         Image(systemName: "mappin.circle.fill")
-                            .font(.system(size: 12))
+                            .font(.tte(12))
                         Text("\(course.places.count)곳")
-                            .font(.system(size: 12))
+                            .font(.tte(12))
                     }
                     .foregroundColor(.white.opacity(0.8))
                     Spacer()
                     HStack(spacing: 3) {
                         Image(systemName: "heart.fill")
-                            .font(.system(size: 12))
+                            .font(.tte(12))
                         Text("\(course.likeCount)")
-                            .font(.system(size: 12))
+                            .font(.tte(12))
                     }
                     .foregroundColor(.white.opacity(0.8))
                 }
@@ -640,15 +652,15 @@ extension MainView {
     private var emptySearchResultOverlay: some View {
         VStack(spacing: 12) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 40))
+                .font(.tte(40))
                 .foregroundColor(.tteOrange.opacity(0.6))
             
             Text("검색 결과가 없어요")
-                .font(.system(size: 17, weight: .bold))
+                .font(.tte(17, .bold))
                 .foregroundColor(.tteDarkGray)
             
             Text("다른 키워드로 검색해보세요!")
-                .font(.system(size: 14))
+                .font(.tte(14))
                 .foregroundColor(.tteMediumGray)
         }
         .padding(.horizontal, 32)
@@ -707,12 +719,13 @@ struct CoursePreviewCard: View {
                     Spacer()
                     Button(action: onDismiss) {
                         Image(systemName: "xmark")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.tte(12, .semibold))
                             .foregroundColor(.tteMediumGray)
                             .frame(width: 28, height: 28)
                             .background(Circle().fill(Color(UIColor.secondarySystemBackground)))
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("미리보기 닫기")
                 }
                 .padding(.horizontal, 16)
             }
@@ -733,7 +746,7 @@ struct CoursePreviewCard: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 5) {
                         Text(course.courseName)
-                            .font(.system(size: 16, weight: .bold))
+                            .font(.tte(16, .bold))
                             .foregroundColor(.tteDarkGray)
                             .lineLimit(1)
                         if isAuthorVerified {
@@ -742,28 +755,28 @@ struct CoursePreviewCard: View {
                     }
                     HStack(spacing: 6) {
                         Text(course.tag.rawValue)
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.tte(11, .semibold))
                             .foregroundColor(.tteOrange)
                             .padding(.horizontal, 8).padding(.vertical, 3)
                             .background(Capsule().fill(Color.tteOrange.opacity(0.12)))
                         if isAuthorVerified {
                             Text(authorNickname)
-                                .font(.system(size: 11, weight: .medium))
+                                .font(.tte(11, .medium))
                                 .foregroundColor(.tteOrange.opacity(0.8))
                         }
                         Text("장소 \(course.places.count)개")
-                            .font(.system(size: 12))
+                            .font(.tte(12))
                             .foregroundColor(.tteMediumGray)
                         HStack(spacing: 3) {
-                            Image(systemName: "heart.fill").font(.system(size: 11))
-                            Text("\(course.likeCount)").font(.system(size: 12))
+                            Image(systemName: "heart.fill").font(.tte(11))
+                            Text("\(course.likeCount)").font(.tte(12))
                         }
                         .foregroundColor(.tteMediumGray)
                     }
                 }
                 Spacer()
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.tte(14, .semibold))
                     .foregroundColor(.tteOrange)
             }
             .padding(.horizontal, 16)
@@ -815,7 +828,7 @@ struct PlacePhotoThumbnail: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12))
 
                 Text("\(place.order)")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.tte(10, .bold))
                     .foregroundColor(.white)
                     .frame(width: 18, height: 18)
                     .background(Circle().fill(Color.tteOrange))
@@ -823,14 +836,14 @@ struct PlacePhotoThumbnail: View {
             }
 
             Text(place.placeName)
-                .font(.system(size: 11, weight: .medium))
+                .font(.tte(11, .medium))
                 .foregroundColor(.tteDarkGray)
                 .lineLimit(1)
                 .frame(width: 80)
 
             if let category {
                 Text(category)
-                    .font(.system(size: 10))
+                    .font(.tte(10))
                     .foregroundColor(.tteMediumGray)
                     .lineLimit(1)
                     .frame(width: 80)

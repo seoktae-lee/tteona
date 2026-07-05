@@ -18,10 +18,10 @@ struct RoomSelectView: View {
             // 헤더
             VStack(spacing: 6) {
                 Text("어디에 공유할까요?")
-                    .font(.system(size: 22, weight: .bold))
+                    .font(.tte(22, .bold))
                     .foregroundColor(.tteDarkGray)
                 Text("선택한 그룹에 오늘의 기록이 공유돼요")
-                    .font(.system(size: 14))
+                    .font(.tte(14))
                     .foregroundColor(.tteMediumGray)
             }
             .padding(.top, 28)
@@ -40,14 +40,14 @@ struct RoomSelectView: View {
                     } label: {
                         HStack(spacing: 14) {
                             Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                                .font(.system(size: 24))
+                                .font(.tte(24))
                                 .foregroundColor(isSelected ? .tteOrange : Color.secondary.opacity(0.4))
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(room.name)
-                                    .font(.system(size: 16, weight: .semibold))
+                                    .font(.tte(16, .semibold))
                                     .foregroundColor(.tteDarkGray)
                                 Text("멤버 \(room.memberIds.count)명")
-                                    .font(.system(size: 13))
+                                    .font(.tte(13))
                                     .foregroundColor(.tteMediumGray)
                             }
                             Spacer()
@@ -75,7 +75,7 @@ struct RoomSelectView: View {
                     onConfirm()
                 } label: {
                     Text(selectedRoomIds.isEmpty ? "공유 없이 시작" : "시작하기")
-                        .font(.system(size: 17, weight: .bold))
+                        .font(.tte(17, .bold))
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .frame(height: 56)
@@ -86,7 +86,7 @@ struct RoomSelectView: View {
                     dismiss()
                 } label: {
                     Text("취소")
-                        .font(.system(size: 15))
+                        .font(.tte(15))
                         .foregroundColor(.tteMediumGray)
                 }
             }

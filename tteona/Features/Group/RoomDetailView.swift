@@ -83,10 +83,10 @@ struct RoomDetailView: View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 3) {
                 Text("초대 코드")
-                    .font(.system(size: 11))
+                    .font(.tte(11))
                     .foregroundColor(.tteMediumGray)
                 Text(room.inviteCode)
-                    .font(.system(size: 22, weight: .bold))
+                    .font(.tte(22, .bold))
                     .foregroundColor(.tteOrange)
                     .kerning(4)
             }
@@ -95,17 +95,17 @@ struct RoomDetailView: View {
                 showShareSheet = true
             } label: {
                 Image(systemName: "square.and.arrow.up")
-                    .font(.system(size: 15))
+                    .font(.tte(15))
                     .foregroundColor(.white)
                     .frame(width: 36, height: 36)
                     .background(RoundedRectangle(cornerRadius: 8).fill(Color.tteOrange))
             }
             HStack(spacing: 3) {
                 Image(systemName: "person.fill")
-                    .font(.system(size: 11))
+                    .font(.tte(11))
                     .foregroundColor(.tteMediumGray)
                 Text("\(room.memberIds.count)명")
-                    .font(.system(size: 12))
+                    .font(.tte(12))
                     .foregroundColor(.tteMediumGray)
             }
             .padding(.leading, 4)
@@ -147,24 +147,24 @@ struct FeedCard: View {
     var body: some View {
         HStack(spacing: 12) {
             Text(icon)
-                .font(.system(size: 26))
+                .font(.tte(26))
                 .frame(width: 44, height: 44)
                 .background(Circle().fill(Color.tteOrange.opacity(0.1)))
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(message)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.tte(14, .medium))
                     .foregroundColor(.tteDarkGray)
                 HStack(spacing: 6) {
                     Text(item.createdAt.relativeDescription)
-                        .font(.system(size: 12))
+                        .font(.tte(12))
                         .foregroundColor(.tteMediumGray)
                     if item.commentCount > 0 {
                         Text("·")
                             .foregroundColor(.tteMediumGray.opacity(0.5))
-                            .font(.system(size: 12))
+                            .font(.tte(12))
                         Text("댓글 \(item.commentCount)개")
-                            .font(.system(size: 12))
+                            .font(.tte(12))
                             .foregroundColor(.tteOrange.opacity(0.8))
                     }
                 }
@@ -176,7 +176,7 @@ struct FeedCard: View {
                 onComment?()
             } label: {
                 Image(systemName: item.commentCount > 0 ? "bubble.left.fill" : "bubble.left")
-                    .font(.system(size: 20))
+                    .font(.tte(20))
                     .foregroundColor(item.commentCount > 0 ? .tteOrange : .tteMediumGray.opacity(0.5))
                     .frame(width: 40, height: 40)
             }
@@ -244,7 +244,7 @@ struct MemberChatRow: View {
                     .foregroundColor(.tteDarkGray)
                 if let summary = latestFeedSummary {
                     Text(summary)
-                        .font(.system(size: 12))
+                        .font(.tte(12))
                         .foregroundColor(.tteMediumGray)
                         .lineLimit(1)
                 }
@@ -253,7 +253,7 @@ struct MemberChatRow: View {
             Spacer()
 
             Image(systemName: "chevron.right")
-                .font(.system(size: 12, weight: .medium))
+                .font(.tte(12, .medium))
                 .foregroundColor(.tteMediumGray.opacity(0.4))
         }
         .padding(.horizontal, 16)

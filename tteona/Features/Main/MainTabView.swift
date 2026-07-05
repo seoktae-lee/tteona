@@ -11,6 +11,7 @@ struct MainTabView: View {
     @State private var deepLinkedRoomCode: String? = nil
     @State private var showJoinRoomFromDeepLink = false
     @State private var courseSessionInfo: CourseSessionInfo? = nil
+    @State private var pendingSessionInfo: CourseSessionInfo? = nil
     @State private var selectedTab: Int = 0
     @State private var deepLinkTask: Task<Void, Never>? = nil
 
@@ -28,21 +29,32 @@ struct MainTabView: View {
                 }
                 .tag(1)
 
+            FeedTabView()
+                .tabItem {
+                    Label("채팅", systemImage: "bubble.left.and.bubble.right.fill")
+                }
+                .badge(roomService.unreadRoomIds.count)
+                .tag(2)
+
             SettingsView()
                 .tabItem {
                     Label("설정", systemImage: "gearshape.fill")
                 }
-                .tag(2)
+                .tag(3)
         }
         .tint(.tteOrange)
         .environmentObject(userService)
         .environmentObject(roomService)
-        .sheet(item: $deepLinkedCourse) { course in
+        .sheet(item: $deepLinkedCourse, onDismiss: {
+            // 딥링크 상세에서 "떠나기" 확정 시 → 시트 닫힘 완료 후 세션 시작
+            if let info = pendingSessionInfo {
+                pendingSessionInfo = nil
+                courseSessionInfo = info
+            }
+        }) { course in
             CourseDetailView(course: course) { roomIds in
+                pendingSessionInfo = CourseSessionInfo(course: course, roomIds: roomIds)
                 deepLinkedCourse = nil
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                    courseSessionInfo = CourseSessionInfo(course: course, roomIds: roomIds)
-                }
             }
             .environmentObject(authService)
             .environmentObject(courseService)
@@ -68,6 +80,10 @@ struct MainTabView: View {
                 roomService.startListeningMyRooms(userId: uid)
             }
         }
+        .onChange(of: roomService.myRooms) { _, _ in
+            guard let uid = authService.currentUser?.uid else { return }
+            Task { await roomService.refreshUnreadStatus(userId: uid) }
+        }
         .onChange(of: authService.currentUser?.uid) { _, uid in
             // 로그인/로그아웃 전환 시 실시간 리스너가 남지 않도록 정리
             guard let uid else {
@@ -81,7 +97,7 @@ struct MainTabView: View {
         }
         .onChange(of: notificationManager.pendingChatRoom) { _, pending in
             guard pending != nil else { return }
-            selectedTab = 1
+            selectedTab = 2
         }
         .onAppear {
             // 콜드 스타트 딥링크: MainTabView 진입 전 이미 pendingCourseId가 설정된 경우

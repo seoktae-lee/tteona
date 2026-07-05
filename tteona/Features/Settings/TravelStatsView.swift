@@ -26,7 +26,7 @@ struct TravelStatsView: View {
                     .padding(.horizontal, 20)
 
                     Text("방문한 장소와 활동한 날은 앱 업데이트 이후의 활동부터 집계돼요.")
-                        .font(.system(size: 12))
+                        .font(.tte(12))
                         .foregroundColor(.tteMediumGray)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 32)
@@ -34,10 +34,10 @@ struct TravelStatsView: View {
                 } else {
                     VStack(spacing: 10) {
                         Image(systemName: "wifi.slash")
-                            .font(.system(size: 32))
+                            .font(.tte(32))
                             .foregroundColor(.tteMediumGray)
                         Text("통계를 불러오지 못했어요")
-                            .font(.system(size: 14))
+                            .font(.tte(14))
                             .foregroundColor(.tteMediumGray)
                     }
                     .padding(.top, 60)
@@ -62,10 +62,10 @@ struct TravelStatsView: View {
                 .frame(width: 64, height: 64)
             VStack(alignment: .leading, spacing: 4) {
                 Text("지금까지의 여정")
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.tte(13, .medium))
                     .foregroundColor(.tteMediumGray)
                 Text("떠난 만큼 쌓여요")
-                    .font(.system(size: 20, weight: .bold))
+                    .font(.tte(20, .bold))
                     .foregroundColor(.tteDarkGray)
             }
             Spacer()
@@ -76,13 +76,13 @@ struct TravelStatsView: View {
     private func statCard(icon: String, title: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Image(systemName: icon)
-                .font(.system(size: 18))
+                .font(.tte(18))
                 .foregroundColor(.tteOrange)
             Text(value)
-                .font(.system(size: 24, weight: .bold))
+                .font(.tte(24, .bold))
                 .foregroundColor(.tteDarkGray)
             Text(title)
-                .font(.system(size: 13))
+                .font(.tte(13))
                 .foregroundColor(.tteMediumGray)
         }
         .frame(maxWidth: .infinity, alignment: .leading)

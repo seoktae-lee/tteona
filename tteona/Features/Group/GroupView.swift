@@ -13,10 +13,10 @@ struct RoomCard: View {
                     .foregroundColor(.tteDarkGray)
                 HStack(spacing: 4) {
                     Image(systemName: "person.fill")
-                        .font(.system(size: 11))
+                        .font(.tte(11))
                         .foregroundColor(.tteMediumGray)
                     Text("\(room.memberIds.count)명")
-                        .font(.system(size: 13))
+                        .font(.tte(13))
                         .foregroundColor(.tteMediumGray)
                 }
             }
@@ -27,7 +27,7 @@ struct RoomCard: View {
                     .frame(width: 10, height: 10)
             }
             Image(systemName: "chevron.right")
-                .font(.system(size: 14))
+                .font(.tte(14))
                 .foregroundColor(.tteMediumGray)
         }
         .padding(16)
@@ -51,10 +51,10 @@ struct CreateRoomView: View {
             VStack(spacing: 24) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("그룹 이름")
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.tte(14, .medium))
                         .foregroundColor(.tteMediumGray)
                     TextField("예: 제주 여행 친구들", text: $roomName)
-                        .font(.system(size: 17))
+                        .font(.tte(17))
                         .padding(14)
                         .background(RoundedRectangle(cornerRadius: 12).fill(Color(UIColor.secondarySystemBackground)))
                 }
@@ -63,7 +63,7 @@ struct CreateRoomView: View {
 
                 if let error = errorMessage {
                     Text(error)
-                        .font(.system(size: 14))
+                        .font(.tte(14))
                         .foregroundColor(.red)
                         .padding(.horizontal, 20)
                 }
@@ -78,7 +78,7 @@ struct CreateRoomView: View {
                             ProgressView().tint(.white)
                         } else {
                             Text("방 만들기")
-                                .font(.system(size: 17, weight: .semibold))
+                                .font(.tte(17, .semibold))
                                 .foregroundColor(.white)
                         }
                     }
@@ -143,11 +143,11 @@ struct JoinRoomView: View {
             VStack(spacing: 24) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("초대 코드 6자리를 입력하세요")
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.tte(14, .medium))
                         .foregroundColor(.tteMediumGray)
 
                     TextField("예: A3F7K2", text: $inviteCode)
-                        .font(.system(size: 28, weight: .bold))
+                        .font(.tte(28, .bold))
                         .multilineTextAlignment(.center)
                         .kerning(6)
                         .autocorrectionDisabled()
@@ -163,17 +163,17 @@ struct JoinRoomView: View {
 
                 if isLocked {
                     Text("코드 입력 횟수를 초과했어요.\n\(cooldownRemaining / 60)분 후 다시 시도해주세요.")
-                        .font(.system(size: 14))
+                        .font(.tte(14))
                         .foregroundColor(.red)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 20)
                 } else if let error = errorMessage {
                     VStack(spacing: 4) {
                         Text(error)
-                            .font(.system(size: 14))
+                            .font(.tte(14))
                             .foregroundColor(.red)
                         Text("\(failCount)/\(maxAttempts)회 실패")
-                            .font(.system(size: 12))
+                            .font(.tte(12))
                             .foregroundColor(.tteMediumGray)
                     }
                     .padding(.horizontal, 20)
@@ -189,7 +189,7 @@ struct JoinRoomView: View {
                             ProgressView().tint(.white)
                         } else {
                             Text("참여하기")
-                                .font(.system(size: 17, weight: .semibold))
+                                .font(.tte(17, .semibold))
                                 .foregroundColor(.white)
                         }
                     }

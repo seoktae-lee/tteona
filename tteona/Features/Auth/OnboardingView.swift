@@ -86,7 +86,7 @@ struct OnboardingView: View {
                     .shadow(color: .tteOrange.opacity(0.25), radius: 16, y: 6)
 
                 Text("특별한 순간을 영상으로 기록하세요")
-                    .font(.system(size: 16))
+                    .font(.tte(16))
                     .foregroundColor(.tteMediumGray)
             }
 
@@ -113,7 +113,7 @@ struct OnboardingView: View {
                 Button("건너뛰기") {
                     withAnimation { step = 2 }
                 }
-                .font(.system(size: 14))
+                .font(.tte(14))
                 .foregroundColor(.tteMediumGray)
             }
             .padding(.horizontal, 24)
@@ -132,16 +132,16 @@ struct OnboardingView: View {
                         .fill(Color.tteOrange.opacity(0.14))
                         .frame(width: 120, height: 120)
                     Image(systemName: slide.icon)
-                        .font(.system(size: 48, weight: .medium))
+                        .font(.tte(48, .medium))
                         .foregroundColor(.tteOrange)
                 }
 
                 VStack(spacing: 14) {
                     Text(slide.title)
-                        .font(.system(size: 28, weight: .bold))
+                        .font(.tte(28, .bold))
                         .foregroundColor(.tteDarkGray)
                     Text(slide.description)
-                        .font(.system(size: 17))
+                        .font(.tte(17))
                         .foregroundColor(.tteMediumGray)
                         .multilineTextAlignment(.center)
                         .lineSpacing(5)
@@ -189,12 +189,12 @@ struct OnboardingView: View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 12) {
                 Text("닉네임을\n설정해주세요")
-                    .font(.system(size: 30, weight: .bold))
+                    .font(.tte(30, .bold))
                     .foregroundColor(.tteDarkGray)
                     .padding(.top, 24)
 
                 Text("코스를 만들 때 닉네임이 표시됩니다.")
-                    .font(.system(size: 15))
+                    .font(.tte(15))
                     .foregroundColor(.tteMediumGray)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -214,28 +214,28 @@ struct OnboardingView: View {
                     case .checking:
                         ProgressView().scaleEffect(0.7)
                         Text("확인 중...")
-                            .font(.system(size: 12))
+                            .font(.tte(12))
                             .foregroundColor(.tteMediumGray)
                     case .available:
                         Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 13))
+                            .font(.tte(13))
                             .foregroundColor(.green)
                         Text("사용 가능한 별명이에요")
-                            .font(.system(size: 12))
+                            .font(.tte(12))
                             .foregroundColor(.green)
                     case .taken:
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 13))
+                            .font(.tte(13))
                             .foregroundColor(.red)
                         Text("이미 사용 중인 별명이에요")
-                            .font(.system(size: 12))
+                            .font(.tte(12))
                             .foregroundColor(.red)
                     case .idle:
                         EmptyView()
                     }
                     Spacer()
                     Text("\(nickname.count)/10")
-                        .font(.system(size: 12))
+                        .font(.tte(12))
                         .foregroundColor(nickname.count > 10 ? .red : .tteMediumGray)
                 }
                 .padding(.horizontal, 28)
@@ -267,12 +267,12 @@ struct OnboardingView: View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 12) {
                 Text("앱 사용을 위해\n권한이 필요해요")
-                    .font(.system(size: 30, weight: .bold))
+                    .font(.tte(30, .bold))
                     .foregroundColor(.tteDarkGray)
                     .padding(.top, 48)
 
                 Text("아래 권한들은 핵심 기능에 사용됩니다.")
-                    .font(.system(size: 15))
+                    .font(.tte(15))
                     .foregroundColor(.tteMediumGray)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -334,7 +334,7 @@ struct OnboardingView: View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 12) {
                 Text("서비스 이용을\n동의해주세요")
-                    .font(.system(size: 30, weight: .bold))
+                    .font(.tte(30, .bold))
                     .foregroundColor(.tteDarkGray)
                     .padding(.top, 48)
             }
@@ -351,11 +351,11 @@ struct OnboardingView: View {
                 } label: {
                     HStack(spacing: 14) {
                         Image(systemName: (agreedTerms && agreedPrivacy) ? "checkmark.circle.fill" : "circle")
-                            .font(.system(size: 24))
+                            .font(.tte(24))
                             .foregroundColor((agreedTerms && agreedPrivacy) ? .tteOrange : Color(UIColor.tertiaryLabel))
 
                         Text("전체 동의")
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(.tte(16, .semibold))
                             .foregroundColor(.tteDarkGray)
                         Spacer()
                     }
@@ -396,7 +396,7 @@ struct OnboardingView: View {
     private func nextButton(title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 17, weight: .semibold))
+                .font(.tte(17, .semibold))
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
                 .frame(height: 54)
@@ -514,7 +514,7 @@ struct PermissionRow: View {
     var body: some View {
         HStack(spacing: 16) {
             Image(systemName: icon)
-                .font(.system(size: 22, weight: .medium))
+                .font(.tte(22, .medium))
                 .foregroundColor(.tteOrange)
                 .frame(width: 52, height: 52)
                 .background(
@@ -524,10 +524,10 @@ struct PermissionRow: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.tte(15, .semibold))
                     .foregroundColor(.tteDarkGray)
                 Text(description)
-                    .font(.system(size: 12))
+                    .font(.tte(12))
                     .foregroundColor(.tteMediumGray)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -536,7 +536,7 @@ struct PermissionRow: View {
 
             Button(action: onTap) {
                 Text(isGranted ? "허용됨" : "계속")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.tte(13, .semibold))
                     .foregroundColor(isGranted ? .green : .white)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 8)
@@ -566,17 +566,17 @@ struct TermsRow: View {
         HStack(spacing: 12) {
             Button { withAnimation { isChecked.toggle() } } label: {
                 Image(systemName: isChecked ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 20))
+                    .font(.tte(20))
                     .foregroundColor(isChecked ? .tteOrange : Color(UIColor.tertiaryLabel))
             }
 
             Text(title)
-                .font(.system(size: 14))
+                .font(.tte(14))
                 .foregroundColor(.tteDarkGray)
 
             if isRequired {
                 Text("필수")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.tte(11, .medium))
                     .foregroundColor(.tteOrange)
                     .padding(.horizontal, 7)
                     .padding(.vertical, 3)
@@ -589,7 +589,7 @@ struct TermsRow: View {
                 UIApplication.shared.open(url)
             } label: {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 12))
+                    .font(.tte(12))
                     .foregroundColor(Color(UIColor.tertiaryLabel))
             }
         }
