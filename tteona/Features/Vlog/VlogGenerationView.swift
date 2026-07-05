@@ -11,6 +11,8 @@ struct VlogGenerationView: View {
     var thumbnailCourseId: String? = nil
     var onDismissToHome: (() -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var pro = ProManager.shared
+    @State private var showPaywall = false
 
     @State private var phase: Phase = .chooseFormat
     @State private var vlogURL: URL?
@@ -108,6 +110,7 @@ struct VlogGenerationView: View {
             }
         }
         .task { await detectShotOrientation() }
+        .sheet(isPresented: $showPaywall) { ProPaywallView() }
     }
 
     /// 세션 클립들의 회전 메타를 읽어 다수 방향을 판별 → 특화 배지·기본 포맷 결정
@@ -134,9 +137,12 @@ struct VlogGenerationView: View {
     private func formatRow(icon: String, title: String, ratio: String,
                            subtitle: String, key: String, badge: String?) -> some View {
         let fixed = key == baseFormat
+        // 기본 포맷은 무료 포함. 추가 포맷은 PRO 전용 — 무료 유저는 잠금 표시.
+        let locked = !fixed && !pro.isPro
         let isOn = fixed || selectedFormats.contains(key)
         return Button {
             guard !fixed else { return }
+            if locked { showPaywall = true; return }
             if selectedFormats.contains(key) { selectedFormats.remove(key) }
             else { selectedFormats.insert(key) }
         } label: {
@@ -165,6 +171,8 @@ struct VlogGenerationView: View {
                             .foregroundColor(.white)
                             .padding(.horizontal, 8).padding(.vertical, 3)
                             .background(Capsule().fill(Color.tteOrange))
+                        } else if locked {
+                            proBadge
                         }
                     }
                     Text(subtitle)
@@ -172,10 +180,11 @@ struct VlogGenerationView: View {
                         .foregroundColor(.white.opacity(0.55))
                 }
                 Spacer()
-                Image(systemName: fixed ? "checkmark.circle.fill"
-                                        : (isOn ? "checkmark.circle.fill" : "circle"))
-                    .font(.system(size: 22))
-                    .foregroundColor(isOn ? .tteOrange : .white.opacity(0.3))
+                Image(systemName: locked ? "lock.fill"
+                                         : (isOn ? "checkmark.circle.fill" : "circle"))
+                    .font(.system(size: locked ? 18 : 22))
+                    .foregroundColor(locked ? .white.opacity(0.4)
+                                            : (isOn ? .tteOrange : .white.opacity(0.3)))
             }
             .padding(16)
             .background(
@@ -188,6 +197,22 @@ struct VlogGenerationView: View {
             )
         }
         .disabled(fixed)
+    }
+
+    /// PRO 전용 잠금 배지
+    private var proBadge: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "crown.fill")
+                .font(.system(size: 8, weight: .bold))
+            Text("PRO")
+                .font(.system(size: 10, weight: .heavy))
+        }
+        .foregroundColor(.white)
+        .padding(.horizontal, 7).padding(.vertical, 3)
+        .background(Capsule().fill(
+            LinearGradient(colors: [Color(red: 1, green: 0.7, blue: 0.3), .tteOrange],
+                           startPoint: .leading, endPoint: .trailing)
+        ))
     }
 
     // MARK: - BGM 선택
@@ -252,12 +277,16 @@ struct VlogGenerationView: View {
         }
         .task { await loadBgmTracks() }
         .onDisappear { stopBgmPreview() }
+        .sheet(isPresented: $showPaywall) { ProPaywallView() }
     }
 
     private func bgmRow(id: String, name: String, mood: String?,
                         subtitle: String?, previewURL: URL?) -> some View {
         let isOn = selectedBgm == id
+        // 자동 추천·음악 없음은 무료. 개별 트랙(previewURL 존재)은 PRO 전용.
+        let locked = previewURL != nil && !pro.isPro
         return Button {
+            if locked { showPaywall = true; return }
             selectedBgm = id
         } label: {
             HStack(spacing: 14) {
@@ -279,6 +308,7 @@ struct VlogGenerationView: View {
                                 .padding(.horizontal, 7).padding(.vertical, 2)
                                 .background(Capsule().fill(Color.tteOrange.opacity(0.18)))
                         }
+                        if locked { proBadge }
                     }
                     if let subtitle {
                         Text(subtitle)
@@ -287,19 +317,25 @@ struct VlogGenerationView: View {
                     }
                 }
                 Spacer()
-                if let previewURL {
-                    Button {
-                        toggleBgmPreview(id: id, url: previewURL)
-                    } label: {
-                        Image(systemName: playingTrackId == id ? "pause.circle.fill" : "play.circle")
-                            .font(.system(size: 26))
-                            .foregroundColor(.white.opacity(0.85))
+                if locked {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 18))
+                        .foregroundColor(.white.opacity(0.4))
+                } else {
+                    if let previewURL {
+                        Button {
+                            toggleBgmPreview(id: id, url: previewURL)
+                        } label: {
+                            Image(systemName: playingTrackId == id ? "pause.circle.fill" : "play.circle")
+                                .font(.system(size: 26))
+                                .foregroundColor(.white.opacity(0.85))
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
+                    Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 22))
+                        .foregroundColor(isOn ? .tteOrange : .white.opacity(0.3))
                 }
-                Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 22))
-                    .foregroundColor(isOn ? .tteOrange : .white.opacity(0.3))
             }
             .padding(16)
             .background(
@@ -386,6 +422,8 @@ struct VlogGenerationView: View {
                         let result = try await VlogServerService.shared.generate(
                             course: course, sessionId: sessionId, userId: uid,
                             formats: Array(selectedFormats), bgm: selectedBgm,
+                            watermark: !pro.isPro,   // PRO 유저만 워터마크 제거
+                            priority: pro.isPro,     // PRO 유저 우선 렌더링
                             onProgress: { p, stage in
                                 progress = p
                                 stageText = stage

@@ -13,11 +13,14 @@ struct SettingsView: View {
     @State private var notificationGranted: Bool? = nil
     @State private var avatarPickerItem: PhotosPickerItem?
     @State private var isUploadingAvatar = false
+    @ObservedObject private var pro = ProManager.shared
+    @State private var showPaywall = false
 
     var body: some View {
         NavigationStack {
             List {
                 profileSection
+                proSection
                 appSection
                 accountSection
             }
@@ -56,6 +59,7 @@ struct SettingsView: View {
         .task {
             await checkNotificationStatus()
         }
+        .sheet(isPresented: $showPaywall) { ProPaywallView() }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             Task { await checkNotificationStatus() }
         }
@@ -136,6 +140,46 @@ struct SettingsView: View {
             } label: {
                 Label("내 여행 통계", systemImage: "chart.bar.fill")
             }
+        }
+    }
+
+    private var proSection: some View {
+        Section {
+            Button {
+                if !pro.isPro { showPaywall = true }
+            } label: {
+                HStack(spacing: 14) {
+                    Image(systemName: "crown.fill")
+                        .font(.system(size: 20))
+                        .foregroundStyle(
+                            LinearGradient(colors: [Color(red: 1, green: 0.7, blue: 0.3), .tteOrange],
+                                           startPoint: .top, endPoint: .bottom)
+                        )
+                        .frame(width: 28)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(pro.isPro ? "tteona PRO 이용 중" : "tteona PRO")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.tteDarkGray)
+                        Text(pro.isPro
+                             ? "모든 프리미엄 기능이 켜져 있어요"
+                             : "워터마크 제거 · 멀티포맷 · 5분 영상 · 우선 렌더링")
+                            .font(.system(size: 12))
+                            .foregroundColor(.tteMediumGray)
+                    }
+                    Spacer()
+                    if pro.isPro {
+                        Image(systemName: "checkmark.seal.fill")
+                            .foregroundColor(.tteOrange)
+                    } else {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.tteMediumGray)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+            .buttonStyle(.plain)
+            .disabled(pro.isPro)
         }
     }
 

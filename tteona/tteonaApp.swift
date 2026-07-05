@@ -20,6 +20,7 @@ struct TteonaApp: App {
         if let mapsKey = Bundle.main.object(forInfoDictionaryKey: "GOOGLE_PLACES_API_KEY") as? String {
             GMSServices.provideAPIKey(mapsKey)
         }
+        ProManager.shared.configure(userId: nil)
     }
 
     var body: some Scene {
@@ -41,7 +42,11 @@ struct TteonaApp: App {
                 }
                 .onChange(of: authService.currentUser) { _, user in
                     notificationManager.currentUserId = user?.uid
-                    guard let uid = user?.uid else { return }
+                    guard let uid = user?.uid else {
+                        ProManager.shared.logOut()
+                        return
+                    }
+                    ProManager.shared.logIn(userId: uid)
                     Task {
                         await FCMService.shared.saveFCMToken(userId: uid)
                         await PushService.shared.registerDeviceToken(userId: uid)

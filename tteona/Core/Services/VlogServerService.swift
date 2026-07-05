@@ -63,9 +63,13 @@ actor VlogServerService {
     /// 서버에서 Vlog 합성 후 로컬 임시 파일 URL 반환.
     /// formats: 추가 생성할 포맷 — 촬영 방향 기본본은 항상 생성.
     /// bgm: "auto"(태그 기반 자동) | "none"(음악 없음) | "mood/파일명"(지정 트랙)
+    /// watermark: false는 plus 유저 전용 (우측 상단 tteona 로고 제거)
+    /// priority: true면 렌더링 큐 우선 처리 (plus 유저 전용)
     /// onProgress: (0.0~1.0, 단계 설명 텍스트)
     func generate(course: Course, sessionId: String, userId: String, formats: [String],
                   bgm: String = "auto",
+                  watermark: Bool = true,
+                  priority: Bool = false,
                   onProgress: @escaping @MainActor (Double, String) -> Void) async throws -> GeneratedVlog {
 
         // 로컬에 실제 존재하는 클립만 수집
@@ -91,6 +95,8 @@ actor VlogServerService {
             tag: course.tag.rawValue,
             formats: formats,
             bgm: bgm,
+            watermark: watermark,
+            priority: priority,
             placesPayload: placesPayload
         )
 
@@ -143,7 +149,7 @@ actor VlogServerService {
     // MARK: - API 단계별 호출
 
     private func createJob(userId: String, courseId: String, courseName: String, tag: String,
-                           formats: [String], bgm: String,
+                           formats: [String], bgm: String, watermark: Bool, priority: Bool,
                            placesPayload: [[String: Any]]) async throws -> Int {
         guard let url = URL(string: "\(baseURL)/jobs") else { throw ServerVlogError.badResponse("bad url") }
         var req = URLRequest(url: url)
@@ -156,6 +162,8 @@ actor VlogServerService {
             "tag": tag,
             "formats": formats,
             "bgm": bgm,
+            "watermark": watermark,
+            "priority": priority,
             "places": placesPayload,
         ])
         let (data, resp) = try await URLSession.shared.data(for: req)

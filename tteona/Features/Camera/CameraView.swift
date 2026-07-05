@@ -54,7 +54,10 @@ final class CameraViewController: UIViewController {
     private let zoomBar = UIStackView()
     private var progressTimer: Timer?
     private var recordStart: Date?
-    private var landscapeOverlay: UIView?
+    // 세션 총 촬영 예산 — 무료 30초(장소당 5초) / PRO 5분(장소당 제한 없음). 기존 클립 합계 + 현재 클립으로 계산
+    private var usedSeconds: Double = 0
+    private var budgetSeconds: Double { ProManager.shared.vlogBudgetSeconds }
+    private var tipChip: UIView?
     private var savingOverlay: UIView?
     private var permissionOverlay: UIView?
 
@@ -70,6 +73,7 @@ final class CameraViewController: UIViewController {
         view.backgroundColor = .black
         buildUI()
         checkAndStartCamera()
+        refreshUsedSeconds()
     }
 
     override func viewDidDisappear(_ animated: Bool) {
@@ -86,7 +90,7 @@ final class CameraViewController: UIViewController {
         super.viewDidLayoutSubviews()
         previewLayer.frame = view.bounds
         layoutBottomUI()
-        landscapeOverlay?.frame = view.bounds
+        layoutTipChip()
         // 전환 버튼 위치 갱신
         view.viewWithTag(902)?.frame = CGRect(x: view.bounds.width - 64, y: 60, width: 44, height: 44)
     }
@@ -94,13 +98,13 @@ final class CameraViewController: UIViewController {
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         layoutBottomUI()
-        layoutLandscapeOverlay()
-        // 1.2초 후 fade out
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+        layoutTipChip()
+        // 3초 후 fade out
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
             UIView.animate(withDuration: 0.5) {
-                self?.landscapeOverlay?.alpha = 0
+                self?.tipChip?.alpha = 0
             } completion: { _ in
-                self?.landscapeOverlay?.isHidden = true
+                self?.tipChip?.isHidden = true
             }
         }
     }
@@ -136,7 +140,7 @@ final class CameraViewController: UIViewController {
         view.addSubview(placeL)
 
         // 힌트
-        hintLabel.text = "버튼을 누르면 5초 고정 촬영"
+        hintLabel.text = "버튼을 눌러 촬영 시작 · 다시 누르면 종료"
         hintLabel.textColor = UIColor.white.withAlphaComponent(0.8)
         hintLabel.font = .systemFont(ofSize: 13)
         hintLabel.textAlignment = .center
@@ -177,7 +181,7 @@ final class CameraViewController: UIViewController {
         setZoomSelected(1.0)
         buildProgressRing()
         buildRecordButton()
-        buildLandscapeOverlay()
+        buildTipChip()
         buildSavingOverlay()
         buildPermissionOverlay()
     }
@@ -356,16 +360,72 @@ final class CameraViewController: UIViewController {
         let container = UIView(frame: CGRect(x: 0, y: 0, width: size, height: size))
         container.layer.addSublayer(bg)
         container.layer.addSublayer(progressRing)
-        container.alpha = 0.3
+        container.alpha = 0.85
         container.tag = 901
         view.addSubview(container)
 
-        countLabel.text = "5"
+        // 남은 촬영 예산(초) 표시 — 링은 사용량 비율
+        countLabel.text = "--"
         countLabel.textColor = .white
-        countLabel.font = .systemFont(ofSize: 16, weight: .semibold)
+        countLabel.font = .systemFont(ofSize: 13, weight: .semibold)
         countLabel.textAlignment = .center
         countLabel.frame = CGRect(x: 0, y: 0, width: size, height: size)
         container.addSubview(countLabel)
+    }
+
+    // MARK: - 촬영 예산 (무료 30초·장소당 5초 / PRO 5분)
+
+    /// 세션 폴더의 기존 클립 길이를 합산해 남은 예산 표시를 갱신
+    private func refreshUsedSeconds() {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let dir = docs.appendingPathComponent("Tteona/Sessions/\(sessionId)")
+        Task { [weak self] in
+            guard let self else { return }
+            var total: Double = 0
+            let files = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
+            for f in files where f.pathExtension.lowercased() == "mp4" {
+                if let d = try? await AVURLAsset(url: f).load(.duration) {
+                    total += CMTimeGetSeconds(d)
+                }
+            }
+            self.usedSeconds = total
+            self.updateBudgetUI(extraElapsed: 0)
+        }
+    }
+
+    private func updateBudgetUI(extraElapsed: Double) {
+        let used = min(usedSeconds + extraElapsed, budgetSeconds)
+        let fraction = used / budgetSeconds
+        progressRing.strokeEnd = CGFloat(fraction)
+        progressRing.strokeColor = (fraction > 0.9 ? UIColor.systemRed
+                                                   : UIColor(red: 1, green: 0.42, blue: 0.21, alpha: 1)).cgColor
+        countLabel.text = Self.fmtBudget(budgetSeconds - used)
+    }
+
+    private static func fmtBudget(_ seconds: Double) -> String {
+        let v = max(0, Int(seconds.rounded(.down)))
+        return v >= 60 ? String(format: "%d:%02d", v / 60, v % 60) : "\(v)초"
+    }
+
+    private func showBudgetAlert() {
+        let popup = VlogLimitPopupView(
+            isPro: ProManager.shared.isPro,
+            onUpgrade: { [weak self] in
+                self?.presentedViewController?.dismiss(animated: true) {
+                    let paywall = UIHostingController(rootView: ProPaywallView())
+                    paywall.modalPresentationStyle = .fullScreen
+                    self?.present(paywall, animated: true)
+                }
+            },
+            onDismiss: { [weak self] in
+                self?.presentedViewController?.dismiss(animated: true)
+            }
+        )
+        let host = UIHostingController(rootView: popup)
+        host.view.backgroundColor = .clear
+        host.modalPresentationStyle = .overFullScreen
+        host.modalTransitionStyle = .crossDissolve
+        present(host, animated: true)
     }
 
     private func buildRecordButton() {
@@ -387,83 +447,36 @@ final class CameraViewController: UIViewController {
         recordBtn.layer.addSublayer(innerDot)
     }
 
-    // MARK: - 가로 유도 오버레이
-    private func buildLandscapeOverlay() {
-        let overlay = UIView()
-        overlay.backgroundColor = UIColor.black.withAlphaComponent(0.82)
-        view.addSubview(overlay)
-        landscapeOverlay = overlay
+    // MARK: - 촬영 팁 칩
+    private func buildTipChip() {
+        let chip = UIView()
+        chip.backgroundColor = UIColor.black.withAlphaComponent(0.55)
+        chip.layer.cornerRadius = 16
+        chip.isUserInteractionEnabled = false
+        view.addSubview(chip)
+        tipChip = chip
 
-        // 폰 아이콘 (회전 애니메이션)
-        let phoneLabel = UILabel()
-        phoneLabel.text = "📱"
-        phoneLabel.font = .systemFont(ofSize: 56)
-        phoneLabel.textAlignment = .center
-        phoneLabel.tag = 811
-
-        let arrowLabel = UILabel()
-        arrowLabel.text = "→"
-        arrowLabel.font = .systemFont(ofSize: 32, weight: .ultraLight)
-        arrowLabel.textColor = UIColor(red: 1, green: 0.42, blue: 0.21, alpha: 1)
-        arrowLabel.textAlignment = .center
-
-        // 가로 폰 아이콘
-        let phoneLandLabel = UILabel()
-        phoneLandLabel.text = "📱"
-        phoneLandLabel.font = .systemFont(ofSize: 56)
-        phoneLandLabel.textAlignment = .center
-        phoneLandLabel.transform = CGAffineTransform(rotationAngle: .pi / 2)
-
-        let iconRow = UIStackView(arrangedSubviews: [phoneLabel, arrowLabel, phoneLandLabel])
-        iconRow.axis = .horizontal
-        iconRow.spacing = 16
-        iconRow.alignment = .center
-
-        let msgLabel = UILabel()
-        msgLabel.text = "가로로 돌려서 촬영하세요"
-        msgLabel.font = .systemFont(ofSize: 17, weight: .semibold)
-        msgLabel.textColor = .white
-        msgLabel.textAlignment = .center
-
-        let subLabel = UILabel()
-        subLabel.text = "더 넓은 화면으로 여행을 담아보세요"
-        subLabel.font = .systemFont(ofSize: 13)
-        subLabel.textColor = UIColor.white.withAlphaComponent(0.6)
-        subLabel.textAlignment = .center
-
-        let stack = UIStackView(arrangedSubviews: [iconRow, msgLabel, subLabel])
-        stack.axis = .vertical
-        stack.spacing = 14
-        stack.alignment = .center
-        stack.tag = 812
-        overlay.addSubview(stack)
-
-        // phoneLabel 흔들기 애니메이션
-        UIView.animateKeyframes(withDuration: 1.0, delay: 0.3,
-                                options: [.repeat, .calculationModeCubic]) {
-            UIView.addKeyframe(withRelativeStartTime: 0,   relativeDuration: 0.35) {
-                phoneLabel.transform = CGAffineTransform(rotationAngle: .pi / 2 * 0.75)
-            }
-            UIView.addKeyframe(withRelativeStartTime: 0.35, relativeDuration: 0.1) {
-                phoneLabel.transform = CGAffineTransform(rotationAngle: .pi / 2 * 0.65)
-            }
-            UIView.addKeyframe(withRelativeStartTime: 0.45, relativeDuration: 0.55) {
-                phoneLabel.transform = CGAffineTransform(rotationAngle: .pi / 2 * 0.75)
-            }
-        }
+        let label = UILabel()
+        label.text = "💡 버튼으로 촬영 시작·종료, 가로·세로 자유롭게"
+        label.font = .systemFont(ofSize: 13, weight: .medium)
+        label.textColor = .white
+        label.textAlignment = .center
+        label.tag = 811
+        chip.addSubview(label)
     }
 
-    private func layoutLandscapeOverlay() {
-        guard let overlay = landscapeOverlay,
-              let stack = overlay.viewWithTag(812) else { return }
-        overlay.frame = view.bounds
-        let stackW: CGFloat = 280
-        let stackH: CGFloat = 190
-        stack.frame = CGRect(
-            x: (overlay.bounds.width - stackW) / 2,
-            y: (overlay.bounds.height - stackH) / 2,
-            width: stackW, height: stackH
+    private func layoutTipChip() {
+        guard let chip = tipChip,
+              let label = chip.viewWithTag(811) as? UILabel else { return }
+        label.sizeToFit()
+        let chipW = label.frame.width + 32
+        let chipH: CGFloat = 32
+        chip.frame = CGRect(
+            x: (view.bounds.width - chipW) / 2,
+            y: 82 + 36 / 2 + 12,
+            width: chipW, height: chipH
         )
+        label.frame = chip.bounds
     }
 
     private func layoutBottomUI() {
@@ -505,25 +518,45 @@ final class CameraViewController: UIViewController {
     }
 
     @objc private func recordTapped() {
-        guard !service.isRecording else { return }
+        if service.isRecording {
+            stopRecordingUI()
+            return
+        }
+        let remaining = budgetSeconds - usedSeconds
+        guard remaining >= 1 else {
+            showBudgetAlert()
+            return
+        }
+        // 무료 유저는 한 장소(클립)당 5초 상한, PRO는 남은 예산 전체
+        let clipLimit: Double
+        if let clipMax = ProManager.shared.vlogClipMaxSeconds {
+            clipLimit = min(clipMax, remaining)
+        } else {
+            clipLimit = remaining
+        }
+        service.maxDuration = clipLimit
         service.startRecording(place: place, sessionId: sessionId)
         setInnerDot(recording: true)
-        hintLabel.text = "5초 촬영 중..."
+        hintLabel.text = "촬영 중 · 버튼을 누르면 종료"
         view.viewWithTag(901)?.alpha = 1
         recordStart = Date()
         progressTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
             guard let self, let s = self.recordStart else { return }
-            let p = min(Date().timeIntervalSince(s) / 5.0, 1.0)
-            self.progressRing.strokeEnd = CGFloat(p)
-            let remaining = max(0, Int(ceil((1 - p) * 5)))
-            self.countLabel.text = "\(remaining)"
-            
-            // 5초 완료 시점 UI 잠금
-            if p >= 1.0 {
-                self.savingOverlay?.isHidden = false
-                self.view.isUserInteractionEnabled = false
+            let elapsed = Date().timeIntervalSince(s)
+            self.updateBudgetUI(extraElapsed: elapsed)
+            // 클립 한도 도달 — CameraService도 maxDuration에서 자동 종료된다
+            if elapsed >= clipLimit {
+                self.stopRecordingUI()
             }
         }
+    }
+
+    private func stopRecordingUI() {
+        progressTimer?.invalidate()
+        progressTimer = nil
+        savingOverlay?.isHidden = false
+        view.isUserInteractionEnabled = false
+        service.stopRecording()
     }
 
     @objc private func zoomTapped(_ sender: UIButton) {
@@ -535,10 +568,10 @@ final class CameraViewController: UIViewController {
     private func recordingDone(url: URL?) {
         progressTimer?.invalidate()
         progressTimer = nil
-        progressRing.strokeEnd = 0
-        countLabel.text = "5"
-        view.viewWithTag(901)?.alpha = 0.3
-        hintLabel.text = "버튼을 누르면 5초 고정 촬영"
+        recordStart = nil
+        refreshUsedSeconds()   // 파일 기준으로 재계산 (재촬영 덮어쓰기 반영)
+        view.viewWithTag(901)?.alpha = 0.85
+        hintLabel.text = "버튼을 눌러 촬영 시작 · 다시 누르면 종료"
         setInnerDot(recording: false)
         
         if url != nil {

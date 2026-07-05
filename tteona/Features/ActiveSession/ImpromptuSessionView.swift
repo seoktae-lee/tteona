@@ -608,6 +608,9 @@ struct ImpromptuSessionView: View {
     }
 
     private func startNewSession() {
+        // 세션 폴더(free_{uid})는 유저당 고정이라 이전 세션 클립이 남아 있으면
+        // 촬영 예산(무료 30초)을 그대로 소진시킨다 — 새 세션은 깨끗한 폴더로 시작
+        deleteAllClips()
         capturedPlaces = []
         activeRoomIds = selectedRoomIds
         let roomIds = Array(activeRoomIds)

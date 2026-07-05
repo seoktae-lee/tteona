@@ -9,7 +9,7 @@ WAS_HOST="ubuntu@114.110.181.49"
 WEB_HOST="ubuntu@114.110.182.45"
 PORT=30022
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-LOGO="/private/tmp/claude-501/-Users-leeseoktae-Documents-Teacher-sKnock-ios/36e4fbe4-eb9c-4434-8761-5f0562ea5b28/scratchpad/tteona-logo-server.png"
+LOGO="$SCRIPT_DIR/assets/tteona-logo.png"
 
 echo "▶ [1/5] WAS: server.js + 로고 업로드..."
 scp -i "$WAS_KEY" -P $PORT "$SCRIPT_DIR/server.js" $WAS_HOST:/home/ubuntu/tteona-api/server.js

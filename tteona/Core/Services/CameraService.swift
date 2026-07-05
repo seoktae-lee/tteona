@@ -20,7 +20,8 @@ class CameraService: NSObject {
     private var isWritingSessionStarted = false
     private(set) var isRecording = false
 
-    private let maxDuration: TimeInterval = 5.0
+    /// 이번 클립의 최대 길이(초) — 촬영 시작 전에 남은 세션 예산으로 설정된다
+    var maxDuration: TimeInterval = 5.0
     private var recordingStartTime: CMTime = .zero
 
     var onRecordingFinished: ((URL?) -> Void)?

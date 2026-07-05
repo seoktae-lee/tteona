@@ -20,6 +20,7 @@
 		549C59642FACAB0800074627 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 549C59632FACAB0800074627 /* FirebaseMessaging */; };
 		549C59682FACB93600074627 /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = 549C59672FACB93600074627 /* FirebaseFunctions */; };
 		54A435822FF7EE94003B0FCA /* GoogleMaps in Frameworks */ = {isa = PBXBuildFile; productRef = 54A435812FF7EE94003B0FCA /* GoogleMaps */; };
+		54B100013000000000000A03 /* RevenueCat in Frameworks */ = {isa = PBXBuildFile; productRef = 54B100013000000000000A02 /* RevenueCat */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -112,6 +113,7 @@
 				548BBE5F2FA9958B00334BA6 /* GoogleSignInSwift in Frameworks */,
 				548BBEE32FA9B48500334BA6 /* KakaoSDKCommon in Frameworks */,
 				548BBEE12FA9B48500334BA6 /* KakaoSDKAuth in Frameworks */,
+				54B100013000000000000A03 /* RevenueCat in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -187,6 +189,7 @@
 				549C59632FACAB0800074627 /* FirebaseMessaging */,
 				549C59672FACB93600074627 /* FirebaseFunctions */,
 				54A435812FF7EE94003B0FCA /* GoogleMaps */,
+				54B100013000000000000A02 /* RevenueCat */,
 			);
 			productName = tteona;
 			productReference = 548BBD542FA9720A00334BA6 /* tteona.app */;
@@ -246,6 +249,7 @@
 				548BBE5B2FA9958B00334BA6 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
 				548BBEDF2FA9B48500334BA6 /* XCRemoteSwiftPackageReference "kakao-ios-sdk" */,
 				54A435802FF7EE94003B0FCA /* XCRemoteSwiftPackageReference "ios-maps-sdk" */,
+				54B100013000000000000A01 /* XCRemoteSwiftPackageReference "purchases-ios" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 548BBD552FA9720A00334BA6 /* Products */;
@@ -601,6 +605,14 @@
 				minimumVersion = 10.15.0;
 			};
 		};
+		54B100013000000000000A01 /* XCRemoteSwiftPackageReference "purchases-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/RevenueCat/purchases-ios";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 5.0.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -653,6 +665,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 54A435802FF7EE94003B0FCA /* XCRemoteSwiftPackageReference "ios-maps-sdk" */;
 			productName = GoogleMaps;
+		};
+		54B100013000000000000A02 /* RevenueCat */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 54B100013000000000000A01 /* XCRemoteSwiftPackageReference "purchases-ios" */;
+			productName = RevenueCat;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

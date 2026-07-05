@@ -873,7 +873,7 @@ const vlogUpload = multer({
 //                   bgm?: 'auto'|'none'|'mood/파일명',
 //                   places: [{order, placeName, shotAt?}] }  (shotAt: 클립 촬영시각 표시 문자열)
 app.post('/api/vlog/jobs', async (req, res) => {
-  const { userId, courseId, courseName, tag, formats, bgm, places } = req.body || {};
+  const { userId, courseId, courseName, tag, formats, bgm, places, watermark, priority } = req.body || {};
   if (!userId || !Array.isArray(places) || places.length === 0) {
     return res.status(400).json({ error: 'userId and places required' });
   }
@@ -886,7 +886,9 @@ app.post('/api/vlog/jobs', async (req, res) => {
       [userId, courseId || 'free', courseName || '나의 오늘',
        JSON.stringify(places),
        JSON.stringify({ tag: tag || null, formats: wanted,
-                        bgm: typeof bgm === 'string' ? bgm.slice(0, 200) : null })]
+                        bgm: typeof bgm === 'string' ? bgm.slice(0, 200) : null,
+                        watermark: watermark !== false,
+                        priority: priority === true })]
     );
     res.json({ jobId: r.rows[0].id });
   } catch (err) {
@@ -1024,6 +1026,8 @@ async function composeVlog(job) {
     ? job.options : JSON.parse(job.options || '{}');
   const formats = [mainFormat,
     ...(opts.formats || []).filter(f => f !== mainFormat && FORMAT_SPECS[f])];
+  // 워터마크: 기본 적용, plus 유저만 opts.watermark === false로 제거
+  const watermark = opts.watermark !== false && fs.existsSync(VLOG_LOGO);
   await setProgress(4);
 
   const enc = ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21', '-pix_fmt', 'yuv420p',
@@ -1119,8 +1123,8 @@ async function composeVlog(job) {
         const dateTxt = writeTextFile(workDir, `date_${i}.txt`, String(c.shotAt));
         overlays.push(`drawtext=fontfile=${VLOG_FONT}:textfile=${dateTxt}:fontcolor=white:fontsize=${dateSize2}:x=(w-text_w)/2:y=(h/2)+${Math.round(dateSize2 * 0.3)}:${shadow}:alpha=${alpha}`);
       }
-      overlays.push('fade=t=in:st=0:d=0.4');
-      if (!isLast) overlays.push(`fade=t=out:st=${Math.max(0, D - 0.4).toFixed(2)}:d=0.4`);
+      const fades = ['fade=t=in:st=0:d=0.4'];
+      if (!isLast) fades.push(`fade=t=out:st=${Math.max(0, D - 0.4).toFixed(2)}:d=0.4`);
 
       let af = 'afade=t=in:st=0:d=0.4';
       if (!isLast) af += `,afade=t=out:st=${Math.max(0, D - 0.4).toFixed(2)}:d=0.4`;
@@ -1129,10 +1133,20 @@ async function composeVlog(job) {
       if (!info.hasAudio) {
         args.push('-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100', '-shortest');
       }
-      if (cover) {
-        args.push('-vf', [fitChain, ...overlays].join(','));
+      if (watermark) {
+        // 우측 상단 tteona 로고 워터마크 — 페이드 전에 얹어 클립과 함께 페이드된다
+        const wmIdx = info.hasAudio ? 1 : 2;
+        const wmW = Math.round(Math.min(W, H) * 0.20);
+        const wmM = Math.round(Math.min(W, H) * 0.035);
+        args.push('-i', VLOG_LOGO, '-filter_complex',
+          `[0:v]${fitChain},${overlays.join(',')}[base];` +
+          `[${wmIdx}:v]scale=${wmW}:-1,format=rgba,colorchannelmixer=aa=0.55[wm];` +
+          `[base][wm]overlay=W-w-${wmM}:${wmM},${fades.join(',')}[v]`,
+          '-map', '[v]', '-map', info.hasAudio ? '0:a' : '1:a');
+      } else if (cover) {
+        args.push('-vf', [fitChain, ...overlays, ...fades].join(','));
       } else {
-        args.push('-filter_complex', `[0:v]${fitChain},${overlays.join(',')}[v]`,
+        args.push('-filter_complex', `[0:v]${fitChain},${[...overlays, ...fades].join(',')}[v]`,
                   '-map', '[v]', '-map', info.hasAudio ? '0:a' : '1:a');
       }
       args.push('-af', af, ...enc, segOut);
@@ -1253,7 +1267,8 @@ setInterval(async () => {
   try {
     const r = await pgPool.query(`
       UPDATE vlog_jobs SET status = 'processing', started_at = NOW(), progress = 1
-      WHERE id = (SELECT id FROM vlog_jobs WHERE status = 'pending' ORDER BY created_at LIMIT 1)
+      WHERE id = (SELECT id FROM vlog_jobs WHERE status = 'pending'
+                  ORDER BY COALESCE((options->>'priority')::boolean, false) DESC, created_at LIMIT 1)
       RETURNING *`);
     if (r.rows.length === 0) return;
     job = r.rows[0];
