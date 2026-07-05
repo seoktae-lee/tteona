@@ -18,16 +18,26 @@ struct VlogGenerationView: View {
     @State private var progress: Double = 0
     @State private var stageText = "추억을 만들고 있어요..."
     @State private var savedFormatsCount = 1
-    @State private var selectedFormats: Set<String> = []   // "youtube", "insta"
+    @State private var selectedFormats: Set<String> = []   // 기본 포맷 외 추가 선택
     @State private var didGenerate = false
+
+    // 촬영 방향 판별 — 클립 다수 방향 (nil = 판별 중, 기본 세로 가정)
+    @State private var shotPortrait: Bool? = nil
+
+    // BGM 선택 — "auto"(태그 기반 자동) | "none"(음악 없음) | "mood/파일명"(지정 트랙)
+    @State private var bgmTracks: [BgmTrack] = []
+    @State private var selectedBgm = "auto"
+    @State private var previewPlayer: AVPlayer?
+    @State private var playingTrackId: String?
 
     private let vlogService = VlogService()
 
-    enum Phase { case chooseFormat, generating, preview, error }
+    enum Phase { case chooseFormat, chooseBgm, generating, preview, error }
 
     var body: some View {
         switch phase {
         case .chooseFormat: chooseFormatView
+        case .chooseBgm: chooseBgmView
         case .generating: generatingView
         case .preview:
             if let url = vlogURL {
@@ -44,6 +54,10 @@ struct VlogGenerationView: View {
     }
 
     // MARK: - 포맷 선택
+
+    /// 촬영 방향에 맞는 기본 포맷 — 세로 촬영이면 릴스, 가로 촬영이면 유튜브
+    private var baseFormat: String { (shotPortrait ?? true) ? "reels" : "youtube" }
+
     private var chooseFormatView: some View {
         ZStack {
             VlogAuroraBackground()
@@ -52,18 +66,23 @@ struct VlogGenerationView: View {
                 Text("어떤 포맷으로 만들까요?")
                     .font(.system(size: 22, weight: .bold))
                     .foregroundColor(.white)
-                Text("촬영 방향 그대로의 기본 영상은 항상 포함돼요")
+                Text("촬영 방향에 딱 맞는 포맷은 기본으로 포함돼요")
                     .font(.system(size: 13))
                     .foregroundColor(.white.opacity(0.65))
                     .padding(.top, 6)
 
                 VStack(spacing: 12) {
                     formatRow(icon: "iphone", title: "릴스 · 세로", ratio: "9:16",
-                              subtitle: "기본 포함", fixed: true, key: nil)
+                              subtitle: baseFormat == "reels" ? "기본 포함 · 촬영 방향 그대로" : "블러 배경으로 변환",
+                              key: "reels",
+                              badge: baseFormat == "reels" ? "세로 촬영 특화" : nil)
                     formatRow(icon: "play.rectangle.fill", title: "유튜브 · 가로", ratio: "16:9",
-                              subtitle: "블러 배경으로 변환", fixed: false, key: "youtube")
+                              subtitle: baseFormat == "youtube" ? "기본 포함 · 촬영 방향 그대로" : "블러 배경으로 변환",
+                              key: "youtube",
+                              badge: baseFormat == "youtube" ? "가로 촬영 특화" : nil)
                     formatRow(icon: "square.fill", title: "인스타 · 정방형", ratio: "1:1",
-                              subtitle: "블러 배경으로 변환", fixed: false, key: "insta")
+                              subtitle: "여백 없이 꽉 차게 잘라서 변환",
+                              key: "insta", badge: nil)
                 }
                 .padding(.horizontal, 24)
                 .padding(.top, 28)
@@ -71,7 +90,7 @@ struct VlogGenerationView: View {
                 Spacer()
 
                 Button {
-                    phase = .generating
+                    phase = .chooseBgm
                 } label: {
                     Text(selectedFormats.isEmpty ? "Vlog 만들기" : "\(selectedFormats.count + 1)가지 버전으로 만들기")
                         .font(.system(size: 17, weight: .bold))
@@ -88,13 +107,36 @@ struct VlogGenerationView: View {
                     .padding(.bottom, 36)
             }
         }
+        .task { await detectShotOrientation() }
+    }
+
+    /// 세션 클립들의 회전 메타를 읽어 다수 방향을 판별 → 특화 배지·기본 포맷 결정
+    private func detectShotOrientation() async {
+        guard shotPortrait == nil else { return }
+        var portraitVotes = 0, landscapeVotes = 0
+        for place in course.places {
+            let url = VlogService.clipURL(place: place, sessionId: sessionId)
+            guard FileManager.default.fileExists(atPath: url.path) else { continue }
+            let asset = AVURLAsset(url: url)
+            guard let track = try? await asset.loadTracks(withMediaType: .video).first,
+                  let (size, transform) = try? await track.load(.naturalSize, .preferredTransform) else { continue }
+            let display = CGRect(origin: .zero, size: size).applying(transform)
+            if abs(display.height) >= abs(display.width) { portraitVotes += 1 }
+            else { landscapeVotes += 1 }
+        }
+        guard portraitVotes + landscapeVotes > 0 else { return }
+        let portrait = portraitVotes >= landscapeVotes
+        shotPortrait = portrait
+        // 기본 포맷이 바뀌면 추가 선택 목록에서 제거 (서버가 항상 기본으로 생성)
+        selectedFormats.remove(portrait ? "reels" : "youtube")
     }
 
     private func formatRow(icon: String, title: String, ratio: String,
-                           subtitle: String, fixed: Bool, key: String?) -> some View {
-        let isOn = fixed || (key.map { selectedFormats.contains($0) } ?? false)
+                           subtitle: String, key: String, badge: String?) -> some View {
+        let fixed = key == baseFormat
+        let isOn = fixed || selectedFormats.contains(key)
         return Button {
-            guard let key else { return }
+            guard !fixed else { return }
             if selectedFormats.contains(key) { selectedFormats.remove(key) }
             else { selectedFormats.insert(key) }
         } label: {
@@ -113,6 +155,17 @@ struct VlogGenerationView: View {
                             .foregroundColor(.tteOrange)
                             .padding(.horizontal, 7).padding(.vertical, 2)
                             .background(Capsule().fill(Color.tteOrange.opacity(0.18)))
+                        if let badge {
+                            HStack(spacing: 3) {
+                                Image(systemName: "sparkles")
+                                    .font(.system(size: 9, weight: .bold))
+                                Text(badge)
+                                    .font(.system(size: 11, weight: .bold))
+                            }
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .background(Capsule().fill(Color.tteOrange))
+                        }
                     }
                     Text(subtitle)
                         .font(.system(size: 12))
@@ -135,6 +188,155 @@ struct VlogGenerationView: View {
             )
         }
         .disabled(fixed)
+    }
+
+    // MARK: - BGM 선택
+
+    struct BgmTrack: Decodable, Identifiable {
+        let id: String     // "mood/파일명"
+        let name: String
+        let mood: String   // 커플 · 친구 · 가족 · 혼자
+        let url: String
+    }
+
+    private var chooseBgmView: some View {
+        ZStack {
+            VlogAuroraBackground()
+            VStack(spacing: 0) {
+                Spacer(minLength: 60)
+                Text("어떤 음악과 함께할까요?")
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundColor(.white)
+                Text("미리 들어보고 골라도, 그냥 맡겨도 좋아요")
+                    .font(.system(size: 13))
+                    .foregroundColor(.white.opacity(0.65))
+                    .padding(.top, 6)
+
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 12) {
+                        bgmRow(id: "auto", name: "자동 추천", mood: course.tag.rawValue,
+                               subtitle: "여행 태그에 어울리는 음악을 골라드려요", previewURL: nil)
+                        bgmRow(id: "none", name: "음악 없이", mood: nil,
+                               subtitle: "현장의 소리만 그대로 담아요", previewURL: nil)
+                        ForEach(bgmTracks) { track in
+                            bgmRow(id: track.id, name: track.name, mood: track.mood,
+                                   subtitle: nil, previewURL: URL(string: track.url))
+                        }
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.top, 28)
+                    .padding(.bottom, 12)
+                }
+
+                Button {
+                    stopBgmPreview()
+                    phase = .generating
+                } label: {
+                    Text("Vlog 만들기")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity).frame(height: 56)
+                        .background(RoundedRectangle(cornerRadius: 16).fill(Color.tteOrange))
+                }
+                .padding(.horizontal, 24)
+
+                Button("이전으로") {
+                    stopBgmPreview()
+                    phase = .chooseFormat
+                }
+                .font(.system(size: 14))
+                .foregroundColor(.white.opacity(0.6))
+                .padding(.top, 14)
+                .padding(.bottom, 36)
+            }
+        }
+        .task { await loadBgmTracks() }
+        .onDisappear { stopBgmPreview() }
+    }
+
+    private func bgmRow(id: String, name: String, mood: String?,
+                        subtitle: String?, previewURL: URL?) -> some View {
+        let isOn = selectedBgm == id
+        return Button {
+            selectedBgm = id
+        } label: {
+            HStack(spacing: 14) {
+                Image(systemName: id == "auto" ? "wand.and.stars"
+                                : (id == "none" ? "speaker.slash" : "music.note"))
+                    .font(.system(size: 18))
+                    .foregroundColor(isOn ? .tteOrange : .white.opacity(0.5))
+                    .frame(width: 28)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(name)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                        if let mood {
+                            Text(mood)
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.tteOrange)
+                                .padding(.horizontal, 7).padding(.vertical, 2)
+                                .background(Capsule().fill(Color.tteOrange.opacity(0.18)))
+                        }
+                    }
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(.system(size: 12))
+                            .foregroundColor(.white.opacity(0.55))
+                    }
+                }
+                Spacer()
+                if let previewURL {
+                    Button {
+                        toggleBgmPreview(id: id, url: previewURL)
+                    } label: {
+                        Image(systemName: playingTrackId == id ? "pause.circle.fill" : "play.circle")
+                            .font(.system(size: 26))
+                            .foregroundColor(.white.opacity(0.85))
+                    }
+                    .buttonStyle(.plain)
+                }
+                Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 22))
+                    .foregroundColor(isOn ? .tteOrange : .white.opacity(0.3))
+            }
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color.white.opacity(isOn ? 0.12 : 0.06))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(isOn ? Color.tteOrange.opacity(0.6) : Color.clear, lineWidth: 1.2)
+            )
+        }
+    }
+
+    private func loadBgmTracks() async {
+        guard bgmTracks.isEmpty else { return }
+        if let tracks = try? await VlogServerService.shared.fetchBgmTracks() {
+            bgmTracks = tracks.map { BgmTrack(id: $0.id, name: $0.name, mood: $0.mood, url: $0.url) }
+        }
+        // 목록을 못 받아도 자동 추천/음악 없음 두 옵션으로 진행 가능
+    }
+
+    private func toggleBgmPreview(id: String, url: URL) {
+        if playingTrackId == id {
+            stopBgmPreview()
+            return
+        }
+        previewPlayer?.pause()
+        let player = AVPlayer(url: url)
+        player.play()
+        previewPlayer = player
+        playingTrackId = id
+    }
+
+    private func stopBgmPreview() {
+        previewPlayer?.pause()
+        previewPlayer = nil
+        playingTrackId = nil
     }
 
     // MARK: - 생성 중
@@ -183,7 +385,7 @@ struct VlogGenerationView: View {
                         // 1순위: 서버(WAS 8코어) 합성 — 폰 부담 없이 빠르고 BGM·멀티포맷 포함
                         let result = try await VlogServerService.shared.generate(
                             course: course, sessionId: sessionId, userId: uid,
-                            formats: Array(selectedFormats),
+                            formats: Array(selectedFormats), bgm: selectedBgm,
                             onProgress: { p, stage in
                                 progress = p
                                 stageText = stage

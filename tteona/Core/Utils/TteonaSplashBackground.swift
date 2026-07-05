@@ -9,17 +9,17 @@ struct TteonaSplashBackground: View {
             Color.white.ignoresSafeArea()
 
             Circle()
-                .fill(Color.tteOrange.opacity(0.16))
+                .fill(Color.tteOrange.opacity(0.22))
                 .frame(width: 420, height: 420)
                 .blur(radius: 90)
                 .offset(x: animate ? -110 : 130, y: animate ? -200 : -80)
             Circle()
-                .fill(Color(red: 1.0, green: 0.63, blue: 0.35).opacity(0.12))
+                .fill(Color(red: 1.0, green: 0.63, blue: 0.35).opacity(0.17))
                 .frame(width: 360, height: 360)
                 .blur(radius: 80)
                 .offset(x: animate ? 130 : -100, y: animate ? 180 : 300)
             Circle()
-                .fill(Color.tteOrange.opacity(0.09))
+                .fill(Color.tteOrange.opacity(0.13))
                 .frame(width: 320, height: 320)
                 .blur(radius: 85)
                 .offset(x: animate ? -60 : 80, y: animate ? 300 : 70)
@@ -33,13 +33,14 @@ struct TteonaSplashBackground: View {
     }
 }
 
-/// 워드마크 PNG(500×500)에서 실제 글자 높이 ≈52pt로 맞춘 로고
+/// 트리밍된 워드마크 PNG(417×109) — 로그인·스플래시 공용
 struct TteonaWordmarkLogo: View {
+    var height: CGFloat = 42
+
     var body: some View {
         Image("tteona-logo")
             .resizable()
             .scaledToFit()
-            .frame(width: 268)
-            .padding(.vertical, -108)
+            .frame(height: height)
     }
 }

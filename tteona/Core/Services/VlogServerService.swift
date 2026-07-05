@@ -40,12 +40,32 @@ actor VlogServerService {
         let extras: [(format: String, url: URL)]  // 유저가 추가 선택한 포맷들
     }
 
+    struct BgmTrack: Decodable {
+        let id: String     // "mood/파일명" — 잡 생성 시 bgm 필드로 전달
+        let name: String
+        let mood: String
+        let url: String    // 미리듣기 스트리밍 URL
+    }
+
+    /// BGM 선택 화면용 트랙 목록
+    func fetchBgmTracks() async throws -> [BgmTrack] {
+        guard let url = URL(string: "\(baseURL)/bgm") else { throw ServerVlogError.badResponse("bad url") }
+        let (data, resp) = try await URLSession.shared.data(from: url)
+        guard (resp as? HTTPURLResponse)?.statusCode == 200 else {
+            throw ServerVlogError.badResponse("bgm list failed")
+        }
+        struct Wrapper: Decodable { let tracks: [BgmTrack] }
+        return try JSONDecoder().decode(Wrapper.self, from: data).tracks
+    }
+
     // MARK: - 전체 오케스트레이션
 
     /// 서버에서 Vlog 합성 후 로컬 임시 파일 URL 반환.
-    /// formats: 추가 생성할 포맷 ("youtube", "insta") — 촬영 방향 기본본은 항상 생성.
+    /// formats: 추가 생성할 포맷 — 촬영 방향 기본본은 항상 생성.
+    /// bgm: "auto"(태그 기반 자동) | "none"(음악 없음) | "mood/파일명"(지정 트랙)
     /// onProgress: (0.0~1.0, 단계 설명 텍스트)
     func generate(course: Course, sessionId: String, userId: String, formats: [String],
+                  bgm: String = "auto",
                   onProgress: @escaping @MainActor (Double, String) -> Void) async throws -> GeneratedVlog {
 
         // 로컬에 실제 존재하는 클립만 수집
@@ -70,6 +90,7 @@ actor VlogServerService {
             courseName: course.courseName,
             tag: course.tag.rawValue,
             formats: formats,
+            bgm: bgm,
             placesPayload: placesPayload
         )
 
@@ -122,7 +143,8 @@ actor VlogServerService {
     // MARK: - API 단계별 호출
 
     private func createJob(userId: String, courseId: String, courseName: String, tag: String,
-                           formats: [String], placesPayload: [[String: Any]]) async throws -> Int {
+                           formats: [String], bgm: String,
+                           placesPayload: [[String: Any]]) async throws -> Int {
         guard let url = URL(string: "\(baseURL)/jobs") else { throw ServerVlogError.badResponse("bad url") }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -133,6 +155,7 @@ actor VlogServerService {
             "courseName": courseName,
             "tag": tag,
             "formats": formats,
+            "bgm": bgm,
             "places": placesPayload,
         ])
         let (data, resp) = try await URLSession.shared.data(for: req)

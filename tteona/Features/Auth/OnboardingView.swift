@@ -82,7 +82,7 @@ struct OnboardingView: View {
                 Image("tteona-logo")
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 200)
+                    .frame(height: 46)
                     .shadow(color: .tteOrange.opacity(0.25), radius: 16, y: 6)
 
                 Text("특별한 순간을 영상으로 기록하세요")

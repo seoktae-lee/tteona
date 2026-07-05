@@ -9,10 +9,7 @@ struct RootView: View {
     var body: some View {
         Group {
             if authService.isInitializing {
-                ZStack {
-                    TteonaSplashBackground()
-                    TteonaWordmarkLogo()
-                }
+                SplashView()
             } else if !authService.isLoggedIn || authService.verificationEmailSent {
                 AuthView()
             } else if !authService.onboardingComplete {
@@ -31,6 +28,23 @@ struct RootView: View {
             if !isLoggedIn {
                 courseService.clearUserData()
             }
+        }
+    }
+}
+
+// MARK: - 앱 진입 스플래시 — 주황 일렁임 배경 위 로고가 부드럽게 떠오름
+private struct SplashView: View {
+    @State private var appeared = false
+
+    var body: some View {
+        ZStack {
+            TteonaSplashBackground()
+            TteonaWordmarkLogo(height: 46)
+                .scaleEffect(appeared ? 1.0 : 0.9)
+                .opacity(appeared ? 1.0 : 0)
+        }
+        .onAppear {
+            withAnimation(.easeOut(duration: 0.8)) { appeared = true }
         }
     }
 }

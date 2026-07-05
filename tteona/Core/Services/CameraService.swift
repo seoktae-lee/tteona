@@ -6,6 +6,8 @@ class CameraService: NSObject {
     let captureSession = AVCaptureSession()
     private var videoDevice: AVCaptureDevice?
     private(set) var currentCameraPosition: AVCaptureDevice.Position = .back
+    // 중력 센서 기반 물리 방향 추적 — 화면 세로 잠금 상태에서도 가로 촬영을 정확히 감지
+    private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
     private var videoDataOutput = AVCaptureVideoDataOutput()
     private var audioDataOutput = AVCaptureAudioDataOutput()
 
@@ -43,6 +45,7 @@ class CameraService: NSObject {
         }
         captureSession.addInput(videoInput)
         videoDevice = device
+        rotationCoordinator = AVCaptureDevice.RotationCoordinator(device: device, previewLayer: nil)
 
         // 오디오
         if let audioDevice = AVCaptureDevice.default(for: .audio),
@@ -87,6 +90,7 @@ class CameraService: NSObject {
             captureSession.addInput(newInput)
             videoDevice = newDevice
             currentCameraPosition = newPosition
+            rotationCoordinator = AVCaptureDevice.RotationCoordinator(device: newDevice, previewLayer: nil)
         }
         captureSession.commitConfiguration()
     }
@@ -129,6 +133,7 @@ class CameraService: NSObject {
         if captureSession.canAddInput(newInput) {
             captureSession.addInput(newInput)
             videoDevice = newDevice
+            rotationCoordinator = AVCaptureDevice.RotationCoordinator(device: newDevice, previewLayer: nil)
             try? newDevice.lockForConfiguration()
             newDevice.videoZoomFactor = CGFloat(zoom)
             newDevice.unlockForConfiguration()
@@ -155,8 +160,8 @@ class CameraService: NSObject {
         ]
         let videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
         videoInput.expectsMediaDataInRealTime = true
-        // 기기 방향 기준 회전 메타 (앱은 세로 UI — 기본 세로 촬영 90°)
-        videoInput.transform = Self.currentVideoTransform()
+        // 물리 방향 기준 회전 메타 — 세로 잠금이 걸려 있어도 가로 촬영이 바로 서게 기록
+        videoInput.transform = currentVideoTransform()
 
         let audioSettings: [String: Any] = [
             AVFormatIDKey: kAudioFormatMPEG4AAC,
@@ -246,8 +251,13 @@ class CameraService: NSObject {
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
     }
 
-    // 기기 방향 → 영상 회전 메타. 센서 버퍼가 landscape이므로 세로 촬영이면 90° 회전 기록.
-    private static func currentVideoTransform() -> CGAffineTransform {
+    // 물리 방향 → 영상 회전 메타. 센서 버퍼가 landscape이므로 세로 촬영이면 90° 회전 기록.
+    // RotationCoordinator는 중력 센서 기반이라 화면 세로 잠금·faceUp 상태에서도 정확하다.
+    private func currentVideoTransform() -> CGAffineTransform {
+        if let angle = rotationCoordinator?.videoRotationAngleForHorizonLevelCapture {
+            return CGAffineTransform(rotationAngle: angle * .pi / 180)
+        }
+        // 폴백: 기기 방향 (세로 잠금 시 부정확할 수 있음)
         switch UIDevice.current.orientation {
         case .landscapeLeft:       return .identity                          // 홈버튼(하단) 오른쪽
         case .landscapeRight:      return CGAffineTransform(rotationAngle: .pi)

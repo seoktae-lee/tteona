@@ -125,7 +125,7 @@
   <!-- ===== 한국어 ===== -->
   <div id="ko" class="lang-section active">
     <h1>개인정보처리방침</h1>
-    <p class="effective-date">시행일: 2026년 5월 12일</p>
+    <p class="effective-date">시행일: 2026년 5월 12일 · 최종 개정일: 2026년 7월 5일</p>
 
     <h2>1. 개요</h2>
     <p>본 개인정보처리방침은 AERON(이하 "서비스 제공자")이 운영하는 모바일 애플리케이션 "떠나"(이하 "앱")가 이용자의 개인정보를 어떻게 수집·이용·보관·파기하는지 설명합니다.</p>
@@ -144,7 +144,9 @@
     <h3>2-2. 서비스 이용 데이터</h3>
     <ul>
       <li>생성한 여행 코스(코스명, 장소 목록, 지역, 태그, 좋아요 수), 좋아요한 코스 ID 목록</li>
+      <li>코스 썸네일 이미지 (이용자가 직접 선택·업로드한 경우)</li>
       <li>그룹(방) 정보: 방 이름, 초대 코드, 멤버 ID 목록, 생성 시각</li>
+      <li>그룹 채팅 메시지: 텍스트, 답장(인용 원문), 이모지 반응, 작성자 닉네임, 작성 시각 — 같은 방의 멤버에게만 공개</li>
       <li>여행 세션 기록: 장소 방문 기록(장소명·위도·경도), 세션 시작/종료 시각</li>
       <li>피드 항목: 유형(여행 시작·종료·도착·영상 등), 닉네임, 관련 위치 좌표, 이미지 URL</li>
       <li>댓글 및 답글: 텍스트, 인용한 원문 텍스트</li>
@@ -157,17 +159,25 @@
     </ul>
 
     <h3>2-4. 위치 정보</h3>
+    <p>서비스 제공자는 「위치정보의 보호 및 이용 등에 관한 법률」을 준수하며, 아래 목적 범위에서만 위치정보를 처리합니다.</p>
     <ul>
       <li>코스 진행 중 현재 위치 (목적지 도착 감지)</li>
-      <li>그룹 여행 중 실시간 위치 공유 (같은 방의 멤버에게만 공개)</li>
+      <li>그룹 여행 중 실시간 위치 공유 (같은 방의 멤버에게만 공개 — 방 참여로써 멤버 간 위치 공유에 동의한 것으로 봅니다)</li>
+      <li>장소 간 이동 경로·소요시간 계산 (출발·도착 좌표를 카카오모빌리티 API에 전달)</li>
+      <li>장소 대표 사진·정보 조회 (장소명·좌표를 한국관광공사 TourAPI, Google Places API에 전달)</li>
       <li>앱이 백그라운드 상태일 때도 위치를 수집할 수 있으며, 이용자가 위치 권한을 거부하면 해당 기능이 제한됩니다.</li>
+      <li>실시간 위치는 여행 세션 진행 중에만 공유되며, 이용 목적 달성 시 지체 없이 파기하거나 통계 목적의 비식별 정보로만 보관합니다.</li>
     </ul>
 
-    <h3>2-5. 카메라·마이크·사진 라이브러리</h3>
+    <h3>2-5. 카메라·마이크·사진 라이브러리 및 영상 처리</h3>
     <ul>
       <li><strong>카메라·마이크</strong>: 장소에서 영상 촬영 시 사용</li>
       <li><strong>사진 라이브러리(쓰기)</strong>: 완성된 브이로그를 기기 앨범에 저장할 때 사용</li>
-      <li>촬영된 영상 클립은 브이로그 생성 전까지 기기 내 앱 전용 폴더에 임시 저장되며, 브이로그 생성이 완료되면 자동 삭제됩니다. 영상 클립은 서버로 전송되지 않습니다.</li>
+      <li><strong>사진 라이브러리(읽기, 선택 항목)</strong>: 코스 썸네일 이미지를 직접 선택하는 경우에 한해 이용자가 고른 사진만 접근</li>
+      <li>촬영된 영상 클립은 브이로그 생성 전까지 기기 내 앱 전용 폴더에 임시 저장됩니다.</li>
+      <li><strong>서버 합성</strong>: 브이로그 생성 시 영상 클립이 암호화된 통신(HTTPS)으로 서비스 제공자의 국내 서버(tteona.kr)에 업로드되어 편집·합성에 이용됩니다. 업로드된 클립과 완성본은 합성 및 전송 목적 달성 후 서버에서 주기적으로 삭제되며, 편집 이외의 목적으로 이용하거나 제3자에게 제공하지 않습니다.</li>
+      <li>서버 합성이 불가능한 경우 기기 내에서만 합성되며, 이 경우 클립은 서버로 전송되지 않습니다.</li>
+      <li>브이로그에 삽입되는 배경음악(BGM)은 서비스 제공자가 적법하게 확보한 음원으로, 개인정보를 포함하지 않습니다.</li>
     </ul>
 
     <h2>3. 개인정보의 이용 목적</h2>
@@ -176,10 +186,12 @@
       <li>여행 코스·그룹 여행 기능 제공</li>
       <li>목적지 도착 알림, 그룹 여행 관련 푸시 알림 발송 (로컬 알림 및 FCM 원격 알림)</li>
       <li>라이브 액티비티(Dynamic Island·잠금화면)를 통한 여행 세션 현황 표시</li>
-      <li>장소 검색 (카카오 로컬 API, Apple MapKit 활용)</li>
+      <li>장소 검색 및 장소 정보·사진 제공 (카카오 로컬 API, Apple MapKit, Google Places, 한국관광공사 TourAPI 활용)</li>
+      <li>이동 경로·소요시간 계산 (카카오모빌리티 API 활용)</li>
       <li>날씨 정보 제공 (현재 위치 좌표를 OpenWeatherMap 서버에 전달)</li>
-      <li>브이로그 자동 생성 기능 제공</li>
-      <li>실시간 위치 공유 (그룹 멤버 간)</li>
+      <li>브이로그 자동 생성 기능 제공 (자체 서버 편집·합성 포함)</li>
+      <li>실시간 위치 공유 및 그룹 채팅 (그룹 멤버 간)</li>
+      <li>코스 추천 (지역·계절·태그 기반)</li>
       <li>서비스 개선 및 오류 분석</li>
       <li>법적 의무 이행 및 이용약관 적용</li>
     </ul>
@@ -213,6 +225,21 @@
         <td><a href="https://www.kakao.com/policy/privacy" target="_blank">보기</a></td>
       </tr>
       <tr>
+        <td>카카오모빌리티</td>
+        <td>이동 경로·소요시간 계산 (출발·도착 좌표 전달)</td>
+        <td><a href="https://www.kakaomobility.com/privacy" target="_blank">보기</a></td>
+      </tr>
+      <tr>
+        <td>Google Maps Platform</td>
+        <td>지도 표시, 장소 상세 정보·사진 조회 (장소명·좌표 전달)</td>
+        <td><a href="https://policies.google.com/privacy" target="_blank">보기</a></td>
+      </tr>
+      <tr>
+        <td>한국관광공사 (TourAPI)</td>
+        <td>관광지 대표 사진·정보 조회 (장소명·좌표 전달)</td>
+        <td><a href="https://api.visitkorea.or.kr" target="_blank">보기</a></td>
+      </tr>
+      <tr>
         <td>OpenWeatherMap</td>
         <td>날씨 정보 제공 (현재 위치 좌표 전달)</td>
         <td><a href="https://openweather.co.uk/privacy-policy" target="_blank">보기</a></td>
@@ -223,24 +250,28 @@
     <h2>5. 개인정보 처리 위탁</h2>
     <p>서비스 제공자는 서비스 운영을 위해 아래와 같이 개인정보 처리를 위탁합니다.</p>
     <ul>
-      <li><strong>수탁자</strong>: Google (Firebase) · Google 로그인 · Apple · 카카오 · OpenWeatherMap</li>
-      <li><strong>위탁 업무</strong>: 인증, 데이터 저장, 푸시 알림 처리, 소셜 로그인, 장소 검색, 날씨 정보 조회</li>
-      <li><strong>위탁 항목</strong>: 계정 식별자, 프로필 정보, FCM 토큰, 여행·그룹 데이터, 장소 검색 쿼리, 위치 좌표 (각 업무에 필요한 범위)</li>
+      <li><strong>수탁자</strong>: Google (Firebase) · Google 로그인 · Apple · 카카오 · 카카오모빌리티 · 한국관광공사 · OpenWeatherMap · 디엔에이클라우드(서버 인프라 호스팅)</li>
+      <li><strong>위탁 업무</strong>: 인증, 데이터 저장, 푸시 알림 처리, 소셜 로그인, 장소 검색·정보 조회, 경로 계산, 날씨 정보 조회, 브이로그 합성 서버 및 데이터베이스 호스팅</li>
+      <li><strong>위탁 항목</strong>: 계정 식별자, 프로필 정보, FCM 토큰, 여행·그룹 데이터, 장소 검색 쿼리, 위치 좌표, 브이로그 영상 클립 (각 업무에 필요한 범위)</li>
     </ul>
+    <p>브이로그 합성 및 일부 서비스 데이터는 국내 클라우드 서버(디엔에이클라우드 호스팅, tteona.kr)에 저장·처리되며, 개인정보의 국외 이전은 발생하지 않습니다. 다만 Firebase 등 글로벌 서비스의 데이터는 해당 서비스의 정책에 따라 국외에서 처리될 수 있습니다.</p>
 
     <h2>6. 개인정보 보유 및 파기</h2>
     <ul>
       <li>회원 탈퇴 전까지 보관하며, 탈퇴 시 관련 법령에 따라 파기합니다.</li>
       <li>관련 법령에 보관 의무가 있는 경우 해당 기간 동안 보관 후 파기합니다.</li>
       <li>이메일 미인증 계정은 가입 후 24시간 경과 시 자동 삭제됩니다.</li>
+      <li>브이로그 합성을 위해 서버에 업로드된 영상 클립과 완성본은 합성·전송 목적 달성 후 주기적으로 자동 삭제됩니다.</li>
+      <li>실시간 공유 위치정보는 여행 세션 종료 등 이용 목적 달성 시 지체 없이 파기합니다. 위치정보의 수집·이용·제공 사실 확인자료는 「위치정보의 보호 및 이용 등에 관한 법률」에 따라 기록·보존 후 파기합니다.</li>
     </ul>
 
     <h2>7. 회원 탈퇴 시 삭제되는 정보</h2>
     <p>앱 내 「설정 → 계정 삭제」를 완료하면 아래 정보가 삭제됩니다.</p>
     <ul>
       <li>Firebase Authentication 계정 삭제</li>
-      <li>Firestore에 저장된 모든 개인 데이터 (프로필, 여행 코스, 피드, 댓글, fcmRequests 관련 데이터 등)</li>
+      <li>Firestore에 저장된 모든 개인 데이터 (프로필, 여행 코스, 피드, 댓글, 채팅 메시지, fcmRequests 관련 데이터 등)</li>
       <li>소속된 모든 그룹(방)에서 멤버 제거 및 내가 작성한 피드 삭제</li>
+      <li>자체 서버에 남아 있는 브이로그 관련 데이터 (업로드 클립·완성본은 보유 기간 정책에 따라 자동 삭제)</li>
       <li>기기 내 앱 저장 데이터 (앱 재설치 시 초기화)</li>
     </ul>
     <p><strong>참고:</strong> 내가 마지막 멤버인 그룹에서 탈퇴하거나 계정을 삭제하면, 해당 그룹의 모든 데이터(피드, 댓글, 공유 코스 등)가 함께 삭제됩니다.</p>
@@ -253,7 +284,7 @@
     <p>서비스 제공자는 만 14세 미만 아동의 개인정보를 의도적으로 수집하지 않습니다. 14세 미만 아동이 개인정보를 제공한 사실을 인지하는 경우 즉시 삭제합니다.</p>
 
     <h2>10. 보안</h2>
-    <p>서비스 제공자는 이용자의 개인정보를 보호하기 위해 Firebase 보안 규칙, 전송 중 암호화(TLS), 접근 제한 등의 기술적·관리적 조치를 적용합니다.</p>
+    <p>서비스 제공자는 이용자의 개인정보를 보호하기 위해 Firebase 보안 규칙, 전송 중 암호화(TLS/HTTPS), 자체 서버의 방화벽 및 접근 통제(SSH 키 인증), 위치정보 취급 직원 최소화 등의 기술적·관리적 조치를 적용합니다.</p>
 
     <h2>11. 방침 변경</h2>
     <p>본 방침은 필요에 따라 변경될 수 있으며, 중요한 변경 사항은 앱 또는 본 페이지를 통해 사전 공지합니다.</p>
@@ -269,7 +300,7 @@
   <!-- ===== English ===== -->
   <div id="en" class="lang-section">
     <h1>Privacy Policy</h1>
-    <p class="effective-date">Effective Date: May 12, 2026</p>
+    <p class="effective-date">Effective Date: May 12, 2026 · Last Updated: July 5, 2026</p>
 
     <h2>1. Overview</h2>
     <p>This Privacy Policy explains how AERON (the "Service Provider") collects, uses, stores, and deletes personal information through the mobile application "떠나 (Tteona)" (the "App").</p>
@@ -287,7 +318,9 @@
     <h3>2-2. Service Usage Data</h3>
     <ul>
       <li>Travel courses created (name, place list, region, tag, like count), liked course IDs</li>
+      <li>Course thumbnail images (only when uploaded by the user)</li>
       <li>Group (room) info: room name, invite code, member ID list, creation timestamp</li>
+      <li>Group chat messages: text, replies (quoted text), emoji reactions, author nickname, timestamps — visible only to members of the same room</li>
       <li>Trip session records: places visited (name, latitude, longitude), session start/end timestamps</li>
       <li>Feed items: type (trip start/end, arrival, video, etc.), nickname, location coordinates, image URL</li>
       <li>Comments and replies: text content, quoted original text</li>
@@ -300,17 +333,25 @@
     </ul>
 
     <h3>2-4. Location Information</h3>
+    <p>The Service Provider complies with the Korean Act on the Protection and Use of Location Information and processes location data only for the purposes below.</p>
     <ul>
       <li>Current location during active travel courses (for arrival detection)</li>
-      <li>Real-time location sharing during group trips (visible only to members of the same room)</li>
+      <li>Real-time location sharing during group trips (visible only to members of the same room — by joining a room you consent to sharing your location with its members)</li>
+      <li>Route and travel-time calculation (origin/destination coordinates sent to the Kakao Mobility API)</li>
+      <li>Place photos and details lookup (place name and coordinates sent to Korea Tourism Organization TourAPI and Google Places API)</li>
       <li>Location may be collected in the background; denying location permission will limit related features.</li>
+      <li>Real-time locations are shared only while a trip session is active and are promptly destroyed once the purpose is fulfilled, or retained only as de-identified statistics.</li>
     </ul>
 
-    <h3>2-5. Camera, Microphone &amp; Photo Library</h3>
+    <h3>2-5. Camera, Microphone, Photo Library &amp; Video Processing</h3>
     <ul>
       <li><strong>Camera &amp; Microphone</strong>: Used to record videos at each location</li>
       <li><strong>Photo Library (write access)</strong>: Used to save the completed vlog to the device's camera roll</li>
-      <li>Recorded video clips are stored temporarily in a private app folder on-device until vlog generation is complete, at which point they are automatically deleted. Clips are never uploaded to any server.</li>
+      <li><strong>Photo Library (read access, selected items)</strong>: Only the photo you pick when setting a course thumbnail is accessed</li>
+      <li>Recorded video clips are stored temporarily in a private app folder on-device until vlog generation.</li>
+      <li><strong>Server-side processing</strong>: When generating a vlog, your video clips are uploaded over encrypted connections (HTTPS) to the Service Provider's servers in Korea (tteona.kr) for editing and composition. Uploaded clips and rendered outputs are periodically deleted after the composition and delivery purposes are fulfilled, and are never used for any other purpose or shared with third parties.</li>
+      <li>If server-side processing is unavailable, the vlog is composed entirely on-device and clips are not uploaded.</li>
+      <li>Background music (BGM) inserted into vlogs comes from audio tracks lawfully licensed by the Service Provider and contains no personal information.</li>
     </ul>
 
     <h2>3. How We Use Your Information</h2>
@@ -319,10 +360,12 @@
       <li>Providing travel course and group trip features</li>
       <li>Sending push notifications for arrival alerts and group activities (local notifications and FCM remote notifications)</li>
       <li>Displaying trip session status via Live Activity (Dynamic Island / Lock Screen)</li>
-      <li>Place search (via Kakao Local API and Apple MapKit)</li>
+      <li>Place search and place photos/details (via Kakao Local API, Apple MapKit, Google Places, and Korea Tourism Organization TourAPI)</li>
+      <li>Route and travel-time calculation (via Kakao Mobility API)</li>
       <li>Weather information (current location coordinates sent to OpenWeatherMap)</li>
-      <li>Automatic vlog generation</li>
-      <li>Real-time location sharing among group members</li>
+      <li>Automatic vlog generation (including server-side editing and composition)</li>
+      <li>Real-time location sharing and group chat among group members</li>
+      <li>Course recommendations (based on region, season, and tags)</li>
       <li>Service improvement and error analysis</li>
       <li>Legal compliance and enforcement of our Terms of Service</li>
     </ul>
@@ -356,6 +399,21 @@
         <td><a href="https://www.kakao.com/policy/privacy" target="_blank">View</a></td>
       </tr>
       <tr>
+        <td>Kakao Mobility</td>
+        <td>Route and travel-time calculation (origin/destination coordinates transmitted)</td>
+        <td><a href="https://www.kakaomobility.com/privacy" target="_blank">View</a></td>
+      </tr>
+      <tr>
+        <td>Google Maps Platform</td>
+        <td>Map display, place details and photos (place name and coordinates transmitted)</td>
+        <td><a href="https://policies.google.com/privacy" target="_blank">View</a></td>
+      </tr>
+      <tr>
+        <td>Korea Tourism Organization (TourAPI)</td>
+        <td>Tourist-site photos and details (place name and coordinates transmitted)</td>
+        <td><a href="https://api.visitkorea.or.kr" target="_blank">View</a></td>
+      </tr>
+      <tr>
         <td>OpenWeatherMap</td>
         <td>Weather information (current location coordinates transmitted)</td>
         <td><a href="https://openweather.co.uk/privacy-policy" target="_blank">View</a></td>
@@ -366,24 +424,28 @@
     <h2>5. Data Processing Delegation</h2>
     <p>The Service Provider delegates certain data processing activities as follows:</p>
     <ul>
-      <li><strong>Processors</strong>: Google (Firebase) · Google Sign-In · Apple · Kakao · OpenWeatherMap</li>
-      <li><strong>Delegated tasks</strong>: Authentication, data storage, push notifications, social login, place search, weather lookup</li>
-      <li><strong>Data shared</strong>: Account identifiers, profile data, FCM token, trip and group data, place search queries, location coordinates (limited to what each task requires)</li>
+      <li><strong>Processors</strong>: Google (Firebase) · Google Sign-In · Apple · Kakao · Kakao Mobility · Korea Tourism Organization · OpenWeatherMap · DNA Cloud (server infrastructure hosting)</li>
+      <li><strong>Delegated tasks</strong>: Authentication, data storage, push notifications, social login, place search and details, route calculation, weather lookup, vlog composition server and database hosting</li>
+      <li><strong>Data shared</strong>: Account identifiers, profile data, FCM token, trip and group data, place search queries, location coordinates, vlog video clips (limited to what each task requires)</li>
     </ul>
+    <p>Vlog composition and certain service data are stored and processed on cloud servers located in Korea (hosted by DNA Cloud, tteona.kr); no cross-border transfer occurs from these servers. Data handled by global services such as Firebase may be processed outside Korea according to their respective policies.</p>
 
     <h2>6. Retention &amp; Deletion</h2>
     <ul>
       <li>Data is retained until account deletion and destroyed in accordance with applicable law.</li>
       <li>Data required to be retained by law is kept for the legally mandated period, then destroyed.</li>
       <li>Unverified email accounts are automatically deleted 24 hours after registration.</li>
+      <li>Video clips uploaded for vlog composition and rendered outputs are automatically deleted from the server on a periodic basis after the composition and delivery purposes are fulfilled.</li>
+      <li>Real-time shared locations are promptly destroyed when the trip session ends or the purpose is fulfilled. Records confirming the collection, use, and provision of location information are retained and destroyed in accordance with the Korean Act on the Protection and Use of Location Information.</li>
     </ul>
 
     <h2>7. Data Deleted Upon Account Deletion</h2>
     <p>Completing "Settings → Delete Account" in the App will delete the following:</p>
     <ul>
       <li>Firebase Authentication account</li>
-      <li>All personal data stored in Firestore (profile, travel courses, feed posts, comments, fcmRequests data, etc.)</li>
+      <li>All personal data stored in Firestore (profile, travel courses, feed posts, comments, chat messages, fcmRequests data, etc.)</li>
       <li>Removal from all groups (rooms) you belong to, and deletion of your feed posts within those groups</li>
+      <li>Vlog-related data remaining on our servers (uploaded clips and outputs are auto-deleted per our retention policy)</li>
       <li>App data stored on-device (reset upon reinstallation)</li>
     </ul>
     <p><strong>Note:</strong> If you are the last member of a group when you leave or delete your account, all data in that group (feed, comments, shared courses, etc.) will also be permanently deleted.</p>
@@ -396,7 +458,7 @@
     <p>The Service Provider does not knowingly collect personal information from children under 14. If we become aware that a child under 14 has provided personal information, we will delete it immediately.</p>
 
     <h2>10. Security</h2>
-    <p>The Service Provider applies technical and administrative safeguards — including Firebase security rules, in-transit encryption (TLS), and access controls — to protect your information.</p>
+    <p>The Service Provider applies technical and administrative safeguards — including Firebase security rules, in-transit encryption (TLS/HTTPS), firewalls and access controls on our own servers (SSH key authentication), and minimizing personnel with access to location data — to protect your information.</p>
 
     <h2>11. Changes to This Policy</h2>
     <p>This Policy may be updated periodically. Material changes will be announced in advance through the App or this page.</p>
