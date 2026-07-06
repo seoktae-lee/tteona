@@ -18,6 +18,7 @@ const { randomUUID } = require('crypto');
 const { initializeApp, cert } = require('firebase-admin/app');
 const { getFirestore, FieldValue, Timestamp } = require('firebase-admin/firestore');
 const { getAuth } = require('firebase-admin/auth');
+const { getMessaging } = require('firebase-admin/messaging');
 
 const serviceAccount = require('./firebase-service-account.json');
 initializeApp({ credential: cert(serviceAccount) });
@@ -54,6 +55,20 @@ const pgPool = new Pool({
   connectionTimeoutMillis: 5000,
 });
 pgPool.on('error', (err) => console.error('PostgreSQL pool error:', err));
+
+// 기동 시 device_tokens 스키마 보정 — Android(FCM) 지원을 위해 platform 컬럼 추가,
+// 유저당 1행(user_id 유니크) → 플랫폼별 1행(user_id, platform 유니크)으로 전환
+async function ensurePushSchema() {
+  await pgPool.query(
+    `ALTER TABLE device_tokens ADD COLUMN IF NOT EXISTS platform TEXT NOT NULL DEFAULT 'ios'`
+  );
+  await pgPool.query(`ALTER TABLE device_tokens DROP CONSTRAINT IF EXISTS device_tokens_pkey`);
+  await pgPool.query(`ALTER TABLE device_tokens DROP CONSTRAINT IF EXISTS device_tokens_user_id_key`);
+  await pgPool.query(
+    `CREATE UNIQUE INDEX IF NOT EXISTS device_tokens_user_platform_idx ON device_tokens (user_id, platform)`
+  );
+}
+ensurePushSchema().catch(err => console.error('[Push] schema migration error:', err.message));
 
 // ─── Firebase ID 토큰 인증 미들웨어 ──────────────────────────────────────────
 // 성공 시 req.uid에 검증된 Firebase uid가 들어간다. 클라이언트가 보내는
@@ -94,28 +109,59 @@ const BUNDLE_ID = 'com.seoktaedev.tteona';
 async function sendPush({ userId, title, body, data = {} }) {
   try {
     const result = await pgPool.query(
-      'SELECT token FROM device_tokens WHERE user_id = $1',
+      'SELECT token, platform FROM device_tokens WHERE user_id = $1',
       [userId]
     );
     if (result.rows.length === 0) return { skipped: true, reason: 'no token' };
 
-    const token = result.rows[0].token;
-    const note = new apn.Notification();
-    note.expiry = Math.floor(Date.now() / 1000) + 3600;
-    note.badge  = 1;
-    note.sound  = 'default';
-    note.alert  = { title, body };
-    note.payload = data;
-    note.topic   = BUNDLE_ID;
+    let ok = false;
+    let lastError = null;
+    for (const row of result.rows) {
+      if (row.platform === 'android') {
+        // Android — FCM (data 값은 문자열만 허용)
+        try {
+          const fcmData = {};
+          for (const [k, v] of Object.entries(data)) fcmData[k] = String(v);
+          await getMessaging().send({
+            token: row.token,
+            notification: { title, body },
+            data: fcmData,
+            android: { priority: 'high' },
+          });
+          ok = true;
+        } catch (err) {
+          lastError = err.message;
+          console.error('[FCM] sendPush error:', err.message);
+          // 무효 토큰 정리 — 앱 삭제/토큰 로테이션
+          if (String(err.code || '').includes('registration-token-not-registered')) {
+            pgPool.query(
+              'DELETE FROM device_tokens WHERE user_id = $1 AND token = $2',
+              [userId, row.token]
+            ).catch(() => {});
+          }
+        }
+      } else {
+        // iOS — APNs
+        const note = new apn.Notification();
+        note.expiry = Math.floor(Date.now() / 1000) + 3600;
+        note.badge  = 1;
+        note.sound  = 'default';
+        note.alert  = { title, body };
+        note.payload = data;
+        note.topic   = BUNDLE_ID;
 
-    const res = await apnProvider.send(note, token);
-    if (res.failed.length > 0) {
-      console.error('[APNs] failed:', JSON.stringify(res.failed));
-      return { ok: false, error: res.failed[0].response };
+        const res = await apnProvider.send(note, row.token);
+        if (res.failed.length > 0) {
+          lastError = res.failed[0].response;
+          console.error('[APNs] failed:', JSON.stringify(res.failed));
+        } else {
+          ok = true;
+        }
+      }
     }
-    return { ok: true };
+    return ok ? { ok: true } : { ok: false, error: lastError };
   } catch (err) {
-    console.error('[APNs] sendPush error:', err.message);
+    console.error('[Push] sendPush error:', err.message);
     return { ok: false, error: err.message };
   }
 }
@@ -600,18 +646,20 @@ app.post('/api/moderate', requireAuth, (req, res) => {
 
 // ─── Push 알림 API ───────────────────────────────────────────────────────────
 
-// iOS 앱이 로그인 시 APNs device token 등록 — 본인 토큰만 등록 가능
+// 앱이 로그인 시 device token 등록 — 본인 토큰만 등록 가능
+// iOS는 APNs 토큰(platform 생략 = 'ios'), Android는 FCM 토큰(platform = 'android')
 app.post('/api/push/register', requireAuth, async (req, res) => {
   const { token } = req.body;
+  const platform = req.body.platform === 'android' ? 'android' : 'ios';
   const userId = req.uid || req.body.userId; // 검증된 uid 우선 — 타인 토큰 탈취 방지
   if (!userId || !token) return res.status(400).json({ error: 'userId and token required' });
 
   try {
     await pgPool.query(`
-      INSERT INTO device_tokens (user_id, token, updated_at)
-      VALUES ($1, $2, NOW())
-      ON CONFLICT (user_id) DO UPDATE SET token = EXCLUDED.token, updated_at = NOW()
-    `, [userId, token]);
+      INSERT INTO device_tokens (user_id, token, platform, updated_at)
+      VALUES ($1, $2, $3, NOW())
+      ON CONFLICT (user_id, platform) DO UPDATE SET token = EXCLUDED.token, updated_at = NOW()
+    `, [userId, token, platform]);
     res.json({ ok: true });
   } catch (err) {
     console.error('push register error:', err);
