@@ -50,7 +50,7 @@ struct RoomDetailView: View {
                     Button(role: .destructive) {
                         showLeaveAlert = true
                     } label: {
-                        Label("그룹 나가기", systemImage: "rectangle.portrait.and.arrow.right")
+                        Label(L("room.leave"), systemImage: "rectangle.portrait.and.arrow.right")
                     }
                 } label: {
                     Image(systemName: "ellipsis")
@@ -58,13 +58,13 @@ struct RoomDetailView: View {
                 }
             }
         }
-        .alert("그룹 나가기", isPresented: $showLeaveAlert) {
-            Button("나가기", role: .destructive) {
+        .alert(L("room.leave"), isPresented: $showLeaveAlert) {
+            Button(L("room.leaveButton"), role: .destructive) {
                 Task { try? await roomService.leaveRoom(roomId: room.roomId, userId: uid) }
             }
-            Button("취소", role: .cancel) {}
+            Button(L("common.cancel"), role: .cancel) {}
         } message: {
-            Text("그룹을 나가면 다시 초대 코드로 참여할 수 있어요.")
+            Text(L("room.leaveMessage"))
         }
         .sheet(isPresented: $showShareSheet) {
             ShareSheet(items: [roomInviteURL])
@@ -82,7 +82,7 @@ struct RoomDetailView: View {
     private var inviteCodeBanner: some View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 3) {
-                Text("초대 코드")
+                Text(L("room.inviteCode"))
                     .font(.tte(11))
                     .foregroundColor(.tteMediumGray)
                 Text(room.inviteCode)
@@ -104,7 +104,7 @@ struct RoomDetailView: View {
                 Image(systemName: "person.fill")
                     .font(.tte(11))
                     .foregroundColor(.tteMediumGray)
-                Text("\(room.memberIds.count)명")
+                Text(L("room.membersCount", room.memberIds.count))
                     .font(.tte(12))
                     .foregroundColor(.tteMediumGray)
             }
@@ -134,13 +134,13 @@ struct FeedCard: View {
 
     private var message: String {
         switch item.type {
-        case .tripStart:     return "\(item.nickname)님이 \(item.courseName) 여행을 시작했어요!"
-        case .tripEnd:       return "\(item.nickname)님이 \(item.courseName) 여행을 종료했어요!"
-        case .arrival:       return "\(item.nickname)님이 \(item.placeName ?? "")에 도착했어요!"
-        case .photo:         return "\(item.nickname)님이 사진을 공유했어요"
-        case .freeTripStart: return "\(item.nickname)님이 나의 오늘을 시작했어요!"
-        case .freeCapture:   return "\(item.nickname)님이 \(item.placeName ?? "이곳")에서 영상을 남겼어요"
-        case .freeTripEnd:   return "\(item.nickname)님의 오늘이 끝났어요!\n\(item.courseName)"
+        case .tripStart:     return L("feedcard.tripStart", item.nickname, item.courseName)
+        case .tripEnd:       return L("feedcard.tripEnd", item.nickname, item.courseName)
+        case .arrival:       return L("feedcard.arrival", item.nickname, item.placeName ?? "")
+        case .photo:         return L("feedcard.photo", item.nickname)
+        case .freeTripStart: return L("feedcard.freeTripStart", item.nickname)
+        case .freeCapture:   return L("feedcard.freeCapture", item.nickname, item.placeName ?? L("feed.here"))
+        case .freeTripEnd:   return L("feedcard.freeTripEnd", item.nickname, item.courseName)
         }
     }
 
@@ -163,7 +163,7 @@ struct FeedCard: View {
                         Text("·")
                             .foregroundColor(.tteMediumGray.opacity(0.5))
                             .font(.tte(12))
-                        Text("댓글 \(item.commentCount)개")
+                        Text(L("feed.comments", item.commentCount))
                             .font(.tte(12))
                             .foregroundColor(.tteOrange.opacity(0.8))
                     }
@@ -199,13 +199,13 @@ struct MemberChatRow: View {
         let timeStr = feed.createdAt.relativeDescription
         let action: String
         switch feed.type {
-        case .tripStart:     action = "\(feed.courseName) 여행 시작"
-        case .tripEnd:       action = "\(feed.courseName) 여행 종료"
-        case .arrival:       action = "\(feed.placeName ?? "") 도착"
-        case .photo:         action = "사진 공유"
-        case .freeTripStart: action = "나의 오늘 시작"
-        case .freeCapture:   action = "\(feed.placeName ?? "이곳")에서 영상"
-        case .freeTripEnd:   action = "오늘 종료"
+        case .tripStart:     action = L("feedaction.tripStart", feed.courseName)
+        case .tripEnd:       action = L("feedaction.tripEnd", feed.courseName)
+        case .arrival:       action = L("feedaction.arrival", feed.placeName ?? "")
+        case .photo:         action = L("feedaction.photo")
+        case .freeTripStart: action = L("feedaction.freeTripStart")
+        case .freeCapture:   action = L("feedaction.freeCapture", feed.placeName ?? L("feed.here"))
+        case .freeTripEnd:   action = L("feedaction.freeTripEnd")
         }
         return "\(action) · \(timeStr)"
     }
@@ -239,7 +239,7 @@ struct MemberChatRow: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(isMe ? "\(member.nickname) (나)" : member.nickname)
+                Text(isMe ? L("member.me", member.nickname) : member.nickname)
                     .font(.custom("GowunBatang-Regular", size: 19))
                     .foregroundColor(.tteDarkGray)
                 if let summary = latestFeedSummary {

@@ -107,21 +107,21 @@ actor PlacesPhotoService {
 
     private func categoryText(from types: [String]) -> String? {
         let priority: [(String, String)] = [
-            ("beach", "해변"), ("mountain", "산"), ("national_park", "국립공원"),
-            ("university", "대학교"), ("school", "학교"), ("library", "도서관"),
-            ("museum", "박물관"), ("art_gallery", "갤러리"),
-            ("amusement_park", "놀이공원"), ("zoo", "동물원"), ("aquarium", "수족관"),
-            ("stadium", "경기장"), ("park", "공원"),
-            ("cafe", "카페"), ("bakery", "베이커리"), ("restaurant", "음식점"),
-            ("bar", "바"), ("night_club", "나이트클럽"), ("movie_theater", "영화관"),
-            ("shopping_mall", "쇼핑몰"), ("store", "상점"),
-            ("lodging", "숙박"), ("spa", "스파"), ("gym", "헬스장"),
-            ("hospital", "병원"), ("pharmacy", "약국"),
-            ("subway_station", "지하철역"), ("train_station", "기차역"),
-            ("tourist_attraction", "관광명소"), ("point_of_interest", "명소"),
+            ("beach", "place.category.beach"), ("mountain", "place.category.mountain"), ("national_park", "place.category.nationalPark"),
+            ("university", "place.category.university"), ("school", "place.category.school"), ("library", "place.category.library"),
+            ("museum", "place.category.museum"), ("art_gallery", "place.category.artGallery"),
+            ("amusement_park", "place.category.amusementPark"), ("zoo", "place.category.zoo"), ("aquarium", "place.category.aquarium"),
+            ("stadium", "place.category.stadium"), ("park", "place.category.park"),
+            ("cafe", "place.category.cafe"), ("bakery", "place.category.bakery"), ("restaurant", "place.category.restaurant"),
+            ("bar", "place.category.bar"), ("night_club", "place.category.nightClub"), ("movie_theater", "place.category.movieTheater"),
+            ("shopping_mall", "place.category.shoppingMall"), ("store", "place.category.store"),
+            ("lodging", "place.category.lodging"), ("spa", "place.category.spa"), ("gym", "place.category.gym"),
+            ("hospital", "place.category.hospital"), ("pharmacy", "place.category.pharmacy"),
+            ("subway_station", "place.category.subwayStation"), ("train_station", "place.category.trainStation"),
+            ("tourist_attraction", "place.category.touristAttraction"), ("point_of_interest", "place.category.pointOfInterest"),
         ]
-        for (type, label) in priority {
-            if types.contains(type) { return label }
+        for (type, key) in priority {
+            if types.contains(type) { return L(key) }
         }
         return nil
     }

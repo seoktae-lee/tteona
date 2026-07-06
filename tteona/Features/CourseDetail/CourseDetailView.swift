@@ -53,7 +53,7 @@ struct CourseDetailView: View {
                             .font(.tte(16, .medium))
                             .foregroundColor(.tteDarkGray)
                     }
-                    .accessibilityLabel("닫기")
+                    .accessibilityLabel(L("common.close"))
                 }
 
                 ToolbarItem(placement: .topBarTrailing) {
@@ -68,7 +68,7 @@ struct CourseDetailView: View {
                                         dismiss()
                                     }
                                 } label: {
-                                    Label("코스 삭제", systemImage: "trash")
+                                    Label(L("coursedetail.delete"), systemImage: "trash")
                                 }
                             } label: {
                                 Image(systemName: "ellipsis")
@@ -80,12 +80,12 @@ struct CourseDetailView: View {
                                 Button(role: .destructive) {
                                     showReportAlert = true
                                 } label: {
-                                    Label("코스 신고하기", systemImage: "exclamationmark.bubble")
+                                    Label(L("detail.reportCourse"), systemImage: "exclamationmark.bubble")
                                 }
                                 Button {
                                     showBlockAlert = true
                                 } label: {
-                                    Label("작성자 차단하기", systemImage: "person.crop.circle.badge.xmark")
+                                    Label(L("detail.blockAuthor"), systemImage: "person.crop.circle.badge.xmark")
                                 }
                             } label: {
                                 Image(systemName: "ellipsis")
@@ -110,62 +110,67 @@ struct CourseDetailView: View {
             }
             .environmentObject(roomService)
         }
-        .confirmationDialog("진행 중인 코스가 있어요", isPresented: $showOtherCourseAlert, titleVisibility: .visible) {
-            Button("이어서 하기") {
+        .confirmationDialog(L("detail.otherCourse.title"), isPresented: $showOtherCourseAlert, titleVisibility: .visible) {
+            Button(L("detail.otherCourse.resume")) {
                 if let saved = sessionStore.loadTodaySession() {
                     onStartSession?(Set(saved.roomIds))
                 }
             }
-            Button("새로 시작", role: .destructive) {
+            Button(L("detail.otherCourse.startNew"), role: .destructive) {
                 sessionStore.clear()
                 selectedRoomIds = []
                 showRoomSelect = true
             }
-            Button("취소", role: .cancel) {}
+            Button(L("common.cancel"), role: .cancel) {}
         } message: {
             if let saved = sessionStore.loadTodaySession() {
-                Text("'\(saved.course.courseName)' 코스가 진행 중이에요.\n이어서 할까요, 아니면 새로 시작할까요?")
+                Text(L("detail.otherCourse.message", saved.course.courseName))
             }
         }
-        .alert("좋아요 오류", isPresented: $showLikeErrorAlert) {
-            Button("확인", role: .cancel) {}
+        .alert(L("coursedetail.likeError"), isPresented: $showLikeErrorAlert) {
+            Button(L("common.ok"), role: .cancel) {}
         } message: {
             Text(likeErrorMessage)
         }
         .sheet(item: $selectedPlaceForDetail) { place in
             PlaceDetailSheet(place: place)
         }
-        .confirmationDialog("신고 사유를 선택해주세요", isPresented: $showReportAlert, titleVisibility: .visible) {
-            ForEach(["영리목적/홍보", "음란성/선정성", "욕설/비하", "아동 유해 콘텐츠", "기타"], id: \.self) { reason in
-                Button(reason) {
+        .confirmationDialog(L("report.selectReason"), isPresented: $showReportAlert, titleVisibility: .visible) {
+            // 신고 사유는 운영 검토용으로 한국어 원문을 서버에 제출하고, 버튼 표기만 현지화
+            ForEach([("report.reason.promo", "영리목적/홍보"),
+                     ("report.reason.sexual", "음란성/선정성"),
+                     ("report.reason.abuse", "욕설/비하"),
+                     ("report.reason.child", "아동 유해 콘텐츠"),
+                     ("report.reason.other", "기타")], id: \.1) { key, reason in
+                Button(L(key)) {
                     submitCourseReport(reason: reason)
                 }
             }
-            Button("취소", role: .cancel) {}
+            Button(L("common.cancel"), role: .cancel) {}
         }
-        .alert("작성자 차단", isPresented: $showBlockAlert) {
-            Button("차단", role: .destructive) {
+        .alert(L("block.author.title"), isPresented: $showBlockAlert) {
+            Button(L("block.action"), role: .destructive) {
                 blockAuthor()
             }
-            Button("취소", role: .cancel) {}
+            Button(L("common.cancel"), role: .cancel) {}
         } message: {
-            Text("이 작성자를 차단하시겠어요? 차단하시면 이 작성자가 등록한 모든 코스와 후기가 숨겨집니다.")
+            Text(L("block.author.message"))
         }
-        .alert("신고 완료", isPresented: $showReportSuccessAlert) {
-            Button("확인", role: .cancel) {}
+        .alert(L("report.done.title"), isPresented: $showReportSuccessAlert) {
+            Button(L("common.ok"), role: .cancel) {}
         } message: {
-            Text("신고가 정상 접수되었습니다. 24시간 이내에 검토 및 삭제 처리됩니다.")
+            Text(L("report.done.message"))
         }
-        .alert("차단 완료", isPresented: $showBlockSuccessAlert) {
-            Button("확인", role: .cancel) {
+        .alert(L("block.done.title"), isPresented: $showBlockSuccessAlert) {
+            Button(L("common.ok"), role: .cancel) {
                 dismiss()
             }
         } message: {
-            Text("작성자가 차단되었습니다. 목록에서 제외하기 위해 화면을 닫습니다.")
+            Text(L("block.done.message"))
         }
-        .alert("처리 실패", isPresented: Binding(get: { actionErrorMessage != nil },
+        .alert(L("common.actionFailed"), isPresented: Binding(get: { actionErrorMessage != nil },
                                               set: { if !$0 { actionErrorMessage = nil } })) {
-            Button("확인", role: .cancel) {}
+            Button(L("common.ok"), role: .cancel) {}
         } message: {
             Text(actionErrorMessage ?? "")
         }
@@ -184,7 +189,7 @@ struct CourseDetailView: View {
                 )
                 showReportSuccessAlert = true
             } catch {
-                actionErrorMessage = "신고 접수에 실패했어요. 잠시 후 다시 시도해주세요."
+                actionErrorMessage = L("detail.reportFailed")
             }
         }
     }
@@ -196,7 +201,7 @@ struct CourseDetailView: View {
                 try await userService.blockUser(uid: currentUid, blockedUid: course.authorId)
                 showBlockSuccessAlert = true
             } catch {
-                actionErrorMessage = "차단에 실패했어요. 잠시 후 다시 시도해주세요."
+                actionErrorMessage = L("detail.blockFailed")
             }
         }
     }
@@ -229,7 +234,7 @@ struct CourseDetailView: View {
                 if let author = courseAuthor, author.isVerified {
                     HStack(spacing: 5) {
                         VerifiedBadge(creatorLabel: author.creatorLabel)
-                        Text("크리에이터 코스")
+                        Text(L("coursedetail.creatorCourse"))
                             .font(.tte(11))
                             .foregroundColor(.tteOrange.opacity(0.8))
                         Spacer()
@@ -275,7 +280,7 @@ struct CourseDetailView: View {
 
                 HStack {
                     HStack(spacing: 6) {
-                        Text(course.tag.rawValue)
+                        Text(course.tag.displayName)
                             .font(.tte(12, .medium))
                             .foregroundColor(.tteOrange)
                             .padding(.horizontal, 10)
@@ -302,7 +307,7 @@ struct CourseDetailView: View {
                 .padding(.horizontal, 20)
                 .padding(.vertical, 10)
 
-                Text("장소 목록")
+                Text(L("coursedetail.placeList"))
                     .font(.tte(14, .semibold))
                     .foregroundColor(.tteDarkGray)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -340,7 +345,7 @@ struct CourseDetailView: View {
                 showRoomSelect = true
             }
         } label: {
-            Text("이 코스로 떠나기")
+            Text(L("coursedetail.goWithCourse"))
                 .font(.tte(17, .semibold))
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
@@ -374,7 +379,7 @@ struct CourseDetailView: View {
                 .foregroundColor(isLiked ? .red : .tteDarkGray)
         }
         .disabled(isLikeProcessing)
-        .accessibilityLabel(isLiked ? "좋아요 취소" : "좋아요")
+        .accessibilityLabel(isLiked ? L("detail.unlike") : L("detail.like"))
     }
 
     private var shareButton: some View {
@@ -385,7 +390,7 @@ struct CourseDetailView: View {
                 .font(.tte(18, .medium))
                 .foregroundColor(.tteDarkGray)
         }
-        .accessibilityLabel("코스 공유")
+        .accessibilityLabel(L("detail.shareCourse"))
     }
 
     private func shareCourse() {
@@ -440,7 +445,7 @@ struct PlacePagePhoto: View {
                         HStack(spacing: 4) {
                             Image(systemName: "photo.stack.fill")
                                 .font(.tte(10))
-                            Text("사진·리뷰")
+                            Text(L("coursedetail.photosReviews"))
                                 .font(.tte(11, .semibold))
                         }
                         .foregroundColor(.white)
@@ -569,7 +574,7 @@ struct PlaceRow: View {
             HStack(spacing: 3) {
                 Image(systemName: "star.fill")
                     .font(.tte(9))
-                Text("리뷰 보기")
+                Text(L("coursedetail.viewReviews"))
                     .font(.tte(11, .medium))
                 Image(systemName: "chevron.right")
                     .font(.tte(9, .semibold))

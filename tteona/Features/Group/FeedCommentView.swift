@@ -40,7 +40,7 @@ struct MemberChatView: View {
     @FocusState private var isInputFocused: Bool
 
     private var uid: String { authService.currentUser?.uid ?? "" }
-    private var nickname: String { userService.currentUser?.nickname ?? "멤버" }
+    private var nickname: String { userService.currentUser?.nickname ?? L("session.member") }
 
     var body: some View {
         NavigationStack {
@@ -55,7 +55,7 @@ struct MemberChatView: View {
                         Image(systemName: "bubble.left.and.bubble.right")
                             .font(.tte(36))
                             .foregroundColor(.tteMediumGray.opacity(0.4))
-                        Text("아직 활동이 없어요")
+                        Text(L("comment.noActivity"))
                             .font(.tte(14))
                             .foregroundColor(.tteMediumGray)
                     }
@@ -66,11 +66,11 @@ struct MemberChatView: View {
                 if replyTarget != nil { replyBar }
                 inputBar
             }
-            .navigationTitle("\(memberNickname)님의 오늘")
+            .navigationTitle(L("comment.memberToday", memberNickname))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("닫기") { dismiss() }
+                    Button(L("common.close")) { dismiss() }
                         .foregroundColor(.tteDarkGray)
                 }
             }
@@ -149,7 +149,7 @@ struct MemberChatView: View {
     // MARK: - 입력창
     private var inputBar: some View {
         HStack(spacing: 10) {
-            TextField("댓글 달기...", text: $commentText, axis: .vertical)
+            TextField(L("comment.placeholder"), text: $commentText, axis: .vertical)
                 .font(.tte(15))
                 .lineLimit(1...4)
                 .focused($isInputFocused)
@@ -231,13 +231,13 @@ struct FeedEventRow: View {
 
     private var message: String {
         switch item.type {
-        case .tripStart:     return "\(item.courseName) 여행을 시작했어요!"
-        case .tripEnd:       return "\(item.courseName) 여행을 종료했어요!"
-        case .arrival:       return "\(item.placeName ?? "")에 도착했어요!"
-        case .photo:         return "사진을 공유했어요"
-        case .freeTripStart: return "나의 오늘을 시작했어요!"
-        case .freeCapture:   return "\(item.placeName ?? "이곳")에서 영상을 남겼어요"
-        case .freeTripEnd:   return "오늘 \(item.courseName) 기록을 마쳤어요"
+        case .tripStart:     return L("commentfeed.tripStart", item.courseName)
+        case .tripEnd:       return L("commentfeed.tripEnd", item.courseName)
+        case .arrival:       return L("commentfeed.arrival", item.placeName ?? "")
+        case .photo:         return L("commentfeed.photo")
+        case .freeTripStart: return L("commentfeed.freeTripStart")
+        case .freeCapture:   return L("commentfeed.freeCapture", item.placeName ?? L("feed.here"))
+        case .freeTripEnd:   return L("commentfeed.freeTripEnd", item.courseName)
         }
     }
 
@@ -246,7 +246,7 @@ struct FeedEventRow: View {
             // 지도 썸네일 카드
             let coord = CLLocationCoordinate2D(latitude: lat, longitude: lon)
             Button {
-                openInMap(latitude: lat, longitude: lon, name: item.placeName ?? "영상 기록 장소")
+                openInMap(latitude: lat, longitude: lon, name: item.placeName ?? L("comment.videoPlace"))
             } label: {
                 VStack(alignment: .leading, spacing: 0) {
                     Map(position: .constant(.region(MKCoordinateRegion(
@@ -397,8 +397,8 @@ struct CommentRow: View {
                     showReplyAction = true
                 }
                 .confirmationDialog("", isPresented: $showReplyAction) {
-                    Button("↩ 답장") { onReply?() }
-                    Button("취소", role: .cancel) {}
+                    Button(L("comment.replyAction")) { onReply?() }
+                    Button(L("common.cancel"), role: .cancel) {}
                 }
 
                 Text(comment.createdAt.relativeDescription)
@@ -416,9 +416,9 @@ struct CommentRow: View {
 extension Date {
     var relativeDescription: String {
         let diff = Int(Date().timeIntervalSince(self))
-        if diff < 60 { return "방금 전" }
-        if diff < 3600 { return "\(diff / 60)분 전" }
-        if diff < 86400 { return "\(diff / 3600)시간 전" }
-        return "\(diff / 86400)일 전"
+        if diff < 60 { return L("time.justNow") }
+        if diff < 3600 { return L("time.minutesAgo", diff / 60) }
+        if diff < 86400 { return L("time.hoursAgo", diff / 3600) }
+        return L("time.daysAgo", diff / 86400)
     }
 }

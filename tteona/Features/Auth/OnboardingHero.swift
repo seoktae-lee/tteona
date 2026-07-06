@@ -117,7 +117,7 @@ struct SplashHeroView: View {
                     .opacity(appeared ? 1 : 0)
                     .offset(y: appeared ? 0 : 14)
 
-                Text("특별한 순간을 영상으로 기록하세요")
+                Text(L("auth.tagline"))
                     .font(.tte(16))
                     .foregroundColor(.tteMediumGray)
                     .opacity(appeared ? 1 : 0)
@@ -163,29 +163,29 @@ struct OnboardingFeatureShowcase: View {
     private let slides: [HeroSlide] = [
         HeroSlide(
             id: 0, mascot: "tteoni-travel",
-            title: "지도에서 코스 발견",
-            subtitle: "전 세계 여행 코스를 지도에서 한눈에.\n마음에 드는 코스로 바로 떠나보세요",
+            title: L("onboarding.slide1.title"),
+            subtitle: L("onboarding.slide1.subtitle"),
             tint: Color(hex: "#FF6B35"),
             chips: [("map.fill", -140), ("mappin.and.ellipse", -40), ("airplane.departure", 95)]
         ),
         HeroSlide(
             id: 1, mascot: "tteoni-wink",
-            title: "도착하면, 딱 5초 촬영",
-            subtitle: "장소에 도착하면 나루가 알려드려요.\n5초씩만 담아도 하루가 기록돼요",
+            title: L("onboarding.slide2.title"),
+            subtitle: L("onboarding.slide2.subtitle"),
             tint: Color(hex: "#2EA8C4"),
             chips: [("bell.badge.fill", -135), ("camera.fill", -45), ("timer", 100)]
         ),
         HeroSlide(
             id: 2, mascot: "tteoni-thumbsup",
-            title: "Vlog는 자동 완성",
-            subtitle: "여행이 끝나면 촬영한 클립을 모아\n감성 Vlog 영상을 만들어드려요",
+            title: L("onboarding.slide3.title"),
+            subtitle: L("onboarding.slide3.subtitle"),
             tint: Color(hex: "#8B5CF6"),
             chips: [("film.stack", -140), ("wand.and.stars", -35), ("music.note", 90)]
         ),
         HeroSlide(
             id: 3, mascot: "tteoni-jump",
-            title: "함께라서 더 좋아",
-            subtitle: "친구·가족과 그룹을 만들어\n코스와 '나의 오늘'을 공유해보세요",
+            title: L("onboarding.slide4.title"),
+            subtitle: L("onboarding.slide4.subtitle"),
             tint: Color(hex: "#FF4F79"),
             chips: [("person.2.fill", -140), ("bubble.left.and.bubble.right.fill", -40), ("heart.fill", 95)]
         ),
@@ -210,7 +210,7 @@ struct OnboardingFeatureShowcase: View {
                         .scaledToFit()
                         .frame(height: 22)
                     Spacer()
-                    Button("건너뛰기", action: onFinish)
+                    Button(L("common.skip"), action: onFinish)
                         .font(.tte(14))
                         .foregroundColor(.tteMediumGray)
                 }
@@ -270,7 +270,7 @@ struct OnboardingFeatureShowcase: View {
                         advance(forward: true)
                     }
                 } label: {
-                    Text(isLast ? "시작하기" : "다음")
+                    Text(isLast ? L("onboarding.start") : L("common.next"))
                         .font(.tte(17, .semibold))
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)

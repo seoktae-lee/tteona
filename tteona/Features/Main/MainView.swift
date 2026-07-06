@@ -103,7 +103,7 @@ struct MainView: View {
                     HStack(spacing: 8) {
                         ProgressView()
                             .tint(.white)
-                        Text("코스 불러오는 중...")
+                        Text(L("main.loadingCourses"))
                             .font(.tte(13))
                             .foregroundColor(.white)
                     }
@@ -276,7 +276,7 @@ struct MainView: View {
                             .font(.tte(14, .medium))
                             .foregroundColor(.tteMediumGray)
                         
-                        TextField("코스 검색 · 엔터로 지역 이동", text: $searchText)
+                        TextField(L("main.searchPlaceholder"), text: $searchText)
                             .font(.tte(14))
                             .foregroundColor(.tteDarkGray)
                             .autocorrectionDisabled()
@@ -291,7 +291,7 @@ struct MainView: View {
                                 Image(systemName: "xmark.circle.fill")
                                     .foregroundColor(.tteMediumGray)
                             }
-                            .accessibilityLabel("검색어 지우기")
+                            .accessibilityLabel(L("main.clearSearch"))
                         }
 
                         Divider()
@@ -305,7 +305,7 @@ struct MainView: View {
                                 .font(.tte(14))
                                 .foregroundColor(.tteOrange)
                         }
-                        .accessibilityLabel("지역 검색")
+                        .accessibilityLabel(L("region.title"))
                     }
                     .padding(.horizontal, 12)
                     .frame(height: buttonSize)
@@ -315,9 +315,9 @@ struct MainView: View {
                     // 코스 필터
                     HStack(spacing: 0) {
                         ForEach([
-                            ("square.grid.2x2.fill", CourseFilter.all,   "전체 코스"),
-                            ("heart.fill",            .liked, "찜한 코스"),
-                            ("person.fill",           .mine,  "내 코스")
+                            ("square.grid.2x2.fill", CourseFilter.all,   L("main.filter.all")),
+                            ("heart.fill",            .liked, L("main.filter.liked")),
+                            ("person.fill",           .mine,  L("main.filter.mine"))
                         ], id: \.0) { icon, filter, label in
                             Button {
                                 withAnimation(.easeInOut(duration: 0.2)) { courseFilter = filter }
@@ -406,11 +406,11 @@ struct MainView: View {
             .padding(.bottom, 16)
 
             VStack(spacing: 6) {
-                Text("진행 중인 코스가 있어요")
+                Text(L("main.activeCourseBanner"))
                     .font(.tte(20, .bold))
                     .foregroundColor(.tteDarkGray)
                 if let saved {
-                    Text("\(saved.course.courseName) · \(saved.visitedPlaceOrders.count)/\(saved.orderedPlaces.count)곳 완료")
+                    Text(L("main.courseProgress", saved.course.courseName, saved.visitedPlaceOrders.count, saved.orderedPlaces.count))
                         .font(.tte(14))
                         .foregroundColor(.tteMediumGray)
                 }
@@ -426,7 +426,7 @@ struct MainView: View {
                 } label: {
                     HStack(spacing: 10) {
                         Image(systemName: "play.fill").font(.tte(15))
-                        Text("이어서 기록하기").font(.tte(16, .semibold))
+                        Text(L("main.continueRecording")).font(.tte(16, .semibold))
                     }
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity).frame(height: 56)
@@ -441,7 +441,7 @@ struct MainView: View {
                 } label: {
                     HStack(spacing: 10) {
                         Image(systemName: "arrow.counterclockwise").font(.tte(15))
-                        Text("새로 시작하기")
+                        Text(L("main.startFresh"))
                             .font(.tte(16, .medium))
                     }
                     .foregroundColor(.tteDarkGray)
@@ -471,7 +471,7 @@ struct MainView: View {
                     HStack(spacing: 8) {
                         Image(systemName: "figure.walk")
                             .font(.tte(17, .semibold))
-                        Text("나의 오늘")
+                        Text(L("main.myToday"))
                             .font(.tte(17, .bold))
                     }
                     .foregroundColor(.white)
@@ -497,7 +497,7 @@ struct MainView: View {
                                 VStack(spacing: 3) {
                                     Image(systemName: "figure.walk")
                                         .font(.tte(16, .semibold))
-                                    Text("이어하기")
+                                    Text(L("main.resume"))
                                         .font(.tte(9, .medium))
                                 }
                                 .foregroundColor(.tteOrange)
@@ -515,7 +515,7 @@ struct MainView: View {
                                 VStack(spacing: 3) {
                                     Image(systemName: "map.fill")
                                         .font(.tte(16, .semibold))
-                                    Text("코스")
+                                    Text(L("main.course"))
                                         .font(.tte(9, .medium))
                                 }
                                 .foregroundColor(.tteOrange)
@@ -541,7 +541,7 @@ struct MainView: View {
                             .frame(width: 48, height: 48)
                             .background(Circle().fill(Color.tteBackground).shadow(color: .black.opacity(0.15), radius: 8, y: 2))
                     }
-                    .accessibilityLabel("현재 위치로 이동")
+                    .accessibilityLabel(L("main.moveToCurrentLocation"))
                     .padding(.trailing, 24)
                 }
             }
@@ -609,7 +609,7 @@ struct CourseCardView: View {
             // 텍스트 콘텐츠
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
-                    Text(course.tag.rawValue)
+                    Text(course.tag.displayName)
                         .font(.tte(11, .semibold))
                         .foregroundColor(.white)
                         .padding(.horizontal, 8)
@@ -630,7 +630,7 @@ struct CourseCardView: View {
                     HStack(spacing: 3) {
                         Image(systemName: "mappin.circle.fill")
                             .font(.tte(12))
-                        Text("\(course.places.count)곳")
+                        Text(L("main.placesCount", course.places.count))
                             .font(.tte(12))
                     }
                     .foregroundColor(.white.opacity(0.8))
@@ -666,11 +666,11 @@ extension MainView {
                 .font(.tte(40))
                 .foregroundColor(.tteOrange.opacity(0.6))
             
-            Text("검색 결과가 없어요")
+            Text(L("main.noSearchResults"))
                 .font(.tte(17, .bold))
                 .foregroundColor(.tteDarkGray)
-            
-            Text("다른 키워드로 검색해보세요!")
+
+            Text(L("main.tryOtherKeyword"))
                 .font(.tte(14))
                 .foregroundColor(.tteMediumGray)
         }
@@ -736,7 +736,7 @@ struct CoursePreviewCard: View {
                             .background(Circle().fill(Color(UIColor.secondarySystemBackground)))
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("미리보기 닫기")
+                    .accessibilityLabel(L("main.closePreview"))
                 }
                 .padding(.horizontal, 16)
             }
@@ -766,7 +766,7 @@ struct CoursePreviewCard: View {
                         }
                     }
                     HStack(spacing: 6) {
-                        Text(course.tag.rawValue)
+                        Text(course.tag.displayName)
                             .font(.tte(11, .semibold))
                             .foregroundColor(.tteOrange)
                             .padding(.horizontal, 8).padding(.vertical, 3)
@@ -776,7 +776,7 @@ struct CoursePreviewCard: View {
                                 .font(.tte(11, .medium))
                                 .foregroundColor(.tteOrange.opacity(0.8))
                         }
-                        Text("장소 \(course.displayPlaces.count)개")
+                        Text(L("main.placeCount", course.displayPlaces.count))
                             .font(.tte(12))
                             .foregroundColor(.tteMediumGray)
                         HStack(spacing: 3) {

@@ -17,10 +17,10 @@ struct RoomSelectView: View {
 
             // 헤더
             VStack(spacing: 6) {
-                Text("어디에 공유할까요?")
+                Text(L("roomselect.title"))
                     .font(.tte(22, .bold))
                     .foregroundColor(.tteDarkGray)
-                Text("선택한 그룹에 오늘의 기록이 공유돼요")
+                Text(L("roomselect.subtitle"))
                     .font(.tte(14))
                     .foregroundColor(.tteMediumGray)
             }
@@ -46,7 +46,7 @@ struct RoomSelectView: View {
                                 Text(room.name)
                                     .font(.tte(16, .semibold))
                                     .foregroundColor(.tteDarkGray)
-                                Text("멤버 \(room.memberIds.count)명")
+                                Text(L("roomselect.members", room.memberIds.count))
                                     .font(.tte(13))
                                     .foregroundColor(.tteMediumGray)
                             }
@@ -74,7 +74,7 @@ struct RoomSelectView: View {
                 Button {
                     onConfirm()
                 } label: {
-                    Text(selectedRoomIds.isEmpty ? "공유 없이 시작" : "시작하기")
+                    Text(selectedRoomIds.isEmpty ? L("roomselect.startWithoutSharing") : L("roomselect.start"))
                         .font(.tte(17, .bold))
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
@@ -85,7 +85,7 @@ struct RoomSelectView: View {
                 Button {
                     dismiss()
                 } label: {
-                    Text("취소")
+                    Text(L("common.cancel"))
                         .font(.tte(15))
                         .foregroundColor(.tteMediumGray)
                 }

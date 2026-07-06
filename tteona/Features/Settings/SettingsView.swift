@@ -9,7 +9,7 @@ struct SettingsView: View {
     @State private var showDeleteAccountAlert = false
     @State private var isDeletingAccount = false
     @State private var showDeleteFailedAlert = false
-    @State private var deleteFailedMessage = "회원 탈퇴에 실패했어요. 잠시 후 다시 시도해주세요."
+    @State private var deleteFailedMessage = L("settings.deleteFailed.message")
     @State private var notificationGranted: Bool? = nil
     @State private var avatarPickerItem: PhotosPickerItem?
     @State private var isUploadingAvatar = false
@@ -24,17 +24,17 @@ struct SettingsView: View {
                 appSection
                 accountSection
             }
-            .navigationTitle("설정")
+            .navigationTitle(L("settings.title"))
             .navigationBarTitleDisplayMode(.large)
         }
-        .alert("로그아웃", isPresented: $showSignOutAlert) {
-            Button("로그아웃", role: .destructive) { authService.signOut() }
-            Button("취소", role: .cancel) {}
+        .alert(L("settings.signOut"), isPresented: $showSignOutAlert) {
+            Button(L("settings.signOut"), role: .destructive) { authService.signOut() }
+            Button(L("common.cancel"), role: .cancel) {}
         } message: {
-            Text("정말 로그아웃 하시겠어요?")
+            Text(L("settings.signOut.confirm"))
         }
-        .alert("회원 탈퇴", isPresented: $showDeleteAccountAlert) {
-            Button("탈퇴", role: .destructive) {
+        .alert(L("settings.deleteAccount"), isPresented: $showDeleteAccountAlert) {
+            Button(L("settings.deleteAccount.confirmButton"), role: .destructive) {
                 guard let uid = authService.currentUser?.uid else { return }
                 isDeletingAccount = true
                 Task {
@@ -42,17 +42,17 @@ struct SettingsView: View {
                     do {
                         try await authService.deleteAccount(userId: uid)
                     } catch {
-                        deleteFailedMessage = authService.errorMessage ?? "회원 탈퇴에 실패했어요. 잠시 후 다시 시도해주세요."
+                        deleteFailedMessage = authService.errorMessage ?? L("settings.deleteFailed.message")
                         showDeleteFailedAlert = true
                     }
                 }
             }
-            Button("취소", role: .cancel) {}
+            Button(L("common.cancel"), role: .cancel) {}
         } message: {
-            Text("탈퇴 시 코스, 그룹, 계정 정보가 모두 삭제되며 복구할 수 없어요.")
+            Text(L("settings.deleteAccount.message"))
         }
-        .alert("탈퇴 실패", isPresented: $showDeleteFailedAlert) {
-            Button("확인", role: .cancel) {}
+        .alert(L("settings.deleteFailed.title"), isPresented: $showDeleteFailedAlert) {
+            Button(L("common.ok"), role: .cancel) {}
         } message: {
             Text(deleteFailedMessage)
         }
@@ -69,7 +69,7 @@ struct SettingsView: View {
                     Color.black.opacity(0.3).ignoresSafeArea()
                     VStack(spacing: 14) {
                         ProgressView().tint(.white).scaleEffect(1.3)
-                        Text("탈퇴 처리 중...")
+                        Text(L("settings.deleting"))
                             .font(.tte(14))
                             .foregroundColor(.white)
                     }
@@ -124,7 +124,7 @@ struct SettingsView: View {
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     Text(userService.currentUser?.nickname.isEmpty == false
-                         ? userService.currentUser!.nickname : "닉네임 없음")
+                         ? userService.currentUser!.nickname : L("settings.noNickname"))
                         .font(.tte(17, .semibold))
                         .foregroundColor(.tteDarkGray)
                     Text(authService.currentUser?.email ?? "")
@@ -138,7 +138,7 @@ struct SettingsView: View {
                 TravelStatsView()
                     .environmentObject(authService)
             } label: {
-                Label("내 여행 통계", systemImage: "chart.bar.fill")
+                Label(L("settings.travelStats"), systemImage: "chart.bar.fill")
             }
         }
     }
@@ -157,12 +157,12 @@ struct SettingsView: View {
                         )
                         .frame(width: 28)
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(pro.isPro ? "tteona PRO 이용 중" : "tteona PRO")
+                        Text(pro.isPro ? L("settings.pro.active") : "tteona PRO")
                             .font(.tte(16, .semibold))
                             .foregroundColor(.tteDarkGray)
                         Text(pro.isPro
-                             ? "모든 프리미엄 기능이 켜져 있어요"
-                             : "워터마크 제거 · 멀티포맷 · 5분 영상 · 우선 렌더링")
+                             ? L("settings.pro.activeDesc")
+                             : L("settings.pro.features"))
                             .font(.tte(12))
                             .foregroundColor(.tteMediumGray)
                     }
@@ -184,9 +184,9 @@ struct SettingsView: View {
     }
 
     private var appSection: some View {
-        Section("앱 정보") {
+        Section(L("settings.appInfo")) {
             HStack {
-                Label("버전", systemImage: "info.circle")
+                Label(L("settings.version"), systemImage: "info.circle")
                 Spacer()
                 Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "-")
                     .foregroundColor(.tteMediumGray)
@@ -197,11 +197,11 @@ struct SettingsView: View {
                 }
             } label: {
                 HStack {
-                    Label("푸시알림", systemImage: "bell")
+                    Label(L("settings.push"), systemImage: "bell")
                         .foregroundColor(.tteDarkGray)
                     Spacer()
                     if let granted = notificationGranted {
-                        Text(granted ? "켜짐" : "꺼짐")
+                        Text(granted ? L("common.on") : L("common.off"))
                             .foregroundColor(granted ? .tteMediumGray : .red)
                     }
                     Image(systemName: "chevron.right")
@@ -209,32 +209,27 @@ struct SettingsView: View {
                         .foregroundColor(Color(UIColor.tertiaryLabel))
                 }
             }
-            Button {
-                if let url = URL(string: UIApplication.openSettingsURLString) {
-                    UIApplication.shared.open(url)
-                }
+            NavigationLink {
+                LanguageSettingsView()
             } label: {
                 HStack {
-                    Label("언어", systemImage: "globe")
+                    Label(L("settings.language"), systemImage: "globe")
                         .foregroundColor(.tteDarkGray)
                     Spacer()
-                    Text("한국어")
+                    Text("\(LanguageManager.shared.language.flag) \(LanguageManager.shared.language.nativeName)")
                         .foregroundColor(.tteMediumGray)
-                    Image(systemName: "chevron.right")
-                        .font(.tte(12, .medium))
-                        .foregroundColor(Color(UIColor.tertiaryLabel))
                 }
             }
             Link(destination: URL(string: "https://tteona.kr/privacy.html")!) {
-                Label("개인정보 처리방침", systemImage: "lock.shield")
+                Label(L("settings.privacy"), systemImage: "lock.shield")
                     .foregroundColor(.tteDarkGray)
             }
             Link(destination: URL(string: "https://tteona.kr/terms.html")!) {
-                Label("이용약관", systemImage: "doc.text")
+                Label(L("settings.terms"), systemImage: "doc.text")
                     .foregroundColor(.tteDarkGray)
             }
             Link(destination: URL(string: "https://tteona.kr/child-safety.html")!) {
-                Label("아동 안전 기준 정책", systemImage: "checkmark.shield")
+                Label(L("settings.childSafety"), systemImage: "checkmark.shield")
                     .foregroundColor(.tteDarkGray)
             }
             Button {
@@ -242,7 +237,7 @@ struct SettingsView: View {
                     UIApplication.shared.open(url)
                 }
             } label: {
-                Label("문의하기", systemImage: "envelope")
+                Label(L("settings.contact"), systemImage: "envelope")
                     .foregroundColor(.tteDarkGray)
             }
         }
@@ -267,25 +262,25 @@ struct SettingsView: View {
     }
 
     private var accountSection: some View {
-        Section("계정") {
+        Section(L("settings.account")) {
             NavigationLink {
                 BlockedUsersView()
                     .environmentObject(userService)
                     .environmentObject(authService)
             } label: {
-                Label("차단된 사용자 관리", systemImage: "person.crop.circle.badge.xmark")
+                Label(L("settings.blockedUsers"), systemImage: "person.crop.circle.badge.xmark")
                     .foregroundColor(.tteDarkGray)
             }
             Button {
                 showSignOutAlert = true
             } label: {
-                Label("로그아웃", systemImage: "arrow.right.square")
+                Label(L("settings.signOut"), systemImage: "arrow.right.square")
                     .foregroundColor(.red)
             }
             Button {
                 showDeleteAccountAlert = true
             } label: {
-                Label("회원 탈퇴", systemImage: "person.crop.circle.badge.minus")
+                Label(L("settings.deleteAccount"), systemImage: "person.crop.circle.badge.minus")
                     .foregroundColor(.red)
             }
         }

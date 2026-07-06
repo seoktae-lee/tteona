@@ -48,7 +48,7 @@ struct AuthView: View {
                             Button {
                                 showResetAlert = true
                             } label: {
-                                Text("비밀번호를 잊으셨나요?")
+                                Text(L("auth.forgotPassword"))
                                     .font(.tte(13))
                                     .foregroundColor(.tteMediumGray)
                                     .underline()
@@ -64,28 +64,28 @@ struct AuthView: View {
             }
         }
         .onTapGesture { focusedField = nil }
-        .alert("비밀번호 재설정", isPresented: $showResetAlert) {
-            TextField("이메일 주소", text: $email)
+        .alert(L("auth.resetPassword"), isPresented: $showResetAlert) {
+            TextField(L("auth.emailAddress"), text: $email)
                 .keyboardType(.emailAddress)
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
-            Button("전송") {
+            Button(L("auth.send")) {
                 Task {
                     let success = await authService.sendPasswordReset(email: email)
                     if success { resetSent = true }
                 }
             }
-            Button("취소", role: .cancel) {}
+            Button(L("common.cancel"), role: .cancel) {}
         } message: {
-            Text("가입한 이메일 주소를 입력하면 비밀번호 재설정 링크를 보내드려요.")
+            Text(L("auth.resetPassword.message"))
         }
-        .alert("이메일을 보냈어요", isPresented: $resetSent) {
-            Button("확인", role: .cancel) {}
+        .alert(L("auth.emailSent.title"), isPresented: $resetSent) {
+            Button(L("common.ok"), role: .cancel) {}
         } message: {
-            Text("입력하신 이메일로 비밀번호 재설정 링크를 전송했어요. 메일함을 확인해주세요.")
+            Text(L("auth.emailSent.message"))
         }
-        .alert("인증 메일", isPresented: $resendSent) {
-            Button("확인", role: .cancel) {}
+        .alert(L("auth.verificationMail"), isPresented: $resendSent) {
+            Button(L("common.ok"), role: .cancel) {}
         } message: {
             Text(resendMessage)
         }
@@ -111,15 +111,15 @@ struct AuthView: View {
             .padding(.bottom, 40)
 
             VStack(spacing: 12) {
-                Text("이메일을 확인해주세요")
+                Text(L("auth.checkEmail.title"))
                     .font(.tte(24, .bold))
                     .foregroundColor(.tteDarkGray)
-                Text("가입하신 이메일로 인증 링크를 보냈어요.\n링크를 클릭한 후 아래 버튼을 눌러주세요.")
+                Text(L("auth.checkEmail.message"))
                     .font(.tte(15))
                     .foregroundColor(.tteMediumGray)
                     .multilineTextAlignment(.center)
                     .lineSpacing(5)
-                Text("메일이 보이지 않으면 스팸함도 확인해주세요.")
+                Text(L("auth.checkSpam"))
                     .font(.tte(12))
                     .foregroundColor(Color(UIColor.tertiaryLabel))
                     .padding(.top, 4)
@@ -142,7 +142,7 @@ struct AuthView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "arrow.clockwise")
                             .font(.tte(13, .medium))
-                        Text(resendCooldown > 0 ? "재전송 \(resendCooldown)초 후 가능" : "인증 메일 재전송")
+                        Text(resendCooldown > 0 ? L("auth.resendIn", resendCooldown) : L("auth.resendVerification"))
                             .font(.tte(14, .medium))
                     }
                     .foregroundColor(resendCooldown > 0 ? Color(UIColor.tertiaryLabel) : .tteOrange)
@@ -160,7 +160,7 @@ struct AuthView: View {
                         if isCheckingVerification {
                             ProgressView().tint(.white)
                         } else {
-                            Text("인증 완료 후 시작하기")
+                            Text(L("auth.startAfterVerify"))
                                 .font(.tte(17, .semibold))
                                 .foregroundColor(.white)
                         }
@@ -193,14 +193,14 @@ struct AuthView: View {
                     await authService.refreshOnboardingStatus(uid: user.uid)
                     authService.verificationEmailSent = false
                 } else {
-                    authService.errorMessage = "아직 인증이 완료되지 않았어요.\n메일함에서 링크를 클릭한 후 다시 눌러주세요."
+                    authService.errorMessage = L("auth.notVerifiedYet")
                 }
                 return
             }
 
             // currentUser가 없으면 (예: 앱 재실행) 입력된 계정으로 로그인 후 확인
             guard !email.isEmpty, !password.isEmpty else {
-                authService.errorMessage = "인증 확인을 위해 이메일/비밀번호를 다시 입력해주세요."
+                authService.errorMessage = L("auth.reenterForVerify")
                 return
             }
 
@@ -215,10 +215,10 @@ struct AuthView: View {
                 authService.verificationEmailSent = false
             } else {
                 try? Auth.auth().signOut()
-                authService.errorMessage = "아직 인증이 완료되지 않았어요.\n메일함에서 링크를 클릭한 후 다시 눌러주세요."
+                authService.errorMessage = L("auth.notVerifiedYet")
             }
         } catch {
-            authService.errorMessage = "로그인에 실패했어요. 다시 시도해주세요."
+            authService.errorMessage = L("auth.signInFailed")
         }
     }
 
@@ -229,7 +229,7 @@ struct AuthView: View {
                     try await user.sendEmailVerification()
                     await MainActor.run {
                         authService.errorMessage = nil
-                        resendMessage = "인증 메일을 다시 보냈어요. 메일함(스팸함 포함)을 확인해주세요."
+                        resendMessage = L("auth.resendDone")
                         resendSent = true
                     }
                     startResendCooldown()
@@ -239,18 +239,18 @@ struct AuthView: View {
                     try? Auth.auth().signOut()
                     await MainActor.run {
                         authService.errorMessage = nil
-                        resendMessage = "인증 메일을 다시 보냈어요. 메일함(스팸함 포함)을 확인해주세요."
+                        resendMessage = L("auth.resendDone")
                         resendSent = true
                     }
                     startResendCooldown()
                 } else {
                     await MainActor.run {
-                        authService.errorMessage = "재전송을 위해 이메일/비밀번호를 입력해주세요."
+                        authService.errorMessage = L("auth.reenterForResend")
                     }
                 }
             } catch {
                 await MainActor.run {
-                    authService.errorMessage = "인증 메일 재전송에 실패했어요. 잠시 후 다시 시도해주세요."
+                    authService.errorMessage = L("auth.resendFailed")
                 }
             }
         }
@@ -273,7 +273,7 @@ struct AuthView: View {
         VStack(spacing: 12) {
             TteonaWordmarkLogo()
 
-            Text("특별한 순간을 영상으로 기록하세요")
+            Text(L("auth.tagline"))
                 .font(.tte(15))
                 .foregroundColor(.tteMediumGray)
         }
@@ -282,7 +282,7 @@ struct AuthView: View {
     // MARK: - Social Login
     private var socialLoginSection: some View {
         VStack(spacing: 16) {
-            Text("소셜 계정으로 로그인")
+            Text(L("auth.socialLogin"))
                 .font(.tte(13))
                 .foregroundColor(.tteMediumGray)
 
@@ -343,7 +343,7 @@ struct AuthView: View {
             Rectangle()
                 .fill(Color(UIColor.separator))
                 .frame(height: 1)
-            Text("또는 이메일로 계속하기")
+            Text(L("auth.orContinueWithEmail"))
                 .font(.tte(12))
                 .foregroundColor(.tteMediumGray)
                 .fixedSize()
@@ -356,19 +356,19 @@ struct AuthView: View {
     // MARK: - Email Input
     private var inputSection: some View {
         VStack(spacing: 14) {
-            TteTextField(placeholder: "이메일", text: $email, keyboardType: .emailAddress)
+            TteTextField(placeholder: L("auth.email"), text: $email, keyboardType: .emailAddress)
                 .focused($focusedField, equals: .email)
                 .submitLabel(.next)
                 .onSubmit { focusedField = .password }
 
-            TteTextField(placeholder: "비밀번호", text: $password, isSecure: true)
+            TteTextField(placeholder: L("auth.password"), text: $password, isSecure: true)
                 .focused($focusedField, equals: .password)
                 .submitLabel(isSignUp ? .next : .done)
                 .onSubmit {
                     if isSignUp { focusedField = .confirm }
                     else { Task { await submit() } }
                 }
-            Text("6자 이상 입력해주세요")
+            Text(L("auth.passwordHint"))
                 .font(.tte(12))
                 .foregroundColor(.tteMediumGray)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -376,7 +376,7 @@ struct AuthView: View {
                 .padding(.top, -6)
 
             if isSignUp {
-                TteTextField(placeholder: "비밀번호 확인", text: $confirmPassword, isSecure: true)
+                TteTextField(placeholder: L("auth.confirmPassword"), text: $confirmPassword, isSecure: true)
                     .focused($focusedField, equals: .confirm)
                     .submitLabel(.done)
                     .onSubmit { Task { await submit() } }
@@ -407,7 +407,7 @@ struct AuthView: View {
                 if authService.isLoading {
                     ProgressView().tint(.white)
                 } else {
-                    Text(isSignUp ? "회원가입" : "로그인")
+                    Text(isSignUp ? L("auth.signUp") : L("auth.signIn"))
                         .font(.tte(17, .semibold))
                         .foregroundColor(.white)
                 }
@@ -424,9 +424,9 @@ struct AuthView: View {
             confirmPassword = ""
         } label: {
             HStack(spacing: 4) {
-                Text(isSignUp ? "이미 계정이 있으신가요?" : "계정이 없으신가요?")
+                Text(isSignUp ? L("auth.alreadyHaveAccount") : L("auth.noAccount"))
                     .foregroundColor(.tteMediumGray)
-                Text(isSignUp ? "로그인" : "회원가입")
+                Text(isSignUp ? L("auth.signIn") : L("auth.signUp"))
                     .foregroundColor(.tteOrange)
                     .fontWeight(.semibold)
             }
@@ -439,7 +439,7 @@ struct AuthView: View {
         focusedField = nil
         if isSignUp {
             guard password == confirmPassword else {
-                authService.errorMessage = "비밀번호가 일치하지 않습니다."
+                authService.errorMessage = L("auth.passwordMismatch")
                 return
             }
             await authService.signUp(email: email, password: password)

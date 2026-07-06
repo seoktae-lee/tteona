@@ -12,6 +12,7 @@ struct TteonaApp: App {
     @StateObject private var authService = AuthService()
     @StateObject private var notificationManager = AppNotificationManager.shared
     @StateObject private var deepLinkHandler = DeepLinkHandler()
+    @StateObject private var languageManager = LanguageManager.shared
 
     init() {
         FirebaseApp.configure()
@@ -26,6 +27,10 @@ struct TteonaApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                // 언어 변경 시 id가 바뀌면서 뷰 트리 전체가 재구성돼 새 언어가 즉시 반영됨
+                .id(languageManager.language)
+                .environment(\.locale, languageManager.locale)
+                .environmentObject(languageManager)
                 .environmentObject(authService)
                 .environmentObject(notificationManager)
                 .environmentObject(deepLinkHandler)

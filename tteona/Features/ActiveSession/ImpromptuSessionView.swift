@@ -44,7 +44,7 @@ struct ImpromptuSessionView: View {
 
     private var uid: String { authService.currentUser?.uid ?? "" }
     private var sessionId: String { "free_\(uid)" }
-    private var nickname: String { userService.currentUser?.nickname ?? "멤버" }
+    private var nickname: String { userService.currentUser?.nickname ?? L("session.member") }
 
     var body: some View {
         ZStack {
@@ -160,10 +160,10 @@ struct ImpromptuSessionView: View {
         }) {
             endSheet
         }
-        .alert("일부 영상 확인 불가", isPresented: $showIntegrityAlert) {
-            Button("확인", role: .cancel) { }
+        .alert(L("session.integrity.title"), isPresented: $showIntegrityAlert) {
+            Button(L("common.ok"), role: .cancel) { }
         } message: {
-            Text("일부 장소의 영상 파일이 확인되지 않아 촬영 리스트가 자동으로 정리되었습니다. 해당 장소는 다시 촬영하실 수 있습니다.")
+            Text(L("session.integrity.message"))
         }
     }
 
@@ -176,7 +176,7 @@ struct ImpromptuSessionView: View {
                     .progressViewStyle(.circular)
                     .scaleEffect(1.3)
                     .tint(.white)
-                Text("영상 보관 중...")
+                Text(L("impromptu.archiving"))
                     .font(.tte(15, .medium))
                     .foregroundColor(.white)
             }
@@ -221,7 +221,7 @@ struct ImpromptuSessionView: View {
                 VStack(spacing: 4) {
                     HStack(spacing: 6) {
                         Circle().fill(Color.red).frame(width: 8, height: 8)
-                        Text("나의 오늘 기록 중")
+                        Text(L("impromptu.recording"))
                             .font(.tte(13, .semibold))
                             .foregroundColor(.white)
                     }
@@ -232,7 +232,7 @@ struct ImpromptuSessionView: View {
                         HStack(spacing: 4) {
                             Image(systemName: "location.fill")
                                 .font(.tte(10))
-                            Text("그룹 위치 공유 중")
+                            Text(L("session.sharingLocation"))
                                 .font(.tte(11, .medium))
                         }
                         .foregroundColor(.white.opacity(0.9))
@@ -242,7 +242,7 @@ struct ImpromptuSessionView: View {
                     }
                 }
                 Spacer()
-                Text("\(capturedPlaces.count)곳")
+                Text(L("main.placesCount", capturedPlaces.count))
                     .font(.tte(14, .bold))
                     .foregroundColor(.white)
                     .frame(width: 52, height: 40)
@@ -296,7 +296,7 @@ struct ImpromptuSessionView: View {
                             } else {
                                 Image(systemName: "camera.fill").font(.tte(16))
                             }
-                            Text("여기서 촬영")
+                            Text(L("impromptu.captureHere"))
                                 .font(.tte(16, .semibold))
                         }
                         .foregroundColor(.white)
@@ -307,7 +307,7 @@ struct ImpromptuSessionView: View {
 
                     if !capturedPlaces.isEmpty {
                         Button { showEndAlert = true } label: {
-                            Text("오늘 종료")
+                            Text(L("impromptu.endToday"))
                                 .font(.tte(16, .semibold))
                                 .foregroundColor(.tteOrange)
                                 .frame(height: 54).frame(maxWidth: 110)
@@ -338,10 +338,10 @@ struct ImpromptuSessionView: View {
 
             // 헤더
             VStack(spacing: 6) {
-                Text("오늘을 마칠까요?")
+                Text(L("impromptu.endSheet.title"))
                     .font(.tte(20, .bold))
                     .foregroundColor(.tteDarkGray)
-                Text("방문한 장소 \(capturedPlaces.count)곳이 기록됐어요")
+                Text(L("impromptu.endSheet.subtitle", capturedPlaces.count))
                     .font(.tte(14))
                     .foregroundColor(.tteMediumGray)
             }
@@ -352,8 +352,8 @@ struct ImpromptuSessionView: View {
                 HStack(spacing: 12) {
                     endChoiceCard(
                         icon: "film.fill",
-                        title: "Vlog만 만들기",
-                        subtitle: "영상을 이어 붙여\n추억으로 남겨요",
+                        title: L("impromptu.vlogOnly.title"),
+                        subtitle: L("impromptu.vlogOnly.subtitle"),
                         isPrimary: true
                     ) {
                         buildCourseAndEnd(saveToFirestore: false)
@@ -363,8 +363,8 @@ struct ImpromptuSessionView: View {
 
                     endChoiceCard(
                         icon: "mappin.and.ellipse",
-                        title: "코스 저장 후\nVlog 만들기",
-                        subtitle: "경로를 나중에\n다시 쓸 수 있어요",
+                        title: L("impromptu.saveCourse.title"),
+                        subtitle: L("impromptu.saveCourse.subtitle"),
                         isPrimary: false
                     ) {
                         pendingShowSaveCourse = true
@@ -375,7 +375,7 @@ struct ImpromptuSessionView: View {
                 // 구분선
                 HStack {
                     Rectangle().fill(Color.secondary.opacity(0.15)).frame(height: 1)
-                    Text("또는")
+                    Text(L("common.or"))
                         .font(.tte(12))
                         .foregroundColor(.secondary)
                         .padding(.horizontal, 10)
@@ -387,7 +387,7 @@ struct ImpromptuSessionView: View {
                 Button {
                     showEndAlert = false
                 } label: {
-                    Text("계속 기록할게요")
+                    Text(L("impromptu.keepRecording"))
                         .font(.tte(15, .medium))
                         .foregroundColor(.tteOrange)
                         .frame(maxWidth: .infinity)
@@ -456,20 +456,20 @@ struct ImpromptuSessionView: View {
         NavigationStack {
             VStack(spacing: 20) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("코스 이름")
+                    Text(L("impromptu.courseName"))
                         .font(.tte(14, .medium)).foregroundColor(.tteMediumGray)
-                    TextField("이번 여행의 이름을 지어주세요", text: $courseName)
+                    TextField(L("impromptu.courseName.placeholder"), text: $courseName)
                         .font(.tte(17)).padding(14)
                         .background(RoundedRectangle(cornerRadius: 12)
                             .fill(Color(UIColor.secondarySystemBackground)))
                 }
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("태그")
+                    Text(L("impromptu.tag"))
                         .font(.tte(14, .medium)).foregroundColor(.tteMediumGray)
                     HStack(spacing: 10) {
                         ForEach(CourseTag.allCases, id: \.self) { tag in
                             Button { selectedTag = tag } label: {
-                                Text(tag.rawValue)
+                                Text(tag.displayName)
                                     .font(.tte(14, .medium))
                                     .foregroundColor(selectedTag == tag ? .white : .tteDarkGray)
                                     .padding(.horizontal, 14).padding(.vertical, 8)
@@ -486,7 +486,7 @@ struct ImpromptuSessionView: View {
                     showSaveCourse = false
                     showVlog = true
                 } label: {
-                    Text("저장하고 Vlog 만들기")
+                    Text(L("impromptu.saveAndVlog"))
                         .font(.tte(17, .semibold)).foregroundColor(.white)
                         .frame(maxWidth: .infinity).frame(height: 54)
                         .background(RoundedRectangle(cornerRadius: 14)
@@ -497,11 +497,11 @@ struct ImpromptuSessionView: View {
                 .padding(.bottom, 36)
             }
             .padding(.horizontal, 20).padding(.top, 16)
-            .navigationTitle("코스로 저장")
+            .navigationTitle(L("impromptu.saveAsCourse"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("취소") { showSaveCourse = false }.foregroundColor(.tteDarkGray)
+                    Button(L("common.cancel")) { showSaveCourse = false }.foregroundColor(.tteDarkGray)
                 }
             }
         }
@@ -534,7 +534,7 @@ struct ImpromptuSessionView: View {
         for rid in activeRoomIds {
             roomService.postFeed(roomId: rid, type: .freeCapture,
                                  userId: uid, nickname: nickname,
-                                 courseId: "free", courseName: "나의 오늘",
+                                 courseId: "free", courseName: L("impromptu.myToday.name"),
                                  placeName: place.placeName,
                                  latitude: place.latitude,
                                  longitude: place.longitude)
@@ -568,7 +568,7 @@ struct ImpromptuSessionView: View {
         }
         activityManager.update(
             placesCount: capturedPlaces.count,
-            lastPlaceName: capturedPlaces.last?.placeName ?? "기록 시작"
+            lastPlaceName: capturedPlaces.last?.placeName ?? L("impromptu.startRecord")
         )
     }
 
@@ -599,11 +599,11 @@ struct ImpromptuSessionView: View {
 
     private func buildCourseAndEnd(saveToFirestore: Bool) {
         let name = courseName.trimmingCharacters(in: .whitespaces).isEmpty
-            ? "나의 오늘 \(Date().formatted(.dateTime.month().day()))"
+            ? L("impromptu.myTodayDated", Date().formatted(.dateTime.month().day().locale(LanguageManager.shared.locale)))
             : courseName
         let region = capturedPlaces.first.map {
             "\(String(format: "%.1f", $0.latitude))°N"
-        } ?? "기타"
+        } ?? L("region.other")
         let course = Course(
             courseId: UUID().uuidString, authorId: uid,
             courseName: name, tag: selectedTag, region: region,
@@ -623,13 +623,13 @@ struct ImpromptuSessionView: View {
             senderUserId: uid,
             senderNickname: nickname,
             roomIds: roomIds,
-            courseName: "\(count)곳 방문"
+            courseName: L("impromptu.placesVisited", count)
         )
         for rid in roomIds {
             roomService.postFeed(roomId: rid, type: .freeTripEnd,
                                  userId: uid, nickname: nickname,
                                  courseId: "free",
-                                 courseName: "\(count)곳 방문")
+                                 courseName: L("impromptu.placesVisited", count))
         }
     }
 
@@ -644,7 +644,7 @@ struct ImpromptuSessionView: View {
         for rid in roomIds {
             roomService.postFeed(roomId: rid, type: .freeTripStart,
                                  userId: uid, nickname: nickname,
-                                 courseId: "free", courseName: "나의 오늘")
+                                 courseId: "free", courseName: L("impromptu.myToday.name"))
         }
     }
 
@@ -703,11 +703,11 @@ struct ImpromptuSessionView: View {
             .padding(.bottom, 16)
 
             VStack(spacing: 6) {
-                Text("오늘 기록이 남아있어요")
+                Text(L("impromptu.savedSession.title"))
                     .font(.tte(20, .bold))
                     .foregroundColor(.tteDarkGray)
                 if let saved = savedSession {
-                    Text("장소 \(saved.places.count)곳 · \(Self.timeString(saved.date))")
+                    Text(L("impromptu.savedSession.detail", saved.places.count, Self.timeString(saved.date)))
                         .font(.tte(14))
                         .foregroundColor(.tteMediumGray)
                 }
@@ -723,7 +723,7 @@ struct ImpromptuSessionView: View {
                     HStack(spacing: 10) {
                         Image(systemName: "play.fill")
                             .font(.tte(15))
-                        Text("이어서 기록하기")
+                        Text(L("main.continueRecording"))
                             .font(.tte(16, .semibold))
                     }
                     .foregroundColor(.white)
@@ -747,7 +747,7 @@ struct ImpromptuSessionView: View {
                     HStack(spacing: 10) {
                         Image(systemName: "arrow.counterclockwise")
                             .font(.tte(15))
-                        Text("새로 시작하기")
+                        Text(L("main.startFresh"))
                             .font(.tte(16, .medium))
                     }
                     .foregroundColor(.tteDarkGray)
@@ -769,8 +769,8 @@ struct ImpromptuSessionView: View {
 
     private static func timeString(_ date: Date) -> String {
         let f = DateFormatter()
-        f.dateFormat = "a h:mm"
-        f.locale = Locale(identifier: "ko_KR")
+        f.locale = LanguageManager.shared.locale
+        f.setLocalizedDateFormatFromTemplate("a h:mm")
         return f.string(from: date)
     }
 }

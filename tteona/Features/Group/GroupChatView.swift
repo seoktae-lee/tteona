@@ -37,7 +37,7 @@ struct GroupChatView: View {
     private let quickEmojis = ["👍", "❤️", "😂", "😮", "😢", "👏"]
 
     private var uid: String { authService.currentUser?.uid ?? "" }
-    private var myNickname: String { userService.currentUser?.nickname ?? "멤버" }
+    private var myNickname: String { userService.currentUser?.nickname ?? L("session.member") }
 
     // 채팅에 시스템 메시지로 노출할 활동 — 저빈도·고가치 마일스톤만.
     // 장소별 캡처(freeCapture)·사진·도착은 스팸이 되어 제외.
@@ -115,10 +115,10 @@ struct GroupChatView: View {
                 AppNotificationManager.shared.activeChatRoom = nil
             }
         }
-        .alert("전송할 수 없는 메시지예요", isPresented: $chat.moderationBlocked) {
-            Button("확인", role: .cancel) {}
+        .alert(L("chat.moderation.title"), isPresented: $chat.moderationBlocked) {
+            Button(L("common.ok"), role: .cancel) {}
         } message: {
-            Text("부적절한 표현이 포함되어 있어 메시지가 전송되지 않았어요.")
+            Text(L("chat.moderation.message"))
         }
     }
 
@@ -130,7 +130,7 @@ struct GroupChatView: View {
                 replyPreview(reply)
             }
             HStack(spacing: 10) {
-                TextField("메시지 입력...", text: $draft, axis: .vertical)
+                TextField(L("chat.placeholder"), text: $draft, axis: .vertical)
                     .lineLimit(1...4)
                     .font(.tte(15))
                     .padding(.horizontal, 14)
@@ -163,7 +163,7 @@ struct GroupChatView: View {
         HStack(spacing: 10) {
             Rectangle().fill(Color.tteOrange).frame(width: 3).cornerRadius(2)
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(reply.nickname)님에게 답장")
+                Text(L("chat.replyTo", reply.nickname))
                     .font(.tte(12, .semibold))
                     .foregroundColor(.tteOrange)
                 Text(reply.text)
@@ -210,13 +210,13 @@ struct GroupChatView: View {
 
     static func systemText(for item: FeedItem) -> String {
         switch item.type {
-        case .tripStart:     return "🚀 \(item.nickname)님이 \(item.courseName) 여행을 시작했어요"
-        case .tripEnd:       return "✅ \(item.nickname)님이 \(item.courseName) 여행을 종료했어요"
-        case .arrival:       return "📍 \(item.nickname)님이 \(item.placeName ?? "")에 도착했어요"
-        case .photo:         return "📸 \(item.nickname)님이 사진을 공유했어요"
-        case .freeTripStart: return "🗺️ \(item.nickname)님이 나의 오늘을 시작했어요"
-        case .freeCapture:   return "📸 \(item.nickname)님이 \(item.placeName ?? "이곳")에서 영상을 남겼어요"
-        case .freeTripEnd:   return "✅ \(item.nickname)님의 오늘이 끝났어요 · \(item.courseName)"
+        case .tripStart:     return L("feed.tripStart", item.nickname, item.courseName)
+        case .tripEnd:       return L("feed.tripEnd", item.nickname, item.courseName)
+        case .arrival:       return L("feed.arrival", item.nickname, item.placeName ?? "")
+        case .photo:         return L("feed.photo", item.nickname)
+        case .freeTripStart: return L("feed.freeTripStart", item.nickname)
+        case .freeCapture:   return L("feed.freeCapture", item.nickname, item.placeName ?? L("feed.here"))
+        case .freeTripEnd:   return L("feed.freeTripEnd", item.nickname, item.courseName)
         }
     }
 }
@@ -295,12 +295,12 @@ private struct ChatBubble: View {
         )
         .contextMenu {
             ForEach(quickEmojis, id: \.self) { emoji in
-                Button { onReact(emoji) } label: { Text("\(emoji)  반응") }
+                Button { onReact(emoji) } label: { Text("\(emoji)  \(L("chat.react"))") }
             }
             Divider()
-            Button { onReply() } label: { Label("답장", systemImage: "arrowshape.turn.up.left") }
+            Button { onReply() } label: { Label(L("chat.reply"), systemImage: "arrowshape.turn.up.left") }
             Button { UIPasteboard.general.string = message.text } label: {
-                Label("복사", systemImage: "doc.on.doc")
+                Label(L("chat.copy"), systemImage: "doc.on.doc")
             }
         }
     }

@@ -18,7 +18,7 @@ struct VlogGenerationView: View {
     @State private var vlogURL: URL?
     @State private var errorMessage: String?
     @State private var progress: Double = 0
-    @State private var stageText = "추억을 만들고 있어요..."
+    @State private var stageText = L("vlog.creating")
     @State private var savedFormatsCount = 1
     @State private var selectedFormats: Set<String> = []   // 기본 포맷 외 추가 선택
     @State private var didGenerate = false
@@ -67,25 +67,25 @@ struct VlogGenerationView: View {
             VlogAuroraBackground()
             VStack(spacing: 0) {
                 Spacer()
-                Text("어떤 포맷으로 만들까요?")
+                Text(L("vlog.formatSheet.title"))
                     .font(.tte(22, .bold))
                     .foregroundColor(.white)
-                Text("촬영 방향에 딱 맞는 포맷은 기본으로 포함돼요")
+                Text(L("vlog.formatSheet.subtitle"))
                     .font(.tte(13))
                     .foregroundColor(.white.opacity(0.65))
                     .padding(.top, 6)
 
                 VStack(spacing: 12) {
-                    formatRow(icon: "iphone", title: "릴스 · 세로", ratio: "9:16",
-                              subtitle: baseFormat == "reels" ? "기본 포함 · 촬영 방향 그대로" : "블러 배경으로 변환",
+                    formatRow(icon: "iphone", title: L("vlog.format.reels"), ratio: "9:16",
+                              subtitle: baseFormat == "reels" ? L("vlog.format.included") : L("vlog.format.blurConvert"),
                               key: "reels",
-                              badge: baseFormat == "reels" ? "세로 촬영 특화" : nil)
-                    formatRow(icon: "play.rectangle.fill", title: "유튜브 · 가로", ratio: "16:9",
-                              subtitle: baseFormat == "youtube" ? "기본 포함 · 촬영 방향 그대로" : "블러 배경으로 변환",
+                              badge: baseFormat == "reels" ? L("vlog.format.portraitBadge") : nil)
+                    formatRow(icon: "play.rectangle.fill", title: L("vlog.format.youtube"), ratio: "16:9",
+                              subtitle: baseFormat == "youtube" ? L("vlog.format.included") : L("vlog.format.blurConvert"),
                               key: "youtube",
-                              badge: baseFormat == "youtube" ? "가로 촬영 특화" : nil)
-                    formatRow(icon: "square.fill", title: "인스타 · 정방형", ratio: "1:1",
-                              subtitle: "여백 없이 꽉 차게 잘라서 변환",
+                              badge: baseFormat == "youtube" ? L("vlog.format.landscapeBadge") : nil)
+                    formatRow(icon: "square.fill", title: L("vlog.format.insta"), ratio: "1:1",
+                              subtitle: L("vlog.format.squareCrop"),
                               key: "insta", badge: nil)
                 }
                 .padding(.horizontal, 24)
@@ -96,7 +96,7 @@ struct VlogGenerationView: View {
                 Button {
                     phase = .chooseBgm
                 } label: {
-                    Text(selectedFormats.isEmpty ? "Vlog 만들기" : "\(selectedFormats.count + 1)가지 버전으로 만들기")
+                    Text(selectedFormats.isEmpty ? L("session.makeVlog") : L("vlog.makeVersions", selectedFormats.count + 1))
                         .font(.tte(17, .bold))
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity).frame(height: 56)
@@ -104,7 +104,7 @@ struct VlogGenerationView: View {
                 }
                 .padding(.horizontal, 24)
 
-                Button("닫기") { dismiss() }
+                Button(L("common.close")) { dismiss() }
                     .font(.tte(14))
                     .foregroundColor(.white.opacity(0.6))
                     .padding(.top, 14)
@@ -231,20 +231,20 @@ struct VlogGenerationView: View {
             VlogAuroraBackground()
             VStack(spacing: 0) {
                 Spacer(minLength: 60)
-                Text("어떤 음악과 함께할까요?")
+                Text(L("vlog.bgmSheet.title"))
                     .font(.tte(22, .bold))
                     .foregroundColor(.white)
-                Text("미리 들어보고 골라도, 그냥 맡겨도 좋아요")
+                Text(L("vlog.bgmSheet.subtitle"))
                     .font(.tte(13))
                     .foregroundColor(.white.opacity(0.65))
                     .padding(.top, 6)
 
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 12) {
-                        bgmRow(id: "auto", name: "자동 추천", mood: course.tag.rawValue,
-                               subtitle: "여행 태그에 어울리는 음악을 골라드려요", previewURL: nil)
-                        bgmRow(id: "none", name: "음악 없이", mood: nil,
-                               subtitle: "현장의 소리만 그대로 담아요", previewURL: nil)
+                        bgmRow(id: "auto", name: L("vlog.bgm.auto"), mood: course.tag.displayName,
+                               subtitle: L("vlog.bgm.auto.subtitle"), previewURL: nil)
+                        bgmRow(id: "none", name: L("vlog.bgm.none"), mood: nil,
+                               subtitle: L("vlog.bgm.none.subtitle"), previewURL: nil)
                         ForEach(bgmTracks) { track in
                             bgmRow(id: track.id, name: track.name, mood: track.mood,
                                    subtitle: nil, previewURL: URL(string: track.url))
@@ -259,7 +259,7 @@ struct VlogGenerationView: View {
                     stopBgmPreview()
                     phase = .generating
                 } label: {
-                    Text("Vlog 만들기")
+                    Text(L("session.makeVlog"))
                         .font(.tte(17, .bold))
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity).frame(height: 56)
@@ -267,7 +267,7 @@ struct VlogGenerationView: View {
                 }
                 .padding(.horizontal, 24)
 
-                Button("이전으로") {
+                Button(L("vlog.back")) {
                     stopBgmPreview()
                     phase = .chooseFormat
                 }
@@ -438,7 +438,7 @@ struct VlogGenerationView: View {
                         // 서버 실패(네트워크·서버 다운 등) → 기존 로컬 합성 폴백으로 항상 동작 보장
                         print("[VlogGeneration] 서버 합성 실패 → 로컬 폴백: \(error.localizedDescription)")
                         await MainActor.run {
-                            stageText = "추억을 만들고 있어요..."
+                            stageText = L("vlog.creating")
                             progress = 0.05
                         }
                         mainURL = try await vlogService.generateVlog(
@@ -463,7 +463,7 @@ struct VlogGenerationView: View {
                         throw NSError(
                             domain: "tteona.permissions",
                             code: 1,
-                            userInfo: [NSLocalizedDescriptionKey: "앨범 저장을 위해 사진 권한이 필요해요.\n설정에서 사진 접근을 허용해주세요."]
+                            userInfo: [NSLocalizedDescriptionKey: L("vlog.photoPermission")]
                         )
                     }
                 }
@@ -491,14 +491,14 @@ struct VlogGenerationView: View {
             VStack(spacing: 20) {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .font(.tte(48)).foregroundColor(.red)
-                Text("Vlog 생성에 실패했어요")
+                Text(L("vlog.failed"))
                     .font(.tte(18, .semibold)).foregroundColor(.white)
                 if let msg = errorMessage {
                     Text(msg)
                         .font(.tte(13)).foregroundColor(.white.opacity(0.7))
                         .multilineTextAlignment(.center).padding(.horizontal, 32)
                 }
-                Button("돌아가기") { dismiss() }
+                Button(L("vlog.goBack")) { dismiss() }
                     .buttonStyle(TteButtonStyle()).padding(.horizontal, 40)
             }
         }
@@ -579,7 +579,7 @@ struct VlogPreviewView: View {
                                 .font(.system(size: 28))
                                 .offset(x: 12, y: -2)
                         }
-                    Text("Vlog가 완성됐어요!")
+                    Text(L("vlog.done.title"))
                         .font(.tte(23, .bold))
                         .foregroundColor(.white)
                     HStack(spacing: 5) {
@@ -587,8 +587,8 @@ struct VlogPreviewView: View {
                             .font(.tte(12))
                             .foregroundColor(.green)
                         Text(savedFormatsCount > 1
-                             ? "\(savedFormatsCount)가지 버전이 앨범에 자동 저장됐어요"
-                             : "완성된 영상은 앨범에 자동 저장됐어요")
+                             ? L("vlog.done.savedMulti", savedFormatsCount)
+                             : L("vlog.done.savedSingle"))
                             .font(.tte(13, .medium))
                             .foregroundColor(.white.opacity(0.9))
                     }
@@ -622,7 +622,7 @@ struct VlogPreviewView: View {
                     } label: {
                         HStack(spacing: 8) {
                             Image(systemName: "square.and.arrow.up")
-                            Text("공유하기")
+                            Text(L("vlog.share"))
                         }
                         .font(.tte(16, .bold))
                         .foregroundColor(.white)
@@ -637,7 +637,7 @@ struct VlogPreviewView: View {
                         HStack(spacing: 6) {
                             Image(systemName: "house.fill")
                                 .font(.tte(13))
-                            Text("홈으로 돌아가기")
+                            Text(L("vlog.goHome"))
                         }
                         .font(.tte(15, .medium))
                         .foregroundColor(.white.opacity(0.85))
@@ -663,16 +663,16 @@ struct VlogPreviewView: View {
                 switch thumbState {
                 case .idle:
                     Image(systemName: "photo.on.rectangle.angled")
-                    Text("탐색탭에 보여질 썸네일 고르기")
+                    Text(L("vlog.thumbnail.pick"))
                 case .uploading:
                     ProgressView().tint(.white).scaleEffect(0.8)
-                    Text("썸네일 업로드 중...")
+                    Text(L("vlog.thumbnail.uploading"))
                 case .done:
                     Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
-                    Text("썸네일 설정 완료 · 변경하기")
+                    Text(L("vlog.thumbnail.done"))
                 case .failed:
                     Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.yellow)
-                    Text("업로드 실패 · 다시 시도")
+                    Text(L("vlog.thumbnail.failed"))
                 }
             }
             .font(.tte(15, .semibold))

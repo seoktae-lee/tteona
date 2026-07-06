@@ -142,7 +142,7 @@ final class CameraViewController: UIViewController {
         view.addSubview(placeL)
 
         // 힌트
-        hintLabel.text = "버튼을 눌러 촬영 시작 · 다시 누르면 종료"
+        hintLabel.text = L("camera.hint")
         hintLabel.textColor = UIColor.white.withAlphaComponent(0.8)
         hintLabel.font = .systemFont(ofSize: 13)
         hintLabel.textAlignment = .center
@@ -197,14 +197,14 @@ final class CameraViewController: UIViewController {
         permissionOverlay = overlay
 
         let title = UILabel()
-        title.text = "카메라 권한이 필요해요"
+        title.text = L("camera.permission.title")
         title.textColor = .white
         title.font = .systemFont(ofSize: 18, weight: .semibold)
         title.textAlignment = .center
         title.translatesAutoresizingMaskIntoConstraints = false
 
         let subtitle = UILabel()
-        subtitle.text = "설정에서 카메라 권한을 허용하면 촬영할 수 있어요."
+        subtitle.text = L("camera.permission.subtitle")
         subtitle.textColor = UIColor.white.withAlphaComponent(0.75)
         subtitle.font = .systemFont(ofSize: 13)
         subtitle.textAlignment = .center
@@ -212,7 +212,7 @@ final class CameraViewController: UIViewController {
         subtitle.translatesAutoresizingMaskIntoConstraints = false
 
         let settingsBtn = UIButton(type: .system)
-        settingsBtn.setTitle("설정으로 이동", for: .normal)
+        settingsBtn.setTitle(L("camera.openSettings"), for: .normal)
         settingsBtn.titleLabel?.font = .systemFont(ofSize: 16, weight: .semibold)
         settingsBtn.tintColor = .white
         settingsBtn.backgroundColor = UIColor(red: 1, green: 0.42, blue: 0.21, alpha: 1)
@@ -221,7 +221,7 @@ final class CameraViewController: UIViewController {
         settingsBtn.addTarget(self, action: #selector(openSettingsTapped), for: .touchUpInside)
 
         let closeBtn = UIButton(type: .system)
-        closeBtn.setTitle("닫기", for: .normal)
+        closeBtn.setTitle(L("common.close"), for: .normal)
         closeBtn.titleLabel?.font = .systemFont(ofSize: 15, weight: .medium)
         closeBtn.tintColor = UIColor.white.withAlphaComponent(0.8)
         closeBtn.translatesAutoresizingMaskIntoConstraints = false
@@ -323,7 +323,7 @@ final class CameraViewController: UIViewController {
         ])
 
         let label = UILabel()
-        label.text = "영상 저장 중..."
+        label.text = L("camera.saving")
         label.textColor = .white
         label.font = .systemFont(ofSize: 16, weight: .medium)
         label.tag = 703
@@ -411,7 +411,7 @@ final class CameraViewController: UIViewController {
 
     private static func fmtBudget(_ seconds: Double) -> String {
         let v = max(0, Int(seconds.rounded(.down)))
-        return v >= 60 ? String(format: "%d:%02d", v / 60, v % 60) : "\(v)초"
+        return v >= 60 ? String(format: "%d:%02d", v / 60, v % 60) : L("camera.seconds", v)
     }
 
     private func showBudgetAlert() {
@@ -464,7 +464,7 @@ final class CameraViewController: UIViewController {
         tipChip = chip
 
         let label = UILabel()
-        label.text = "💡 버튼으로 촬영 시작·종료, 가로·세로 자유롭게"
+        label.text = L("camera.tip")
         label.font = .systemFont(ofSize: 13, weight: .medium)
         label.textColor = .white
         label.textAlignment = .center
@@ -550,7 +550,7 @@ final class CameraViewController: UIViewController {
         service.maxDuration = clipLimit
         service.startRecording(place: place, sessionId: sessionId)
         setInnerDot(recording: true)
-        hintLabel.text = "촬영 중 · 버튼을 누르면 종료"
+        hintLabel.text = L("camera.recordingHint")
         view.viewWithTag(901)?.alpha = 1
         recordStart = Date()
         progressTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
@@ -584,7 +584,7 @@ final class CameraViewController: UIViewController {
         recordStart = nil
         refreshUsedSeconds()   // 파일 기준으로 재계산 (재촬영 덮어쓰기 반영)
         view.viewWithTag(901)?.alpha = 0.85
-        hintLabel.text = "버튼을 눌러 촬영 시작 · 다시 누르면 종료"
+        hintLabel.text = L("camera.hint")
         setInnerDot(recording: false)
         
         if url != nil {
@@ -592,7 +592,7 @@ final class CameraViewController: UIViewController {
             savingOverlay?.viewWithTag(701)?.isHidden = true // indicator
             savingOverlay?.viewWithTag(702)?.isHidden = false // checkMark
             if let label = savingOverlay?.viewWithTag(703) as? UILabel {
-                label.text = "영상 저장 성공!"
+                label.text = L("camera.saveSuccess")
             }
             
             // 1.2초 대기 후 자동 닫기

@@ -47,26 +47,26 @@ struct MainTabView: View {
         TabView(selection: $selectedTab) {
             MainView()
                 .tabItem {
-                    Label("홈", systemImage: "map.fill")
+                    Label(L("tab.home"), systemImage: "map.fill")
                 }
                 .tag(0)
 
             ExploreGridView()
                 .tabItem {
-                    Label("탐색", systemImage: "square.grid.2x2.fill")
+                    Label(L("tab.explore"), systemImage: "square.grid.2x2.fill")
                 }
                 .tag(1)
 
             FeedTabView()
                 .tabItem {
-                    Label("채팅", systemImage: "bubble.left.and.bubble.right.fill")
+                    Label(L("tab.chat"), systemImage: "bubble.left.and.bubble.right.fill")
                 }
                 .badge(roomService.unreadRoomIds.count)
                 .tag(2)
 
             SettingsView()
                 .tabItem {
-                    Label("설정", systemImage: "gearshape.fill")
+                    Label(L("tab.settings"), systemImage: "gearshape.fill")
                 }
                 .tag(3)
         }

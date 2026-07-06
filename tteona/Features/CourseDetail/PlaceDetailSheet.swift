@@ -49,31 +49,36 @@ struct PlaceDetailSheet: View {
             visitCount = r.visitCount
             isLoadingReviews = false
         }
-        .confirmationDialog("신고 사유를 선택해주세요", isPresented: $showReportAlert, titleVisibility: .visible) {
-            ForEach(["영리목적/홍보", "음란성/선정성", "욕설/비하", "아동 유해 콘텐츠", "기타"], id: \.self) { reason in
-                Button(reason) {
+        .confirmationDialog(L("report.selectReason"), isPresented: $showReportAlert, titleVisibility: .visible) {
+            // 신고 사유는 운영 검토용으로 한국어 원문을 서버에 제출하고, 버튼 표기만 현지화
+            ForEach([("report.reason.promo", "영리목적/홍보"),
+                     ("report.reason.sexual", "음란성/선정성"),
+                     ("report.reason.abuse", "욕설/비하"),
+                     ("report.reason.child", "아동 유해 콘텐츠"),
+                     ("report.reason.other", "기타")], id: \.1) { key, reason in
+                Button(L(key)) {
                     submitReviewReport(reason: reason)
                 }
             }
-            Button("취소", role: .cancel) {}
+            Button(L("common.cancel"), role: .cancel) {}
         }
-        .alert("리뷰 작성자 차단", isPresented: $showBlockAlert) {
-            Button("차단", role: .destructive) {
+        .alert(L("placedetail.blockReviewer.title"), isPresented: $showBlockAlert) {
+            Button(L("block.action"), role: .destructive) {
                 blockReviewer()
             }
-            Button("취소", role: .cancel) {}
+            Button(L("common.cancel"), role: .cancel) {}
         } message: {
-            Text("이 리뷰 작성자를 차단하시겠어요? 차단하시면 이 작성자가 등록한 모든 코스와 후기가 숨겨집니다.")
+            Text(L("placedetail.blockReviewer.message"))
         }
-        .alert("신고 완료", isPresented: $showReportSuccessAlert) {
-            Button("확인", role: .cancel) {}
+        .alert(L("report.done.title"), isPresented: $showReportSuccessAlert) {
+            Button(L("common.ok"), role: .cancel) {}
         } message: {
-            Text("신고가 정상 접수되었습니다. 24시간 이내에 검토 및 삭제 처리됩니다.")
+            Text(L("report.done.message"))
         }
-        .alert("차단 완료", isPresented: $showBlockSuccessAlert) {
-            Button("확인", role: .cancel) {}
+        .alert(L("block.done.title"), isPresented: $showBlockSuccessAlert) {
+            Button(L("common.ok"), role: .cancel) {}
         } message: {
-            Text("작성자가 차단되었습니다. 목록에서 후기가 삭제되었습니다.")
+            Text(L("placedetail.blockDone.message"))
         }
     }
 
@@ -131,7 +136,7 @@ struct PlaceDetailSheet: View {
                         Text(String(format: "%.1f", rating))
                             .font(.tte(13, .medium))
                             .foregroundColor(.tteDarkGray)
-                        Text("리뷰 \(detail.reviewCount)개")
+                        Text(L("placedetail.reviewCount", detail.reviewCount))
                             .font(.tte(12))
                             .foregroundColor(.tteMediumGray)
                     }
@@ -143,7 +148,7 @@ struct PlaceDetailSheet: View {
                     Image(systemName: "mappin.circle.fill")
                         .font(.tte(22))
                         .foregroundColor(.tteOrange)
-                    Text("떠나 \(visitCount)명")
+                    Text(L("placedetail.visitorCount", visitCount))
                         .font(.tte(10, .medium))
                         .foregroundColor(.tteMediumGray)
                 }
@@ -190,8 +195,8 @@ struct PlaceDetailSheet: View {
     // MARK: - Tab Bar
     private var tabBar: some View {
         HStack(spacing: 0) {
-            tabButton("구글 리뷰", tab: .google)
-            tabButton("떠나 후기", tab: .tteona)
+            tabButton(L("placedetail.googleReviews"), tab: .google)
+            tabButton(L("placedetail.tteonaReviews"), tab: .tteona)
         }
         .padding(.horizontal, 20)
         .padding(.top, 4)
@@ -233,7 +238,7 @@ struct PlaceDetailSheet: View {
                     Divider().padding(.horizontal, 20)
                 }
             } else {
-                emptyState(icon: "star.slash", message: "구글 리뷰가 없어요")
+                emptyState(icon: "star.slash", message: L("placedetail.noGoogleReviews"))
             }
         }
     }
@@ -261,7 +266,7 @@ struct PlaceDetailSheet: View {
             } else {
                 emptyState(
                     icon: "mappin.slash",
-                    message: "아직 떠나 방문 기록이 없어요\n이 코스를 따라가면 첫 번째가 되어보세요!"
+                    message: L("placedetail.noVisits")
                 )
             }
         }
@@ -381,12 +386,12 @@ struct TteonaReviewRow: View {
                             Button(role: .destructive) {
                                 onReport?()
                             } label: {
-                                Label("신고하기", systemImage: "exclamationmark.bubble")
+                                Label(L("report.action"), systemImage: "exclamationmark.bubble")
                             }
                             Button {
                                 onBlock?()
                             } label: {
-                                Label("작성자 차단하기", systemImage: "person.crop.circle.badge.xmark")
+                                Label(L("detail.blockAuthor"), systemImage: "person.crop.circle.badge.xmark")
                             }
                         } label: {
                             Image(systemName: "ellipsis")

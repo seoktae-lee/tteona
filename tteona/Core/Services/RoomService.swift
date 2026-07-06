@@ -59,7 +59,7 @@ class RoomService: ObservableObject {
         )
         
         // 기본 피드 생성 (댓글 작성 보장)
-        postFeed(roomId: roomId, type: .tripStart, userId: userId, nickname: nickname, courseId: "system", courseName: "그룹 참여 여행")
+        postFeed(roomId: roomId, type: .tripStart, userId: userId, nickname: nickname, courseId: "system", courseName: L("room.groupTrip"))
         
         return room
     }
@@ -86,7 +86,7 @@ class RoomService: ObservableObject {
 
         let room = Room(
             roomId: roomId,
-            name: json["name"] as? String ?? "그룹",
+            name: json["name"] as? String ?? L("room.defaultName"),
             inviteCode: json["inviteCode"] as? String ?? inviteCode.uppercased(),
             creatorId: json["creatorId"] as? String ?? "",
             memberIds: json["memberIds"] as? [String] ?? [userId],
@@ -94,7 +94,7 @@ class RoomService: ObservableObject {
         )
 
         // 기본 피드 생성 (댓글 작성 보장)
-        postFeed(roomId: room.roomId, type: .tripStart, userId: userId, nickname: nickname, courseId: "system", courseName: "그룹 참여 여행")
+        postFeed(roomId: room.roomId, type: .tripStart, userId: userId, nickname: nickname, courseId: "system", courseName: L("room.groupTrip"))
 
         return room
     }
@@ -459,9 +459,9 @@ enum RoomError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .roomNotFound: return "해당 초대 코드의 방을 찾을 수 없어요."
-        case .joinFailed: return "그룹 참여에 실패했어요. 네트워크 상태를 확인하고 다시 시도해주세요."
-        case .inappropriateContent: return "부적절한 표현이 포함되어 있어 등록할 수 없어요."
+        case .roomNotFound: return L("room.error.notFound")
+        case .joinFailed: return L("room.error.joinFailed")
+        case .inappropriateContent: return L("room.error.inappropriate")
         }
     }
 }

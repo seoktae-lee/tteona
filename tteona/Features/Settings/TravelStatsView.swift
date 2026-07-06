@@ -16,16 +16,16 @@ struct TravelStatsView: View {
                     ProgressView().tint(.tteOrange).padding(.top, 60)
                 } else if let stats {
                     LazyVGrid(columns: columns, spacing: 12) {
-                        statCard(icon: "map.fill",            title: "만든 코스",     value: "\(stats.coursesCreated)개")
-                        statCard(icon: "mappin.and.ellipse",  title: "기록한 장소",   value: "\(stats.placesInCourses)곳")
-                        statCard(icon: "heart.fill",          title: "받은 좋아요",   value: "\(stats.likesReceived)개")
-                        statCard(icon: "person.2.fill",       title: "함께한 그룹",   value: "\(stats.groups)개")
-                        statCard(icon: "figure.walk",         title: "방문한 장소",   value: "\(stats.placesVisited)곳")
-                        statCard(icon: "calendar",            title: "활동한 날",     value: "\(stats.activeDays)일")
+                        statCard(icon: "map.fill",            title: L("stats.coursesCreated"), value: L("stats.unit.count", stats.coursesCreated))
+                        statCard(icon: "mappin.and.ellipse",  title: L("stats.placesRecorded"), value: L("stats.unit.places", stats.placesInCourses))
+                        statCard(icon: "heart.fill",          title: L("stats.likesReceived"),  value: L("stats.unit.count", stats.likesReceived))
+                        statCard(icon: "person.2.fill",       title: L("stats.groups"),         value: L("stats.unit.count", stats.groups))
+                        statCard(icon: "figure.walk",         title: L("stats.placesVisited"),  value: L("stats.unit.places", stats.placesVisited))
+                        statCard(icon: "calendar",            title: L("stats.activeDays"),     value: L("stats.unit.days", stats.activeDays))
                     }
                     .padding(.horizontal, 20)
 
-                    Text("방문한 장소와 활동한 날은 앱 업데이트 이후의 활동부터 집계돼요.")
+                    Text(L("stats.disclaimer"))
                         .font(.tte(12))
                         .foregroundColor(.tteMediumGray)
                         .multilineTextAlignment(.center)
@@ -36,7 +36,7 @@ struct TravelStatsView: View {
                         Image(systemName: "wifi.slash")
                             .font(.tte(32))
                             .foregroundColor(.tteMediumGray)
-                        Text("통계를 불러오지 못했어요")
+                        Text(L("stats.loadFailed"))
                             .font(.tte(14))
                             .foregroundColor(.tteMediumGray)
                     }
@@ -45,7 +45,7 @@ struct TravelStatsView: View {
             }
             .padding(.vertical, 20)
         }
-        .navigationTitle("내 여행 통계")
+        .navigationTitle(L("settings.travelStats"))
         .navigationBarTitleDisplayMode(.inline)
         .task {
             guard let uid = authService.currentUser?.uid else { isLoading = false; return }
@@ -61,10 +61,10 @@ struct TravelStatsView: View {
                 .scaledToFit()
                 .frame(width: 64, height: 64)
             VStack(alignment: .leading, spacing: 4) {
-                Text("지금까지의 여정")
+                Text(L("stats.journeySoFar"))
                     .font(.tte(13, .medium))
                     .foregroundColor(.tteMediumGray)
-                Text("떠난 만큼 쌓여요")
+                Text(L("stats.subtitle"))
                     .font(.tte(20, .bold))
                     .foregroundColor(.tteDarkGray)
             }

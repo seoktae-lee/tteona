@@ -89,48 +89,53 @@ struct ExploreDetailView: View {
             }
             .environmentObject(roomService)
         }
-        .confirmationDialog("진행 중인 코스가 있어요", isPresented: $showOtherCourseAlert, titleVisibility: .visible) {
-            Button("이어서 하기") {
+        .confirmationDialog(L("detail.otherCourse.title"), isPresented: $showOtherCourseAlert, titleVisibility: .visible) {
+            Button(L("detail.otherCourse.resume")) {
                 if let saved = sessionStore.loadTodaySession() {
                     onStartSession?(Set(saved.roomIds))
                 }
             }
-            Button("새로 시작", role: .destructive) {
+            Button(L("detail.otherCourse.startNew"), role: .destructive) {
                 sessionStore.clear()
                 selectedRoomIds = []
                 showRoomSelect = true
             }
-            Button("취소", role: .cancel) {}
+            Button(L("common.cancel"), role: .cancel) {}
         } message: {
             if let saved = sessionStore.loadTodaySession() {
-                Text("'\(saved.course.courseName)' 코스가 진행 중이에요.\n이어서 할까요, 아니면 새로 시작할까요?")
+                Text(L("detail.otherCourse.message", saved.course.courseName))
             }
         }
-        .confirmationDialog("신고 사유를 선택해주세요", isPresented: $showReportDialog, titleVisibility: .visible) {
-            ForEach(["영리목적/홍보", "음란성/선정성", "욕설/비하", "아동 유해 콘텐츠", "기타"], id: \.self) { reason in
-                Button(reason) { submitCourseReport(reason: reason) }
+        .confirmationDialog(L("report.selectReason"), isPresented: $showReportDialog, titleVisibility: .visible) {
+            // 신고 사유는 운영 검토용으로 한국어 원문을 서버에 제출하고, 버튼 표기만 현지화
+            ForEach([("report.reason.promo", "영리목적/홍보"),
+                     ("report.reason.sexual", "음란성/선정성"),
+                     ("report.reason.abuse", "욕설/비하"),
+                     ("report.reason.child", "아동 유해 콘텐츠"),
+                     ("report.reason.other", "기타")], id: \.1) { key, reason in
+                Button(L(key)) { submitCourseReport(reason: reason) }
             }
-            Button("취소", role: .cancel) {}
+            Button(L("common.cancel"), role: .cancel) {}
         }
-        .alert("작성자 차단", isPresented: $showBlockAlert) {
-            Button("차단", role: .destructive) { blockAuthor() }
-            Button("취소", role: .cancel) {}
+        .alert(L("block.author.title"), isPresented: $showBlockAlert) {
+            Button(L("block.action"), role: .destructive) { blockAuthor() }
+            Button(L("common.cancel"), role: .cancel) {}
         } message: {
-            Text("이 작성자를 차단하시겠어요? 차단하시면 이 작성자가 등록한 모든 코스와 후기가 숨겨집니다.")
+            Text(L("block.author.message"))
         }
-        .alert("신고 완료", isPresented: $showReportSuccessAlert) {
-            Button("확인", role: .cancel) {}
+        .alert(L("report.done.title"), isPresented: $showReportSuccessAlert) {
+            Button(L("common.ok"), role: .cancel) {}
         } message: {
-            Text("신고가 정상 접수되었습니다. 24시간 이내에 검토 및 삭제 처리됩니다.")
+            Text(L("report.done.message"))
         }
-        .alert("차단 완료", isPresented: $showBlockSuccessAlert) {
-            Button("확인", role: .cancel) { dismiss() }
+        .alert(L("block.done.title"), isPresented: $showBlockSuccessAlert) {
+            Button(L("common.ok"), role: .cancel) { dismiss() }
         } message: {
-            Text("작성자가 차단되었습니다. 목록에서 제외하기 위해 화면을 닫습니다.")
+            Text(L("block.done.message"))
         }
-        .alert("처리 실패", isPresented: Binding(get: { actionErrorMessage != nil },
+        .alert(L("common.actionFailed"), isPresented: Binding(get: { actionErrorMessage != nil },
                                               set: { if !$0 { actionErrorMessage = nil } })) {
-            Button("확인", role: .cancel) {}
+            Button(L("common.ok"), role: .cancel) {}
         } message: {
             Text(actionErrorMessage ?? "")
         }
@@ -149,7 +154,7 @@ struct ExploreDetailView: View {
                     .frame(width: 38, height: 38)
                     .background(Circle().fill(Color.black.opacity(0.35)))
             }
-            .accessibilityLabel("코스 공유")
+            .accessibilityLabel(L("detail.shareCourse"))
 
             Button {
                 toggleLike()
@@ -161,19 +166,19 @@ struct ExploreDetailView: View {
                     .background(Circle().fill(Color.black.opacity(0.35)))
             }
             .disabled(isLikeProcessing)
-            .accessibilityLabel(isLiked ? "좋아요 취소" : "좋아요")
+            .accessibilityLabel(isLiked ? L("detail.unlike") : L("detail.like"))
 
             if !isMyCourse {
                 Menu {
                     Button(role: .destructive) {
                         showReportDialog = true
                     } label: {
-                        Label("코스 신고하기", systemImage: "exclamationmark.bubble")
+                        Label(L("detail.reportCourse"), systemImage: "exclamationmark.bubble")
                     }
                     Button {
                         showBlockAlert = true
                     } label: {
-                        Label("작성자 차단하기", systemImage: "person.crop.circle.badge.xmark")
+                        Label(L("detail.blockAuthor"), systemImage: "person.crop.circle.badge.xmark")
                     }
                 } label: {
                     Image(systemName: "ellipsis")
@@ -182,7 +187,7 @@ struct ExploreDetailView: View {
                         .frame(width: 38, height: 38)
                         .background(Circle().fill(Color.black.opacity(0.35)))
                 }
-                .accessibilityLabel("더 보기")
+                .accessibilityLabel(L("common.more"))
             }
         }
         .padding(.trailing, 16)
@@ -199,7 +204,7 @@ struct ExploreDetailView: View {
                 let nickname = userService.currentUser?.nickname ?? ""
                 try await courseService.toggleLike(courseId: course.courseId, userId: uid, likerNickname: nickname)
             } catch {
-                actionErrorMessage = courseService.errorMessage ?? "좋아요 처리에 실패했어요. 잠시 후 다시 시도해주세요."
+                actionErrorMessage = courseService.errorMessage ?? L("detail.likeFailed")
             }
             isLikeProcessing = false
         }
@@ -222,7 +227,7 @@ struct ExploreDetailView: View {
                 )
                 showReportSuccessAlert = true
             } catch {
-                actionErrorMessage = "신고 접수에 실패했어요. 잠시 후 다시 시도해주세요."
+                actionErrorMessage = L("detail.reportFailed")
             }
         }
     }
@@ -234,7 +239,7 @@ struct ExploreDetailView: View {
                 try await userService.blockUser(uid: currentUid, blockedUid: course.authorId)
                 showBlockSuccessAlert = true
             } catch {
-                actionErrorMessage = "차단에 실패했어요. 잠시 후 다시 시도해주세요."
+                actionErrorMessage = L("detail.blockFailed")
             }
         }
     }
@@ -270,7 +275,7 @@ struct ExploreDetailView: View {
             .frame(height: 300)
 
             VStack(alignment: .leading, spacing: 6) {
-                Text("\(course.tag.emoji) \(course.tag.rawValue) · \(course.region)")
+                Text("\(course.tag.emoji) \(course.tag.displayName) · \(course.region)")
                     .font(.tte(13, .semibold))
                     .foregroundColor(.white.opacity(0.9))
                 Text(course.courseName)
@@ -295,7 +300,7 @@ struct ExploreDetailView: View {
                 )
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
-                    Text(author?.nickname ?? "여행자")
+                    Text(author?.nickname ?? L("detail.traveler"))
                         .font(.tte(15, .semibold))
                         .foregroundColor(.tteDarkGray)
                     if author?.isVerified == true {
@@ -304,7 +309,7 @@ struct ExploreDetailView: View {
                             .foregroundColor(.tteOrange)
                     }
                 }
-                Text("장소 \(course.displayPlaces.count)곳 · ♥ \(course.likeCount)")
+                Text(L("detail.placesLikes", course.displayPlaces.count, course.likeCount))
                     .font(.tte(13))
                     .foregroundColor(.tteMediumGray)
             }
@@ -318,7 +323,7 @@ struct ExploreDetailView: View {
         HStack(spacing: 10) {
             Text(weather?.emoji ?? "🌡️").font(.tte(22))
             VStack(alignment: .leading, spacing: 2) {
-                Text("현재 날씨 (첫 장소 기준)")
+                Text(L("detail.currentWeather"))
                     .font(.tte(12, .semibold))
                     .foregroundColor(.tteMediumGray)
                 Text(weather.map { "\(Int($0.tempC))° \($0.description)" } ?? "-")
@@ -335,19 +340,19 @@ struct ExploreDetailView: View {
 
     private var transportSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("이동 정보")
+            Text(L("detail.transport"))
                 .font(.tte(16, .bold))
                 .foregroundColor(.tteDarkGray)
 
             VStack(spacing: 0) {
-                transportRow(icon: "car.fill", label: "자동차",
+                transportRow(icon: "car.fill", label: L("detail.transport.car"),
                              route: carRoute, loading: isLoadingRoute)
                 Divider().padding(.leading, 44)
-                transportRow(icon: "bus.fill", label: "대중교통",
+                transportRow(icon: "bus.fill", label: L("detail.transport.transit"),
                              route: transitRoute, loading: isLoadingTransit,
-                             unavailableText: "정보 없음")
+                             unavailableText: L("detail.noInfo"))
                 Divider().padding(.leading, 44)
-                transportRow(icon: "figure.walk", label: "도보",
+                transportRow(icon: "figure.walk", label: L("detail.transport.walk"),
                              route: walkRoute, loading: isLoadingRoute)
             }
             .padding(.vertical, 4)
@@ -386,7 +391,7 @@ struct ExploreDetailView: View {
 
     private var placesBlock: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("코스 동선")
+            Text(L("detail.courseRoute"))
                 .font(.tte(16, .bold))
                 .foregroundColor(.tteDarkGray)
 
@@ -416,7 +421,7 @@ struct ExploreDetailView: View {
         .overlay(alignment: .topTrailing) {
             HStack(spacing: 4) {
                 Image(systemName: "arrow.up.left.and.arrow.down.right")
-                Text("주변 보기")
+                Text(L("detail.viewNearby"))
             }
             .font(.tte(11, .semibold))
             .foregroundColor(.white)
@@ -453,7 +458,7 @@ struct ExploreDetailView: View {
                 showRoomSelect = true
             }
         } label: {
-            Text("이 코스 따라가기")
+            Text(L("detail.followCourse"))
                 .font(.tte(17, .bold))
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)

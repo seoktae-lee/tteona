@@ -34,7 +34,7 @@ struct FeedTabView: View {
                     }
                 }
             }
-            .navigationTitle("채팅")
+            .navigationTitle(L("tab.chat"))
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -42,19 +42,19 @@ struct FeedTabView: View {
                         Button {
                             showCreateRoom = true
                         } label: {
-                            Label("방 만들기", systemImage: "plus.circle")
+                            Label(L("group.createRoom"), systemImage: "plus.circle")
                         }
                         Button {
                             showJoinRoom = true
                         } label: {
-                            Label("코드로 참여", systemImage: "key.horizontal")
+                            Label(L("group.joinWithCode"), systemImage: "key.horizontal")
                         }
                     } label: {
                         Image(systemName: "plus")
                             .font(.tte(17, .semibold))
                             .foregroundColor(.tteOrange)
                     }
-                    .accessibilityLabel("방 만들기 또는 참여")
+                    .accessibilityLabel(L("group.createOrJoin"))
                 }
             }
             .navigationDestination(item: $selectedRoom) { room in
@@ -117,17 +117,17 @@ struct FeedTabView: View {
             Image(systemName: "person.3.fill")
                 .font(.tte(52))
                 .foregroundColor(.tteOrange.opacity(0.4))
-            Text("아직 참여한 그룹이 없어요")
+            Text(L("group.empty.title"))
                 .font(.tte(17, .semibold))
                 .foregroundColor(.tteDarkGray)
-            Text("친구들과 함께 오늘을 공유해보세요!")
+            Text(L("group.empty.subtitle"))
                 .font(.tte(14))
                 .foregroundColor(.tteMediumGray)
             HStack(spacing: 12) {
                 Button { showCreateRoom = true } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "plus.circle.fill")
-                        Text("방 만들기").fontWeight(.semibold)
+                        Text(L("group.createRoom")).fontWeight(.semibold)
                     }
                     .font(.tte(15))
                     .foregroundColor(.white)
@@ -137,7 +137,7 @@ struct FeedTabView: View {
                 Button { showJoinRoom = true } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "key.horizontal.fill")
-                        Text("코드 입력").fontWeight(.semibold)
+                        Text(L("group.enterCode")).fontWeight(.semibold)
                     }
                     .font(.tte(15))
                     .foregroundColor(.tteOrange)

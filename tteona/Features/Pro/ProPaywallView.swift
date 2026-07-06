@@ -43,23 +43,23 @@ struct ProPaywallView: View {
                                 .renderingMode(.original)
                                 .aspectRatio(contentMode: .fit)
                                 .frame(height: 34)
-                            Text("여행의 순간을 더 길게, 더 자유롭게")
+                            Text(L("paywall.tagline"))
                                 .font(.tte(14))
                                 .foregroundColor(.white.opacity(0.7))
                         }
                         .padding(.top, 12)
 
                         VStack(alignment: .leading, spacing: 14) {
-                            featureRow(icon: "sparkles.rectangle.stack", title: "워터마크 제거",
-                                       subtitle: "로고 없는 깨끗한 영상으로 저장돼요")
-                            featureRow(icon: "rectangle.3.group", title: "멀티포맷 제공",
-                                       subtitle: "릴스·유튜브·인스타 3가지 버전을 한 번에")
-                            featureRow(icon: "music.note.list", title: "BGM 전체 라이브러리",
-                                       subtitle: "모든 음악을 직접 골라 넣을 수 있어요")
-                            featureRow(icon: "timer", title: "영상 길이 5분으로 확대",
-                                       subtitle: "장소당 5초·총 30초 제한 없이 최대 5분까지")
-                            featureRow(icon: "bolt.fill", title: "우선 렌더링",
-                                       subtitle: "대기 없이 내 영상부터 먼저 만들어드려요")
+                            featureRow(icon: "sparkles.rectangle.stack", title: L("paywall.feature.watermark"),
+                                       subtitle: L("paywall.feature.watermark.sub"))
+                            featureRow(icon: "rectangle.3.group", title: L("paywall.feature.multiformat"),
+                                       subtitle: L("paywall.feature.multiformat.sub"))
+                            featureRow(icon: "music.note.list", title: L("paywall.feature.bgm"),
+                                       subtitle: L("paywall.feature.bgm.sub"))
+                            featureRow(icon: "timer", title: L("paywall.feature.duration"),
+                                       subtitle: L("paywall.feature.duration.sub"))
+                            featureRow(icon: "bolt.fill", title: L("paywall.feature.priority"),
+                                       subtitle: L("paywall.feature.priority.sub"))
                         }
                         .padding(20)
                         .background(RoundedRectangle(cornerRadius: 20).fill(Color.white.opacity(0.07)))
@@ -67,10 +67,10 @@ struct ProPaywallView: View {
 
                         if packages.isEmpty {
                             VStack(spacing: 10) {
-                                Text("요금제를 불러오지 못했어요")
+                                Text(L("paywall.loadFailed"))
                                     .font(.tte(14))
                                     .foregroundColor(.white.opacity(0.7))
-                                Button("다시 시도") {
+                                Button(L("paywall.retry")) {
                                     Task { await pro.loadOfferings() }
                                 }
                                 .font(.tte(14, .semibold))
@@ -108,9 +108,9 @@ struct ProPaywallView: View {
                     .padding(.horizontal, 24)
 
                     HStack(spacing: 16) {
-                        Button("구매 복원") { Task { await restore() } }
-                        Link("이용약관", destination: URL(string: "https://tteona.kr/terms")!)
-                        Link("개인정보처리방침", destination: URL(string: "https://tteona.kr/privacy")!)
+                        Button(L("paywall.restore")) { Task { await restore() } }
+                        Link(L("settings.terms"), destination: URL(string: "https://tteona.kr/terms")!)
+                        Link(L("paywall.privacyPolicy"), destination: URL(string: "https://tteona.kr/privacy")!)
                     }
                     .font(.tte(12))
                     .foregroundColor(.white.opacity(0.5))
@@ -128,20 +128,20 @@ struct ProPaywallView: View {
         .onChange(of: pro.isPro) { _, active in
             if active { dismiss() }
         }
-        .alert("알림", isPresented: Binding(get: { alertMessage != nil },
+        .alert(L("common.notice"), isPresented: Binding(get: { alertMessage != nil },
                                           set: { if !$0 { alertMessage = nil } })) {
-            Button("확인", role: .cancel) {}
+            Button(L("common.ok"), role: .cancel) {}
         } message: {
             Text(alertMessage ?? "")
         }
     }
 
     private var ctaTitle: String {
-        guard let pkg = selectedPackage else { return "구독 시작하기" }
+        guard let pkg = selectedPackage else { return L("paywall.subscribe") }
         if pkg.storeProduct.introductoryDiscount?.price == 0 {
-            return "무료 체험 시작하기"
+            return L("paywall.startFreeTrial")
         }
-        return "구독 시작하기"
+        return L("paywall.subscribe")
     }
 
     private func featureRow(icon: String, title: String, subtitle: String) -> some View {
@@ -171,7 +171,7 @@ struct ProPaywallView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
-                        Text(pkg.packageType == .annual ? "연간" : "월간")
+                        Text(pkg.packageType == .annual ? L("paywall.annual") : L("paywall.monthly"))
                             .font(.tte(16, .bold))
                             .foregroundColor(.white)
                         if let badge = savingsBadge(pkg) {
@@ -182,7 +182,7 @@ struct ProPaywallView: View {
                                 .background(Capsule().fill(Color.tteOrange))
                         }
                         if product.introductoryDiscount?.price == 0 {
-                            Text("7일 무료")
+                            Text(L("paywall.freeTrial7"))
                                 .font(.tte(11, .bold))
                                 .foregroundColor(.tteOrange)
                                 .padding(.horizontal, 8).padding(.vertical, 3)
@@ -214,7 +214,7 @@ struct ProPaywallView: View {
         let yearAtMonthly = monthlyPrice * 12
         let saving = (yearAtMonthly - pkg.storeProduct.price) / yearAtMonthly * 100
         let pct = NSDecimalNumber(decimal: saving).intValue
-        return pct > 0 ? "\(pct)% 할인" : nil
+        return pct > 0 ? L("paywall.discount", pct) : nil
     }
 
     private func subtitleText(_ pkg: Package) -> String {
@@ -224,11 +224,11 @@ struct ProPaywallView: View {
             f.numberStyle = .currency
             f.locale = pkg.storeProduct.priceFormatter?.locale ?? .current
             if let s = f.string(from: NSDecimalNumber(decimal: perMonth)) {
-                return "월 \(s) 꼴 · 1년에 한 번 결제"
+                return L("paywall.perMonthAnnual", s)
             }
-            return "1년에 한 번 결제"
+            return L("paywall.billedAnnually")
         }
-        return "언제든 해지 가능"
+        return L("paywall.cancelAnytime")
     }
 
     private func purchase() async {
@@ -240,16 +240,16 @@ struct ProPaywallView: View {
             if !active { return }   // 유저가 결제 시트를 닫음
             Haptics.success()
         } catch {
-            alertMessage = "결제에 실패했어요. 잠시 후 다시 시도해주세요."
+            alertMessage = L("paywall.purchaseFailed")
         }
     }
 
     private func restore() async {
         do {
             let active = try await pro.restore()
-            alertMessage = active ? "구독이 복원됐어요!" : "복원할 구독을 찾지 못했어요."
+            alertMessage = active ? L("paywall.restored") : L("paywall.nothingToRestore")
         } catch {
-            alertMessage = "복원에 실패했어요. 잠시 후 다시 시도해주세요."
+            alertMessage = L("paywall.restoreFailed")
         }
     }
 }

@@ -8,9 +8,17 @@ struct ExploreGridView: View {
     @EnvironmentObject private var roomService: RoomService
 
     enum SortMode: String, CaseIterable {
-        case recommended = "추천순"
-        case latest = "최신순"
-        case popular = "인기순"
+        case recommended
+        case latest
+        case popular
+
+        var displayName: String {
+            switch self {
+            case .recommended: return L("explore.sort.recommended")
+            case .latest: return L("explore.sort.latest")
+            case .popular: return L("explore.sort.popular")
+            }
+        }
     }
 
     @StateObject private var locationService = LocationService()
@@ -71,7 +79,7 @@ struct ExploreGridView: View {
                     }
                 }
             }
-            .navigationTitle("탐색")
+            .navigationTitle(L("tab.explore"))
             .navigationBarTitleDisplayMode(.inline)
         }
         .fullScreenCover(item: $selectedCourse, onDismiss: {
@@ -120,7 +128,7 @@ struct ExploreGridView: View {
                     Button {
                         withAnimation(.easeInOut(duration: 0.15)) { sortMode = mode }
                     } label: {
-                        Text(mode.rawValue)
+                        Text(mode.displayName)
                             .font(.tte(14, .semibold))
                             .foregroundColor(sortMode == mode ? .white : .tteMediumGray)
                             .padding(.horizontal, 16)
@@ -140,7 +148,7 @@ struct ExploreGridView: View {
 
     private var creatorRankingStrip: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("이번 주 인기 크리에이터")
+            Text(L("explore.weeklyCreators"))
                 .font(.tte(14, .bold))
                 .foregroundColor(.tteDarkGray)
                 .padding(.horizontal, 16)
@@ -216,7 +224,7 @@ struct ExploreGridView: View {
             Image(systemName: "square.grid.2x2")
                 .font(.tte(44))
                 .foregroundColor(.tteOrange.opacity(0.4))
-            Text("아직 등록된 코스가 없어요")
+            Text(L("explore.empty"))
                 .font(.tte(15, .semibold))
                 .foregroundColor(.tteDarkGray)
             Spacer()
@@ -289,7 +297,7 @@ private struct GridCell: View {
                             .foregroundColor(.white)
                             .lineLimit(2)
                             .shadow(color: .black.opacity(0.4), radius: 3, y: 1)
-                        Text("\(course.region) · \(course.tag.rawValue)")
+                        Text("\(course.region) · \(course.tag.displayName)")
                             .font(.tte(11))
                             .foregroundColor(.white.opacity(0.9))
                             .lineLimit(1)

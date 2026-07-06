@@ -103,7 +103,7 @@ class CourseService: ObservableObject {
             // Rollback local state on failure
             likedCourseIds = previousLiked
             courses = previousCourses
-            errorMessage = "좋아요 처리에 실패했습니다. 네트워크 상태를 확인하고 다시 시도해주세요."
+            errorMessage = L("course.likeFailed")
             throw error
         }
     }

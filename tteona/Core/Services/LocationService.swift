@@ -106,8 +106,8 @@ class LocationService: NSObject, ObservableObject {
 
     func sendArrivalNotification(placeName: String) {
         let content = UNMutableNotificationContent()
-        content.title = "📍 \(placeName)에 도착했어요!"
-        content.body = "지금 촬영하세요"
+        content.title = L("notif.arrived.title", placeName)
+        content.body = L("notif.arrived.body")
         content.sound = .default
         content.userInfo = ["placeName": placeName, "action": "openCamera"]
 

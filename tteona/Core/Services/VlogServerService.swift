@@ -15,9 +15,9 @@ actor VlogServerService {
 
         var errorDescription: String? {
             switch self {
-            case .noClips:                  return "업로드할 클립이 없어요."
-            case .badResponse(let m):       return "서버 응답 오류: \(m)"
-            case .processingFailed(let m):  return "서버 편집 실패: \(m)"
+            case .noClips:                  return L("vlogserver.error.noClips")
+            case .badResponse(let m):       return L("vlogserver.error.badResponse", m)
+            case .processingFailed(let m):  return L("vlogserver.error.processingFailed", m)
             }
         }
     }
@@ -79,7 +79,7 @@ actor VlogServerService {
         }
         guard !clips.isEmpty else { throw ServerVlogError.noClips }
 
-        await onProgress(0.02, "서버에 편집을 준비하고 있어요")
+        await onProgress(0.02, L("vlogserver.prep"))
 
         // 1) 잡 생성 (태그 → BGM 무드, formats → 추가 포맷, shotAt → 클립별 촬영시각 자막)
         let df = DateFormatter()
@@ -103,10 +103,10 @@ actor VlogServerService {
         // 2) 클립 업로드 (0.05 → 0.45)
         for (i, clip) in clips.enumerated() {
             await onProgress(0.05 + 0.40 * Double(i) / Double(clips.count),
-                             "클립 업로드 중 (\(i + 1)/\(clips.count))")
+                             L("vlogserver.uploading", i + 1, clips.count))
             try await uploadClip(jobId: jobId, order: clip.place.order, fileURL: clip.file)
         }
-        await onProgress(0.45, "서버에서 편집 중이에요")
+        await onProgress(0.45, L("vlogserver.editing"))
 
         // 3) 합성 시작
         try await startJob(jobId: jobId)
@@ -126,25 +126,25 @@ actor VlogServerService {
             case "failed":
                 throw ServerVlogError.processingFailed(st.errorMsg ?? "unknown")
             default:
-                await onProgress(0.45 + 0.43 * Double(st.progress) / 100.0, "서버에서 편집 중이에요")
+                await onProgress(0.45 + 0.43 * Double(st.progress) / 100.0, L("vlogserver.editing"))
             }
             if outputUrl != nil { break }
         }
         guard let outputUrl else { throw ServerVlogError.processingFailed("timeout") }
 
         // 5) 완성본 다운로드 (0.88 → 0.98) — 기본본 + 추가 포맷들
-        await onProgress(0.90, "완성본을 받아오고 있어요")
+        await onProgress(0.90, L("vlogserver.receiving"))
         let mainLocal = try await download(urlString: outputUrl)
         var extras: [(format: String, url: URL)] = []
         let extraItems = outputs.filter { $0.url != outputUrl }
         for (i, item) in extraItems.enumerated() {
             await onProgress(0.92 + 0.05 * Double(i) / Double(max(extraItems.count, 1)),
-                             "선택한 포맷 버전을 받아오고 있어요")
+                             L("vlogserver.receivingFormats"))
             if let local = try? await download(urlString: item.url) {   // 부가 기능 — 실패해도 메인 유지
                 extras.append((item.format, local))
             }
         }
-        await onProgress(0.98, "거의 다 됐어요")
+        await onProgress(0.98, L("vlogserver.almostDone"))
         return GeneratedVlog(main: mainLocal, extras: extras)
     }
 

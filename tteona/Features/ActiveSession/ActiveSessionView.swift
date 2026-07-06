@@ -188,31 +188,31 @@ struct ActiveSessionView: View {
         .sheet(isPresented: $showResumeSheet) {
             resumeSheet
         }
-        .alert("진행 상황은 저장돼요", isPresented: $showExitNotice) {
-            Button("닫기") {
+        .alert(L("session.exitNotice.title"), isPresented: $showExitNotice) {
+            Button(L("common.close")) {
                 didShowExitNotice = true
                 closeSession()
             }
-            Button("계속 진행", role: .cancel) {
+            Button(L("session.continueProgress"), role: .cancel) {
                 didShowExitNotice = true
             }
         } message: {
-            Text("지금까지의 기록은 자동 저장돼요.\n홈의 '이어하기' 버튼으로 언제든 돌아올 수 있어요.")
+            Text(L("session.exitNotice.message"))
         }
-        .confirmationDialog("아직 도착 전이에요", isPresented: $showFarCaptureConfirm, titleVisibility: .visible) {
-            Button("그래도 촬영하기") { showCamera = true }
-            Button("취소", role: .cancel) {}
+        .confirmationDialog(L("session.notArrivedYet"), isPresented: $showFarCaptureConfirm, titleVisibility: .visible) {
+            Button(L("session.captureAnyway")) { showCamera = true }
+            Button(L("common.cancel"), role: .cancel) {}
         } message: {
             if let d = farCaptureDistance, let place = currentPlace {
-                Text("\(place.placeName)까지 \(formatDistance(d)) 남았어요.\nGPS가 부정확하거나 실내라면 지금 촬영해도 괜찮아요.")
+                Text(L("session.farCapture.message", place.placeName, formatDistance(d)))
             } else {
-                Text("현재 위치를 확인할 수 없어요. 지금 촬영해도 괜찮아요.")
+                Text(L("session.farCapture.noLocation"))
             }
         }
-        .alert("일부 영상 확인 불가", isPresented: $showIntegrityAlert) {
-            Button("확인", role: .cancel) { }
+        .alert(L("session.integrity.title"), isPresented: $showIntegrityAlert) {
+            Button(L("common.ok"), role: .cancel) { }
         } message: {
-            Text("일부 장소의 영상 파일이 확인되지 않아 촬영 리스트가 자동으로 정리되었습니다. 해당 장소는 다시 촬영하실 수 있습니다.")
+            Text(L("session.integrity.message"))
         }
         .sheet(isPresented: $showRatingPrompt, onDismiss: { ratingPlace = nil }) {
             if let place = ratingPlace,
@@ -220,7 +220,7 @@ struct ActiveSessionView: View {
                 PlaceRatingPromptView(
                     place: place,
                     userId: uid,
-                    nickname: userService.currentUser?.nickname ?? "멤버"
+                    nickname: userService.currentUser?.nickname ?? L("session.member")
                 ) {
                     showRatingPrompt = false
                 }
@@ -297,14 +297,14 @@ struct ActiveSessionView: View {
                         .frame(width: 40, height: 40)
                         .background(Circle().fill(Color.black.opacity(0.5)))
                 }
-                .accessibilityLabel("세션 닫기")
+                .accessibilityLabel(L("session.close"))
 
                 Spacer()
 
                 VStack(spacing: 4) {
                     HStack(spacing: 6) {
                         Circle().fill(Color.red).frame(width: 8, height: 8)
-                        Text("코스 진행 중")
+                        Text(L("session.courseInProgress"))
                             .font(.tte(13, .semibold))
                             .foregroundColor(.white)
                     }
@@ -316,7 +316,7 @@ struct ActiveSessionView: View {
                         HStack(spacing: 4) {
                             Image(systemName: "location.fill")
                                 .font(.tte(10))
-                            Text("그룹 위치 공유 중")
+                            Text(L("session.sharingLocation"))
                                 .font(.tte(11, .medium))
                         }
                         .foregroundColor(.white.opacity(0.9))
@@ -335,7 +335,7 @@ struct ActiveSessionView: View {
                         Text("\(visitedPlaces.count)/\(orderedPlaces.count)")
                             .font(.tte(13, .semibold))
                             .foregroundColor(.white)
-                        Text("편집")
+                        Text(L("common.edit"))
                             .font(.tte(10))
                             .foregroundColor(.white.opacity(0.8))
                     }
@@ -388,7 +388,7 @@ struct ActiveSessionView: View {
                             Image(systemName: "location.fill")
                                 .foregroundColor(.tteOrange)
                                 .font(.tte(14))
-                            Text("\(place.placeName)까지 \(formatDistance(distance))")
+                            Text(L("session.distanceRemaining", place.placeName, formatDistance(distance)))
                                 .font(.tte(14))
                                 .foregroundColor(.tteDarkGray)
                         }
@@ -405,7 +405,7 @@ struct ActiveSessionView: View {
                             showFarCaptureConfirm = true
                         }
                     } label: {
-                        Text(isNearby ? "📍 \(place.placeName) 도착! 촬영하기" : "📍 \(place.placeName)으로 이동 중...")
+                        Text(isNearby ? L("session.arrivedCapture", place.placeName) : L("session.movingTo", place.placeName))
                             .font(.tte(16, .semibold))
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
@@ -424,7 +424,7 @@ struct ActiveSessionView: View {
                     } label: {
                         HStack(spacing: 8) {
                             Image(systemName: "film.fill")
-                            Text("Vlog 만들기")
+                            Text(L("session.makeVlog"))
                                 .fontWeight(.semibold)
                         }
                         .font(.tte(16))
@@ -465,7 +465,7 @@ struct ActiveSessionView: View {
         Haptics.success()
         visitedPlaces.insert(place.order)
         if !roomIds.isEmpty, let uid = authService.currentUser?.uid {
-            let nickname = userService.currentUser?.nickname ?? "멤버"
+            let nickname = userService.currentUser?.nickname ?? L("session.member")
             let lat = locationService.currentLocation?.coordinate.latitude ?? place.latitude
             let lon = locationService.currentLocation?.coordinate.longitude ?? place.longitude
             for rid in roomIds {
@@ -513,10 +513,10 @@ struct ActiveSessionView: View {
             .padding(.bottom, 16)
 
             VStack(spacing: 6) {
-                Text("오늘 코스가 남아있어요")
+                Text(L("session.courseRemaining.title"))
                     .font(.tte(20, .bold))
                     .foregroundColor(.tteDarkGray)
-                Text("\(course.courseName) · \(visitedPlaces.count)/\(orderedPlaces.count)곳 완료")
+                Text(L("session.courseRemaining.progress", course.courseName, visitedPlaces.count, orderedPlaces.count))
                     .font(.tte(14))
                     .foregroundColor(.tteMediumGray)
             }
@@ -529,7 +529,7 @@ struct ActiveSessionView: View {
                 } label: {
                     HStack(spacing: 10) {
                         Image(systemName: "play.fill").font(.tte(15))
-                        Text("이어서 하기").font(.tte(16, .semibold))
+                        Text(L("session.resume")).font(.tte(16, .semibold))
                     }
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity).frame(height: 56)
@@ -542,7 +542,7 @@ struct ActiveSessionView: View {
                 } label: {
                     HStack(spacing: 10) {
                         Image(systemName: "arrow.counterclockwise").font(.tte(15))
-                        Text("새로 시작하기").font(.tte(16, .medium))
+                        Text(L("main.startFresh")).font(.tte(16, .medium))
                     }
                     .foregroundColor(.tteDarkGray)
                     .frame(maxWidth: .infinity).frame(height: 56)
@@ -566,7 +566,7 @@ struct ActiveSessionView: View {
         currentPlaceIndex = 0
         locationService.startTracking(places: orderedPlaces)
         guard let uid = authService.currentUser?.uid else { return }
-        let nickname = userService.currentUser?.nickname ?? "멤버"
+        let nickname = userService.currentUser?.nickname ?? L("session.member")
         FCMService.shared.requestGroupNotification(
             type: .courseTripStart,
             senderUserId: uid,
@@ -598,7 +598,7 @@ struct ActiveSessionView: View {
 
     private func postTripEnd() {
         guard !roomIds.isEmpty, let uid = authService.currentUser?.uid else { return }
-        let nickname = userService.currentUser?.nickname ?? "멤버"
+        let nickname = userService.currentUser?.nickname ?? L("session.member")
         for rid in roomIds {
             roomService.postFeed(roomId: rid, type: .tripEnd, userId: uid,
                                  nickname: nickname, courseId: course.courseId,
@@ -680,10 +680,10 @@ struct ArrivalBanner: View {
                 Text("📍")
                     .font(.tte(20))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("\(placeName)에 도착했어요!")
+                    Text(L("session.arrivedAt", placeName))
                         .font(.tte(15, .semibold))
                         .foregroundColor(.white)
-                    Text("탭하여 촬영 시작")
+                    Text(L("session.tapToCapture"))
                         .font(.tte(12))
                         .foregroundColor(.white.opacity(0.8))
                 }
@@ -775,11 +775,11 @@ struct PlaceEditorSheet: View {
                                 .foregroundColor(isVisited || isSkipped ? .tteMediumGray : .tteDarkGray)
                                 .strikethrough(isVisited || isSkipped)
                             if isCurrent {
-                                Text("현재 목적지")
+                                Text(L("session.currentDestination"))
                                     .font(.tte(11))
                                     .foregroundColor(.tteOrange)
                             } else if isSkipped {
-                                Text("건너뜀")
+                                Text(L("session.skipped"))
                                     .font(.tte(11))
                                     .foregroundColor(.tteMediumGray)
                             }
@@ -794,7 +794,7 @@ struct PlaceEditorSheet: View {
                                     skippedPlaces.remove(place.order)
                                     updateCurrentIndex()
                                 } label: {
-                                    Text("취소")
+                                    Text(L("common.cancel"))
                                         .font(.tte(12))
                                         .foregroundColor(.tteOrange)
                                         .padding(.horizontal, 10)
@@ -808,7 +808,7 @@ struct PlaceEditorSheet: View {
                                     skippedPlaces.insert(place.order)
                                     updateCurrentIndex()
                                 } label: {
-                                    Text("건너뛰기")
+                                    Text(L("common.skip"))
                                         .font(.tte(12))
                                         .foregroundColor(.tteMediumGray)
                                         .padding(.horizontal, 10)
@@ -845,11 +845,11 @@ struct PlaceEditorSheet: View {
             }
             .listStyle(.plain)
             .environment(\.editMode, $editMode)
-            .navigationTitle("코스 편집")
+            .navigationTitle(L("session.editCourse"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("완료") { dismiss() }
+                    Button(L("common.done")) { dismiss() }
                         .fontWeight(.semibold)
                         .foregroundColor(.tteOrange)
                 }

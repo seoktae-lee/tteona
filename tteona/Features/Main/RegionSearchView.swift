@@ -14,11 +14,11 @@ struct RegionSearchView: View {
                 searchBar
                 resultList
             }
-            .navigationTitle("지역 검색")
+            .navigationTitle(L("region.title"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("닫기") { dismiss() }
+                    Button(L("common.close")) { dismiss() }
                         .foregroundColor(.tteDarkGray)
                 }
             }
@@ -29,7 +29,7 @@ struct RegionSearchView: View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
                 .foregroundColor(.tteMediumGray)
-            TextField("지역, 동네 검색 (예: 잠실, 홍대, 해운대)", text: $query)
+            TextField(L("region.placeholder"), text: $query)
                 .autocorrectionDisabled()
                 .onSubmit { Task { await search.search(query) } }
             if !query.isEmpty {
@@ -62,7 +62,7 @@ struct RegionSearchView: View {
                 Image(systemName: "magnifyingglass")
                     .font(.tte(36))
                     .foregroundColor(.tteMediumGray.opacity(0.4))
-                Text("검색 결과가 없어요")
+                Text(L("region.noResults"))
                     .foregroundColor(.tteMediumGray)
             }
             .padding(.top, 60)
@@ -72,7 +72,7 @@ struct RegionSearchView: View {
                 Image(systemName: "map.fill")
                     .font(.tte(36))
                     .foregroundColor(.tteOrange.opacity(0.4))
-                Text("동네나 지역을 검색해보세요")
+                Text(L("region.hint"))
                     .font(.tte(15))
                     .foregroundColor(.tteMediumGray)
             }

@@ -87,7 +87,7 @@ struct OnboardingView: View {
 
                 Spacer()
 
-                nextButton(title: "시작하기") {
+                nextButton(title: L("onboarding.start")) {
                     Haptics.light()
                     withAnimation { step = 1 }
                 }
@@ -108,12 +108,12 @@ struct OnboardingView: View {
     private var nicknameStep: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 12) {
-                Text("닉네임을\n설정해주세요")
+                Text(L("onboarding.nickname.title"))
                     .font(.tte(30, .bold))
                     .foregroundColor(.tteDarkGray)
                     .padding(.top, 24)
 
-                Text("코스를 만들 때 닉네임이 표시됩니다.")
+                Text(L("onboarding.nickname.subtitle"))
                     .font(.tte(15))
                     .foregroundColor(.tteMediumGray)
             }
@@ -123,7 +123,7 @@ struct OnboardingView: View {
             Spacer()
 
             VStack(spacing: 8) {
-                TteTextField(placeholder: "닉네임 입력 (2~10자)", text: $nickname)
+                TteTextField(placeholder: L("onboarding.nickname.placeholder"), text: $nickname)
                     .padding(.horizontal, 24)
                     .onChange(of: nickname) { _, newValue in
                         scheduleNicknameCheck(newValue)
@@ -133,28 +133,28 @@ struct OnboardingView: View {
                     switch nicknameState {
                     case .checking:
                         ProgressView().scaleEffect(0.7)
-                        Text("확인 중...")
+                        Text(L("onboarding.nickname.checking"))
                             .font(.tte(12))
                             .foregroundColor(.tteMediumGray)
                     case .available:
                         Image(systemName: "checkmark.circle.fill")
                             .font(.tte(13))
                             .foregroundColor(.green)
-                        Text("사용 가능한 별명이에요")
+                        Text(L("onboarding.nickname.available"))
                             .font(.tte(12))
                             .foregroundColor(.green)
                     case .taken:
                         Image(systemName: "xmark.circle.fill")
                             .font(.tte(13))
                             .foregroundColor(.red)
-                        Text("이미 사용 중인 별명이에요")
+                        Text(L("onboarding.nickname.taken"))
                             .font(.tte(12))
                             .foregroundColor(.red)
                     case .inappropriate:
                         Image(systemName: "xmark.circle.fill")
                             .font(.tte(13))
                             .foregroundColor(.red)
-                        Text("사용할 수 없는 표현이 포함돼 있어요")
+                        Text(L("onboarding.nickname.inappropriate"))
                             .font(.tte(12))
                             .foregroundColor(.red)
                     case .idle:
@@ -175,7 +175,7 @@ struct OnboardingView: View {
                 || nickname.count > 10
                 || nicknameState != .available
             VStack(spacing: 12) {
-                nextButton(title: "다음") {
+                nextButton(title: L("common.next")) {
                     Task { await saveNickname() }
                 }
                 .disabled(isInvalid)
@@ -191,12 +191,12 @@ struct OnboardingView: View {
     private var permissionStep: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 12) {
-                Text("앱 사용을 위해\n권한이 필요해요")
+                Text(L("onboarding.permission.title"))
                     .font(.tte(30, .bold))
                     .foregroundColor(.tteDarkGray)
                     .padding(.top, 48)
 
-                Text("아래 권한들은 핵심 기능에 사용됩니다.")
+                Text(L("onboarding.permission.subtitle"))
                     .font(.tte(15))
                     .foregroundColor(.tteMediumGray)
             }
@@ -208,8 +208,8 @@ struct OnboardingView: View {
             VStack(spacing: 14) {
                 PermissionRow(
                     icon: "location.fill",
-                    title: "위치 권한",
-                    description: "장소 도착을 감지하고 지도에 현재 위치를 표시해요",
+                    title: L("onboarding.permission.location"),
+                    description: L("onboarding.permission.location.desc"),
                     isGranted: locationGranted
                 ) {
                     Task { await requestLocation() }
@@ -217,8 +217,8 @@ struct OnboardingView: View {
 
                 PermissionRow(
                     icon: "bell.fill",
-                    title: "알림 권한",
-                    description: "장소에 도착하면 촬영 알림을 보내드려요",
+                    title: L("onboarding.permission.notification"),
+                    description: L("onboarding.permission.notification.desc"),
                     isGranted: notificationGranted
                 ) {
                     Task { await requestNotification() }
@@ -226,8 +226,8 @@ struct OnboardingView: View {
 
                 PermissionRow(
                     icon: "video.fill",
-                    title: "카메라 권한",
-                    description: "각 장소에서 5초 영상을 촬영해요",
+                    title: L("onboarding.permission.camera"),
+                    description: L("onboarding.permission.camera.desc"),
                     isGranted: cameraGranted
                 ) {
                     Task { await requestCamera() }
@@ -235,8 +235,8 @@ struct OnboardingView: View {
 
                 PermissionRow(
                     icon: "photo.fill",
-                    title: "사진 라이브러리 권한",
-                    description: "촬영한 영상을 앨범에 저장해요",
+                    title: L("onboarding.permission.photos"),
+                    description: L("onboarding.permission.photos.desc"),
                     isGranted: photoLibraryGranted
                 ) {
                     Task { await requestPhotoLibrary() }
@@ -246,7 +246,7 @@ struct OnboardingView: View {
 
             Spacer()
 
-            nextButton(title: "다음") {
+            nextButton(title: L("common.next")) {
                 Task { await requestAllPermissionsThenContinue() }
             }
                 .padding(.horizontal, 24)
@@ -258,7 +258,7 @@ struct OnboardingView: View {
     private var termsStep: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 12) {
-                Text("서비스 이용을\n동의해주세요")
+                Text(L("onboarding.terms.title"))
                     .font(.tte(30, .bold))
                     .foregroundColor(.tteDarkGray)
                     .padding(.top, 48)
@@ -279,7 +279,7 @@ struct OnboardingView: View {
                             .font(.tte(24))
                             .foregroundColor((agreedTerms && agreedPrivacy) ? .tteOrange : Color(UIColor.tertiaryLabel))
 
-                        Text("전체 동의")
+                        Text(L("onboarding.terms.agreeAll"))
                             .font(.tte(16, .semibold))
                             .foregroundColor(.tteDarkGray)
                         Spacer()
@@ -297,15 +297,15 @@ struct OnboardingView: View {
 
                 Divider().padding(.horizontal, 8)
 
-                TermsRow(title: "서비스 이용약관 동의", isRequired: true, url: URL(string: "https://tteona.kr/terms.html")!, isChecked: $agreedTerms)
-                TermsRow(title: "개인정보 처리방침 동의", isRequired: true, url: URL(string: "https://tteona.kr/privacy.html")!, isChecked: $agreedPrivacy)
+                TermsRow(title: L("onboarding.terms.service"), isRequired: true, url: URL(string: "https://tteona.kr/terms.html")!, isChecked: $agreedTerms)
+                TermsRow(title: L("onboarding.terms.privacy"), isRequired: true, url: URL(string: "https://tteona.kr/privacy.html")!, isChecked: $agreedPrivacy)
             }
             .padding(.horizontal, 24)
 
             Spacer()
 
             let allAgreed = agreedTerms && agreedPrivacy
-            nextButton(title: "떠나기 시작") {
+            nextButton(title: L("onboarding.letsGo")) {
                 Task { await finishOnboarding() }
             }
             .disabled(!allAgreed)
@@ -502,7 +502,7 @@ struct PermissionRow: View {
             Spacer()
 
             Button(action: onTap) {
-                Text(isGranted ? "허용됨" : "계속")
+                Text(isGranted ? L("onboarding.permission.granted") : L("onboarding.permission.continue"))
                     .font(.tte(13, .semibold))
                     .foregroundColor(isGranted ? .green : .white)
                     .padding(.horizontal, 14)
@@ -542,7 +542,7 @@ struct TermsRow: View {
                 .foregroundColor(.tteDarkGray)
 
             if isRequired {
-                Text("필수")
+                Text(L("onboarding.terms.required"))
                     .font(.tte(11, .medium))
                     .foregroundColor(.tteOrange)
                     .padding(.horizontal, 7)

@@ -23,7 +23,7 @@ struct BlockedUsersView: View {
                     Image(systemName: "person.crop.circle.badge.checkmark")
                         .font(.tte(44))
                         .foregroundColor(.tteMediumGray.opacity(0.4))
-                    Text("차단한 사용자가 없습니다.")
+                    Text(L("blocked.empty"))
                         .font(.tte(15))
                         .foregroundColor(.tteMediumGray)
                 }
@@ -45,7 +45,7 @@ struct BlockedUsersView: View {
                             }
                         }
                         Spacer()
-                        Button("차단 해제") {
+                        Button(L("blocked.unblock")) {
                             unblock(userId: user.uid)
                         }
                         .font(.tte(13, .semibold))
@@ -58,15 +58,15 @@ struct BlockedUsersView: View {
                 }
             }
         }
-        .navigationTitle("차단된 사용자 관리")
+        .navigationTitle(L("settings.blockedUsers"))
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await loadBlockedUsers()
         }
-        .alert("차단 해제 실패", isPresented: $showUnblockErrorAlert) {
-            Button("확인", role: .cancel) {}
+        .alert(L("blocked.unblockFailed"), isPresented: $showUnblockErrorAlert) {
+            Button(L("common.ok"), role: .cancel) {}
         } message: {
-            Text("잠시 후 다시 시도해주세요.")
+            Text(L("common.tryAgainLater"))
         }
     }
 
@@ -82,7 +82,7 @@ struct BlockedUsersView: View {
             if let user = await userService.fetchAuthor(uid: uid) {
                 loadedUsers.append(user)
             } else {
-                loadedUsers.append(AppUser(uid: uid, email: "", nickname: "탈퇴한 사용자"))
+                loadedUsers.append(AppUser(uid: uid, email: "", nickname: L("user.deleted")))
             }
         }
         blockedUsers = loadedUsers

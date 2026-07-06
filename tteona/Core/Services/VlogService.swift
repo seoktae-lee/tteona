@@ -226,7 +226,7 @@ class VlogService {
 
         let dateLayer = CATextLayer()
         let fontSize = size.height * 0.075
-        dateLayer.string = Self.koreanDateString(date)
+        dateLayer.string = Self.localizedDateString(date)
         dateLayer.font = UIFont(name: "GowunBatang-Regular", size: fontSize) ?? UIFont.systemFont(ofSize: fontSize, weight: .bold)
         dateLayer.fontSize = fontSize
         dateLayer.foregroundColor = UIColor.white.cgColor
@@ -260,9 +260,13 @@ class VlogService {
         return container
     }
 
-    private static func koreanDateString(_ date: Date) -> String {
-        let cal = Calendar.current
-        return "\(cal.component(.year, from: date))년 \(cal.component(.month, from: date))월 \(cal.component(.day, from: date))일"
+    private static func localizedDateString(_ date: Date) -> String {
+        // Vlog 오버레이 날짜 — 선택 언어 로케일의 롱 포맷(예: 2026년 7월 7일 / July 7, 2026)
+        let f = DateFormatter()
+        f.locale = LanguageManager.shared.locale
+        f.dateStyle = .long
+        f.timeStyle = .none
+        return f.string(from: date)
     }
 
     // MARK: - CALayer 텍스트 오버레이 생성
@@ -361,9 +365,9 @@ enum VlogError: LocalizedError {
     case noClips, noVideoTrack, writeFailed
     var errorDescription: String? {
         switch self {
-        case .noClips: return "촬영된 영상이 없습니다."
-        case .noVideoTrack: return "영상 트랙을 읽을 수 없습니다."
-        case .writeFailed: return "영상 생성에 실패했습니다."
+        case .noClips: return L("vlog.error.noClips")
+        case .noVideoTrack: return L("vlog.error.noVideoTrack")
+        case .writeFailed: return L("vlog.error.writeFailed")
         }
     }
 }

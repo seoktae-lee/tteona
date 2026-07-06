@@ -89,6 +89,16 @@ enum CourseTag: String, Codable, CaseIterable {
         case .solo: return "🧍"
         }
     }
+
+    // rawValue는 Firestore 저장값(한글)이므로 화면 표시는 항상 displayName을 사용할 것
+    var displayName: String {
+        switch self {
+        case .couple: return L("tag.couple")
+        case .friends: return L("tag.friends")
+        case .family: return L("tag.family")
+        case .solo: return L("tag.solo")
+        }
+    }
 }
 
 let courseRegions = ["서울", "부산", "제주", "경주", "강릉", "전주", "기타"]

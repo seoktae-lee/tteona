@@ -33,14 +33,14 @@ struct VlogLimitPopupView: View {
                 }
                 .padding(.top, 28)
 
-                Text("촬영 한도에 도달했어요")
+                Text(L("vloglimit.title"))
                     .font(.tte(20, .bold))
                     .foregroundColor(.white)
                     .padding(.top, 16)
 
                 Text(isPro
-                     ? "브이로그 영상은 최대 5분까지 담을 수 있어요.\n지금까지 담은 순간들로 멋진 영상을 만들어드릴게요."
-                     : "무료로는 장소당 5초, 총 30초까지 담을 수 있어요.")
+                     ? L("vloglimit.durationMsg")
+                     : L("vloglimit.freeMsg"))
                     .font(.tte(14))
                     .foregroundColor(.white.opacity(0.7))
                     .multilineTextAlignment(.center)
@@ -56,7 +56,7 @@ struct VlogLimitPopupView: View {
                             .renderingMode(.original)
                             .aspectRatio(contentMode: .fit)
                             .frame(height: 20)
-                        Text("장소당 제한 없이 최대 5분까지 자유롭게")
+                        Text(L("vloglimit.proFeature"))
                             .font(.tte(12))
                             .foregroundColor(.white.opacity(0.6))
                     }
@@ -71,7 +71,7 @@ struct VlogLimitPopupView: View {
                     .padding(.horizontal, 20)
 
                     Button(action: onUpgrade) {
-                        Text("tteona PRO 알아보기")
+                        Text(L("vloglimit.learnPro"))
                             .font(.tte(16, .bold))
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
@@ -83,7 +83,7 @@ struct VlogLimitPopupView: View {
                 }
 
                 Button(action: onDismiss) {
-                    Text("확인")
+                    Text(L("common.ok"))
                         .font(.tte(15, .medium))
                         .foregroundColor(.white.opacity(0.65))
                         .frame(maxWidth: .infinity)

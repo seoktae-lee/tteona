@@ -63,7 +63,7 @@ struct RoomCard: View {
                 HStack(spacing: 4) {
                     Image(systemName: "person.2.fill")
                         .font(.tte(10))
-                    Text("멤버 \(room.memberIds.count)명")
+                    Text(L("roomselect.members", room.memberIds.count))
                         .font(.tte(12, .medium))
                 }
                 .foregroundColor(.tteMediumGray)
@@ -103,10 +103,10 @@ struct CreateRoomView: View {
         NavigationStack {
             VStack(spacing: 24) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("그룹 이름")
+                    Text(L("group.roomName"))
                         .font(.tte(14, .medium))
                         .foregroundColor(.tteMediumGray)
-                    TextField("예: 제주 여행 친구들", text: $roomName)
+                    TextField(L("group.roomName.placeholder"), text: $roomName)
                         .font(.tte(17))
                         .padding(14)
                         .background(RoundedRectangle(cornerRadius: 12).fill(Color(UIColor.secondarySystemBackground)))
@@ -130,7 +130,7 @@ struct CreateRoomView: View {
                         if isLoading {
                             ProgressView().tint(.white)
                         } else {
-                            Text("방 만들기")
+                            Text(L("group.createRoom"))
                                 .font(.tte(17, .semibold))
                                 .foregroundColor(.white)
                         }
@@ -146,11 +146,11 @@ struct CreateRoomView: View {
                 .padding(.horizontal, 20)
                 .padding(.bottom, 36)
             }
-            .navigationTitle("그룹 만들기")
+            .navigationTitle(L("group.createGroup"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("취소") { dismiss() }
+                    Button(L("common.cancel")) { dismiss() }
                         .foregroundColor(.tteDarkGray)
                 }
             }
@@ -159,7 +159,7 @@ struct CreateRoomView: View {
 
     private func create() async {
         guard let uid = authService.currentUser?.uid else { return }
-        let nickname = userService.currentUser?.nickname ?? "멤버"
+        let nickname = userService.currentUser?.nickname ?? L("session.member")
         isLoading = true
         do {
             _ = try await roomService.createRoom(name: roomName.trimmingCharacters(in: .whitespaces), userId: uid, nickname: nickname)
@@ -199,11 +199,11 @@ struct JoinRoomView: View {
         NavigationStack {
             VStack(spacing: 24) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("초대 코드 6자리를 입력하세요")
+                    Text(L("group.inviteCode.prompt"))
                         .font(.tte(14, .medium))
                         .foregroundColor(.tteMediumGray)
 
-                    TextField("예: A3F7K2", text: $inviteCode)
+                    TextField(L("group.inviteCode.placeholder"), text: $inviteCode)
                         .font(.tte(28, .bold))
                         .multilineTextAlignment(.center)
                         .kerning(6)
@@ -219,7 +219,7 @@ struct JoinRoomView: View {
                 .padding(.top, 12)
 
                 if isLocked {
-                    Text("코드 입력 횟수를 초과했어요.\n\(cooldownRemaining / 60)분 후 다시 시도해주세요.")
+                    Text(L("group.codeCooldown", cooldownRemaining / 60))
                         .font(.tte(14))
                         .foregroundColor(.red)
                         .multilineTextAlignment(.center)
@@ -229,7 +229,7 @@ struct JoinRoomView: View {
                         Text(error)
                             .font(.tte(14))
                             .foregroundColor(.red)
-                        Text("\(failCount)/\(maxAttempts)회 실패")
+                        Text(L("group.failCount", failCount, maxAttempts))
                             .font(.tte(12))
                             .foregroundColor(.tteMediumGray)
                     }
@@ -245,7 +245,7 @@ struct JoinRoomView: View {
                         if isLoading {
                             ProgressView().tint(.white)
                         } else {
-                            Text("참여하기")
+                            Text(L("group.join"))
                                 .font(.tte(17, .semibold))
                                 .foregroundColor(.white)
                         }
@@ -261,11 +261,11 @@ struct JoinRoomView: View {
                 .padding(.horizontal, 20)
                 .padding(.bottom, 36)
             }
-            .navigationTitle("코드로 참여")
+            .navigationTitle(L("group.joinWithCode"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("취소") { dismiss() }
+                    Button(L("common.cancel")) { dismiss() }
                         .foregroundColor(.tteDarkGray)
                 }
             }
@@ -293,7 +293,7 @@ struct JoinRoomView: View {
 
     private func join() async {
         guard !isLocked, let uid = authService.currentUser?.uid else { return }
-        let nickname = userService.currentUser?.nickname ?? "멤버"
+        let nickname = userService.currentUser?.nickname ?? L("session.member")
         isLoading = true
         errorMessage = nil
         do {

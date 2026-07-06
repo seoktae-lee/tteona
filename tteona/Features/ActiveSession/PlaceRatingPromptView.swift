@@ -20,7 +20,7 @@ struct PlaceRatingPromptView: View {
 
             VStack(spacing: 16) {
                 VStack(spacing: 4) {
-                    Text("방금 방문한 장소 어떠셨나요?")
+                    Text(L("rating.title"))
                         .font(.tte(15, .semibold))
                         .foregroundColor(.tteDarkGray)
                     Text(place.placeName)
@@ -46,7 +46,7 @@ struct PlaceRatingPromptView: View {
                 }
 
                 if selectedRating > 0 {
-                    TextField("한 줄 후기 (선택)", text: $comment)
+                    TextField(L("rating.commentPlaceholder"), text: $comment)
                         .font(.tte(14))
                         .padding(12)
                         .background(RoundedRectangle(cornerRadius: 10)
@@ -60,7 +60,7 @@ struct PlaceRatingPromptView: View {
 
                 HStack(spacing: 12) {
                     Button { onDismiss() } label: {
-                        Text("나중에")
+                        Text(L("rating.later"))
                             .font(.tte(15))
                             .foregroundColor(.tteMediumGray)
                             .frame(maxWidth: .infinity).frame(height: 48)
@@ -73,7 +73,7 @@ struct PlaceRatingPromptView: View {
                             if isSubmitting {
                                 ProgressView().tint(.white)
                             } else {
-                                Text(selectedRating > 0 ? "등록" : "건너뛰기")
+                                Text(selectedRating > 0 ? L("rating.submit") : L("common.skip"))
                                     .font(.tte(15, .semibold))
                                     .foregroundColor(.white)
                             }

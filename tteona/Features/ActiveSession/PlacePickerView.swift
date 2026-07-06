@@ -20,7 +20,7 @@ struct PlacePickerView: View {
                 .frame(width: 40, height: 4)
                 .padding(.top, 12)
 
-            Text("어디서 찍으셨나요?")
+            Text(L("placepicker.title"))
                 .font(.tte(17, .semibold))
                 .foregroundColor(.tteDarkGray)
                 .padding(.top, 16)
@@ -39,10 +39,10 @@ struct PlacePickerView: View {
                         Image(systemName: "location.slash.fill")
                             .foregroundColor(.tteOrange)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("정확한 위치가 꺼져 있어요")
+                            Text(L("placepicker.preciseOff"))
                                 .font(.tte(13, .semibold))
                                 .foregroundColor(.tteDarkGray)
-                            Text("설정에서 켜면 주변 장소를 더 정확하게 찾아요")
+                            Text(L("placepicker.preciseOff.desc"))
                                 .font(.tte(12))
                                 .foregroundColor(.tteMediumGray)
                         }
@@ -67,7 +67,7 @@ struct PlacePickerView: View {
                                 .font(.tte(16))
                                 .foregroundColor(.tteOrange)
                                 .frame(width: 28)
-                            TextField("장소명 직접 입력", text: $customName)
+                            TextField(L("placepicker.customName"), text: $customName)
                                 .font(.tte(15))
                                 .focused($customFocused)
                                 .submitLabel(.done)
@@ -100,7 +100,7 @@ struct PlacePickerView: View {
                                     .font(.tte(16))
                                     .foregroundColor(.tteOrange)
                                     .frame(width: 28)
-                                Text("직접 입력하기")
+                                Text(L("placepicker.enterManually"))
                                     .font(.tte(15))
                                     .foregroundColor(.tteOrange)
                                 Spacer()
@@ -149,7 +149,7 @@ struct PlacePickerView: View {
         // 역지오코딩으로 건물/아파트명 먼저 추가 (가장 위)
         if let placemark = try? await CLGeocoder().reverseGeocodeLocation(location).first,
            let name = placemark.name {
-            collected.append(KakaoNearbyPlace(placeName: name, categoryName: "현재 위치", distance: "0", x: "\(lng)", y: "\(lat)"))
+            collected.append(KakaoNearbyPlace(placeName: name, categoryName: L("placepicker.currentLocation"), distance: "0", x: "\(lng)", y: "\(lat)"))
             seen.insert(name)
         }
 

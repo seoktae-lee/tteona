@@ -24,16 +24,16 @@ struct WeatherInfo {
 
     var description: String {
         switch code {
-        case 0:            return "맑음"
-        case 1, 2:         return "구름 조금"
-        case 3:            return "흐림"
-        case 45, 48:       return "안개"
-        case 51...57:      return "이슬비"
-        case 61...67:      return "비"
-        case 71...77:      return "눈"
-        case 80...82:      return "소나기"
-        case 85, 86:       return "눈 소나기"
-        case 95...99:      return "뇌우"
+        case 0:            return L("weather.clear")
+        case 1, 2:         return L("weather.partlyCloudy")
+        case 3:            return L("weather.cloudy")
+        case 45, 48:       return L("weather.fog")
+        case 51...57:      return L("weather.drizzle")
+        case 61...67:      return L("weather.rain")
+        case 71...77:      return L("weather.snow")
+        case 80...82:      return L("weather.showers")
+        case 85, 86:       return L("weather.snowShowers")
+        case 95...99:      return L("weather.thunderstorm")
         default:           return "-"
         }
     }
@@ -55,9 +55,9 @@ struct RouteInfo {
     var timeText: String {
         let minutes = Int(travelTimeSec / 60)
         if minutes >= 60 {
-            return "\(minutes / 60)시간 \(minutes % 60)분"
+            return L("duration.hoursMinutes", minutes / 60, minutes % 60)
         }
-        return "\(max(minutes, 1))분"
+        return L("duration.minutes", max(minutes, 1))
     }
 }
 

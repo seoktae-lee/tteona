@@ -25,7 +25,7 @@ private func fetchKakaoCustomToken(kakaoAccessToken: String) async throws -> Str
 
     guard statusCode == 200 else {
         throw NSError(domain: "tteona.kakao", code: -1,
-                      userInfo: [NSLocalizedDescriptionKey: "서버 응답 오류 (\(statusCode))"])
+                      userInfo: [NSLocalizedDescriptionKey: L("auth.error.serverResponse", statusCode)])
     }
     guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
           let result = json["result"] as? [String: Any],
@@ -35,7 +35,7 @@ private func fetchKakaoCustomToken(kakaoAccessToken: String) async throws -> Str
         print("[Kakao] 응답 파싱 실패: \(rawBody)")
         #endif
         throw NSError(domain: "tteona.kakao", code: -2,
-                      userInfo: [NSLocalizedDescriptionKey: "서버 응답이 올바르지 않아요."])
+                      userInfo: [NSLocalizedDescriptionKey: L("auth.error.invalidResponse")])
     }
     return token
 }
@@ -104,8 +104,8 @@ class AuthService: NSObject, ObservableObject {
         errorMessage = nil
         defer { isLoading = false }
 
-        guard isValidEmail(email) else { errorMessage = "올바른 이메일 형식이 아닙니다."; return }
-        guard password.count >= 6 else { errorMessage = "비밀번호는 6자 이상이어야 합니다."; return }
+        guard isValidEmail(email) else { errorMessage = L("auth.error.invalidEmail"); return }
+        guard password.count >= 6 else { errorMessage = L("auth.error.shortPassword"); return }
 
         do {
             let result = try await Auth.auth().signIn(withEmail: email, password: password)
@@ -124,7 +124,7 @@ class AuthService: NSObject, ObservableObject {
 
     // MARK: - 비밀번호 재설정
     func sendPasswordReset(email: String) async -> Bool {
-        guard isValidEmail(email) else { errorMessage = "올바른 이메일 형식이 아닙니다."; return false }
+        guard isValidEmail(email) else { errorMessage = L("auth.error.invalidEmail"); return false }
         do {
             try await Auth.auth().sendPasswordReset(withEmail: email)
             return true
@@ -142,8 +142,8 @@ class AuthService: NSObject, ObservableObject {
         errorMessage = nil
         defer { isLoading = false }
 
-        guard isValidEmail(email) else { errorMessage = "올바른 이메일 형식이 아닙니다."; return }
-        guard password.count >= 6 else { errorMessage = "비밀번호는 6자 이상이어야 합니다."; return }
+        guard isValidEmail(email) else { errorMessage = L("auth.error.invalidEmail"); return }
+        guard password.count >= 6 else { errorMessage = L("auth.error.shortPassword"); return }
 
         do {
             let result = try await Auth.auth().createUser(withEmail: email, password: password)
@@ -161,12 +161,12 @@ class AuthService: NSObject, ObservableObject {
                         return
                     } else {
                         try? Auth.auth().signOut()
-                        errorMessage = "이미 가입된 이메일입니다. 로그인해주세요."
+                        errorMessage = L("auth.error.emailInUse")
                         return
                     }
                 }
                 // 비밀번호가 달라 로그인 실패한 경우
-                errorMessage = "이미 가입 진행 중인 이메일이에요.\n처음 설정한 비밀번호로 로그인해 인증을 완료하거나, 비밀번호 재설정을 진행해주세요."
+                errorMessage = L("auth.error.signupInProgress")
             } else {
                 errorMessage = firebaseErrorMessage(error)
             }
@@ -182,7 +182,7 @@ class AuthService: NSObject, ObservableObject {
         guard let nonce = currentNonce,
               let appleIDToken = credential.identityToken,
               let idTokenString = String(data: appleIDToken, encoding: .utf8) else {
-            errorMessage = "Apple 로그인에 실패했습니다."
+            errorMessage = L("auth.error.appleFailed")
             return
         }
 
@@ -222,7 +222,7 @@ class AuthService: NSObject, ObservableObject {
         defer { isLoading = false }
 
         guard let clientID = FirebaseApp.app()?.options.clientID else {
-            errorMessage = "Google 로그인 설정 오류입니다."
+            errorMessage = L("auth.error.googleConfig")
             return
         }
 
@@ -232,7 +232,7 @@ class AuthService: NSObject, ObservableObject {
         do {
             let result = try await GIDSignIn.sharedInstance.signIn(withPresenting: viewController)
             guard let idToken = result.user.idToken?.tokenString else {
-                errorMessage = "Google 인증 토큰을 가져올 수 없습니다."
+                errorMessage = L("auth.error.googleToken")
                 return
             }
             let credential = GoogleAuthProvider.credential(
@@ -279,7 +279,7 @@ class AuthService: NSObject, ObservableObject {
                         cont.resume(throwing: NSError(
                             domain: "tteona.kakao",
                             code: -1,
-                            userInfo: [NSLocalizedDescriptionKey: "카카오 로그인 응답이 비어 있어요. 잠시 후 다시 시도해주세요."]
+                            userInfo: [NSLocalizedDescriptionKey: L("auth.error.kakaoEmpty")]
                         ))
                     }
                 }
@@ -332,13 +332,13 @@ class AuthService: NSObject, ObservableObject {
                      URLError.cannotFindHost.rawValue,
                      URLError.timedOut.rawValue,
                      URLError.dnsLookupFailed.rawValue:
-                    return "카카오 로그인은 되었지만, 서버(Firebase)와 연결되지 않았어요.\nWi‑Fi·셀룰러 연결을 확인하고, VPN·iCloud 프라이베이트 릴레이를 잠시 끈 뒤 다시 시도해주세요."
+                    return L("auth.error.kakaoFirebase")
                 default:
                     break
                 }
             }
             if ns.domain == NSPOSIXErrorDomain, ns.code == 50 {
-                return "카카오 로그인은 되었지만, 네트워크 경로를 찾을 수 없어요.\n인터넷 연결·VPN·방화벽을 확인한 뒤 다시 시도해주세요."
+                return L("auth.error.kakaoNoRoute")
             }
 
             current = ns.userInfo[NSUnderlyingErrorKey] as? Error
@@ -348,12 +348,12 @@ class AuthService: NSObject, ObservableObject {
         if desc.localizedCaseInsensitiveContains("network")
             || desc.localizedCaseInsensitiveContains("internet")
             || desc.localizedCaseInsensitiveContains("route") {
-            return "네트워크 문제로 카카오 로그인을 마무리하지 못했어요.\n연결 상태를 확인한 뒤 다시 시도해주세요."
+            return L("auth.error.kakaoNetwork")
         }
         if desc.localizedCaseInsensitiveContains("already running") {
-            return "로그인 요청이 겹쳐 처리되지 못했어요.\n잠시 후 카카오 버튼을 한 번만 눌러 다시 시도해주세요."
+            return L("auth.error.kakaoOverlap")
         }
-        return "카카오 로그인에 실패했습니다.\n\(desc)"
+        return L("auth.error.kakaoFailed", desc)
     }
 
     // MARK: - 로그아웃
@@ -408,13 +408,13 @@ class AuthService: NSObject, ObservableObject {
     private func firebaseErrorMessage(_ error: Error) -> String {
         let code = AuthErrorCode(rawValue: (error as NSError).code)
         switch code {
-        case .emailAlreadyInUse:    return "이미 사용 중인 이메일입니다."
-        case .invalidEmail:          return "올바른 이메일 형식이 아닙니다."
-        case .wrongPassword:         return "비밀번호가 올바르지 않습니다."
-        case .userNotFound:          return "존재하지 않는 계정입니다."
-        case .networkError:          return "네트워크 오류가 발생했습니다."
-        case .weakPassword:          return "비밀번호는 6자 이상이어야 합니다."
-        default:                     return "오류가 발생했습니다. 다시 시도해주세요."
+        case .emailAlreadyInUse:    return L("auth.error.emailInUse")
+        case .invalidEmail:          return L("auth.error.invalidEmail")
+        case .wrongPassword:         return L("auth.error.wrongPassword")
+        case .userNotFound:          return L("auth.error.userNotFound")
+        case .networkError:          return L("auth.error.network")
+        case .weakPassword:          return L("auth.error.shortPassword")
+        default:                     return L("auth.error.generic")
         }
     }
 

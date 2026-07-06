@@ -29,32 +29,32 @@ struct NavGuideOverlay: View {
     private let steps: [GuideStep] = [
         GuideStep(
             mascot: "tteoni-guide",
-            title: "안녕하세요, 나루예요!",
-            message: "떠나를 30초만에 둘러볼까요?\n제가 안내해드릴게요",
+            title: L("navguide.step1.title"),
+            message: L("navguide.step1.message"),
             tabIndex: nil
         ),
         GuideStep(
             mascot: "tteoni-travel",
-            title: "홈 — 지도에서 떠나기",
-            message: "지도에서 마음에 드는 코스를 골라\n'떠나기'를 누르면 여행이 시작돼요",
+            title: L("navguide.step2.title"),
+            message: L("navguide.step2.message"),
             tabIndex: 0
         ),
         GuideStep(
             mascot: "tteoni-wink",
-            title: "탐색 — 코스 모아보기",
-            message: "전 세계 코스를 카드로 넘겨보고\n인기 코스를 발견해보세요",
+            title: L("navguide.step3.title"),
+            message: L("navguide.step3.message"),
             tabIndex: 1
         ),
         GuideStep(
             mascot: "tteoni-jump",
-            title: "채팅 — 함께 떠나기",
-            message: "그룹을 만들어 친구·가족과\n코스와 '나의 오늘'을 공유해요",
+            title: L("navguide.step4.title"),
+            message: L("navguide.step4.message"),
             tabIndex: 2
         ),
         GuideStep(
             mascot: "tteoni-thumbsup",
-            title: "준비 완료!",
-            message: "이제 지도에서 첫 코스를 골라\n떠나볼 일만 남았어요",
+            title: L("navguide.step5.title"),
+            message: L("navguide.step5.message"),
             tabIndex: nil
         ),
     ]
@@ -156,7 +156,7 @@ struct NavGuideOverlay: View {
                             Haptics.light()
                             onFinish()
                         } label: {
-                            Text("건너뛰기")
+                            Text(L("common.skip"))
                                 .font(.tte(15, .medium))
                                 .foregroundColor(.tteMediumGray)
                                 .frame(maxWidth: .infinity)
@@ -169,7 +169,7 @@ struct NavGuideOverlay: View {
                     }
 
                     Button { advance() } label: {
-                        Text(isLast ? "떠나볼까요!" : "다음 \(stepIndex + 1)/\(steps.count)")
+                        Text(isLast ? L("navguide.letsGo") : L("navguide.next", stepIndex + 1, steps.count))
                             .font(.tte(15, .semibold))
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
