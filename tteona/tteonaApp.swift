@@ -58,6 +58,14 @@ struct TteonaApp: App {
                         await FCMService.shared.saveFCMToken(userId: uid)
                     }
                 }
+                .onReceive(NotificationCenter.default.publisher(for: .apnsTokenReceived)) { _ in
+                    // 로그인 시점에 APNs 토큰이 아직 없어 등록을 건너뛴 경우를 보완 —
+                    // 토큰 도착 즉시 WAS에 등록 (좋아요·Vlog 완성·채팅 푸시가 여기에 의존)
+                    guard let uid = authService.currentUser?.uid else { return }
+                    Task {
+                        await PushService.shared.registerDeviceToken(userId: uid)
+                    }
+                }
                 .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
                     UNUserNotificationCenter.current().setBadgeCount(0)
                 }
@@ -67,6 +75,7 @@ struct TteonaApp: App {
 
 extension Notification.Name {
     static let appOpenedWithURL = Notification.Name("appOpenedWithURL")
+    static let apnsTokenReceived = Notification.Name("apnsTokenReceived")
 }
 
 // MARK: - AppDelegate for FCM & Push
@@ -98,5 +107,6 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         Messaging.messaging().apnsToken = deviceToken
         let tokenString = deviceToken.map { String(format: "%02x", $0) }.joined()
         UserDefaults.standard.set(tokenString, forKey: "apnsDeviceToken")
+        NotificationCenter.default.post(name: .apnsTokenReceived, object: nil)
     }
 }

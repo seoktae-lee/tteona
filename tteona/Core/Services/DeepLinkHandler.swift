@@ -27,8 +27,13 @@ class DeepLinkHandler: ObservableObject {
             if let code = components?.queryItems?.first(where: { $0.name == "code" })?.value {
                 pendingRoomCode = code
             }
+        } else if host == "capture" {
+            // 잠금화면 Live Activity·다이나믹 아일랜드의 "촬영" 버튼 →
+            // 기존 알림 경로(shouldOpenTodaySession)를 재사용해 '나의 오늘' 세션을 연다
+            Task { @MainActor in
+                AppNotificationManager.shared.shouldOpenTodaySession = true
+            }
         }
-        // capture는 ImpromptuSessionView에서 처리
     }
 
     private func handleUniversalLink(url: URL) {

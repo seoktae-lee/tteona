@@ -15,7 +15,7 @@ struct OnboardingView: View {
     @State private var agreedTerms = false
 
     enum NicknameState {
-        case idle, checking, available, taken
+        case idle, checking, available, taken, inappropriate
     }
     @State private var agreedPrivacy = false
     @State private var locationGranted = false
@@ -230,6 +230,13 @@ struct OnboardingView: View {
                         Text("이미 사용 중인 별명이에요")
                             .font(.tte(12))
                             .foregroundColor(.red)
+                    case .inappropriate:
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.tte(13))
+                            .foregroundColor(.red)
+                        Text("사용할 수 없는 표현이 포함돼 있어요")
+                            .font(.tte(12))
+                            .foregroundColor(.red)
                     case .idle:
                         EmptyView()
                     }
@@ -246,9 +253,7 @@ struct OnboardingView: View {
 
             let isInvalid = nickname.trimmingCharacters(in: .whitespaces).count < 2
                 || nickname.count > 10
-                || nicknameState == .taken
-                || nicknameState == .checking
-                || nicknameState == .idle
+                || nicknameState != .available
             VStack(spacing: 12) {
                 nextButton(title: "다음") {
                     Task { await saveNickname() }
@@ -419,7 +424,13 @@ struct OnboardingView: View {
         debounceTask = Task {
             try? await Task.sleep(nanoseconds: 600_000_000)
             guard !Task.isCancelled else { return }
+            // 부적절 표현 검사 (댓글·코스명과 동일 기준, 서버 검사 실패 시 통과)
+            guard await StatsService.shared.isTextAllowed(trimmed) else {
+                if !Task.isCancelled { nicknameState = .inappropriate }
+                return
+            }
             let taken = await userService.isNicknameTaken(trimmed)
+            guard !Task.isCancelled else { return }
             nicknameState = taken ? .taken : .available
         }
     }
@@ -443,15 +454,9 @@ struct OnboardingView: View {
 
     // MARK: - Permission Requests
     private func requestLocation() async {
-        await withCheckedContinuation { continuation in
-            let manager = CLLocationManager()
-            manager.requestAlwaysAuthorization()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                let status = manager.authorizationStatus
-                locationGranted = status == .authorizedAlways || status == .authorizedWhenInUse
-                continuation.resume()
-            }
-        }
+        // 고정 1초 지연으로 판정하면 유저가 늦게 응답한 경우 허용해도 미허용으로 표시됨 —
+        // 시스템 권한 변경 콜백을 기다려 정확히 판정
+        locationGranted = await LocationPermissionRequester.shared.request()
     }
 
     private func requestNotification() async {
@@ -499,6 +504,44 @@ struct OnboardingView: View {
         await requestPhotoLibrary()
         await MainActor.run {
             withAnimation { step = 4 }
+        }
+    }
+}
+
+// MARK: - 위치 권한 요청 헬퍼 (권한 다이얼로그 응답을 콜백으로 대기)
+@MainActor
+final class LocationPermissionRequester: NSObject, CLLocationManagerDelegate {
+    static let shared = LocationPermissionRequester()
+    private let manager = CLLocationManager()
+    private var continuation: CheckedContinuation<Bool, Never>?
+
+    private override init() {
+        super.init()
+        manager.delegate = self
+    }
+
+    func request() async -> Bool {
+        let status = manager.authorizationStatus
+        guard status == .notDetermined else {
+            return status == .authorizedAlways || status == .authorizedWhenInUse
+        }
+        // 이미 진행 중인 요청이 있으면 현재 상태 반환 (중복 continuation 방지)
+        guard continuation == nil else {
+            return status == .authorizedAlways || status == .authorizedWhenInUse
+        }
+        return await withCheckedContinuation { cont in
+            continuation = cont
+            manager.requestAlwaysAuthorization()
+        }
+    }
+
+    nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        let status = manager.authorizationStatus
+        Task { @MainActor in
+            // 요청 직후 notDetermined 상태로 오는 최초 콜백은 무시
+            guard status != .notDetermined, let cont = self.continuation else { return }
+            self.continuation = nil
+            cont.resume(returning: status == .authorizedAlways || status == .authorizedWhenInUse)
         }
     }
 }

@@ -18,6 +18,7 @@ actor ProfileImageService {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        await APIAuth.authorize(&request)
 
         var body = Data()
         body.append("--\(boundary)\r\n".data(using: .utf8)!)

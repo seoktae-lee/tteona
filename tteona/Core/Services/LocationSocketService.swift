@@ -44,13 +44,18 @@ class LocationSocketService: ObservableObject {
         let session = URLSession(configuration: .default)
         wsTask = session.webSocketTask(with: wsURL)
         wsTask?.resume()
-
-        send(["type": "join",
-              "roomId":   currentRoomId ?? "",
-              "userId":   currentUserId ?? "",
-              "nickname": currentNickname])
         listen()
         startPing()
+        // 서버가 join 시 Firebase ID 토큰으로 본인·방 멤버십을 검증한다
+        Task { [weak self] in
+            guard let self else { return }
+            let token = await APIAuth.bearerToken()
+            self.send(["type": "join",
+                       "roomId":   self.currentRoomId ?? "",
+                       "userId":   self.currentUserId ?? "",
+                       "nickname": self.currentNickname,
+                       "idToken":  token ?? ""])
+        }
     }
 
     // MARK: - 위치 전송

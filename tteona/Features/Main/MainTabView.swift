@@ -77,8 +77,13 @@ struct MainTabView: View {
         .task {
             if let uid = authService.currentUser?.uid {
                 await userService.fetchUser(uid: uid)
+                roomService.blockedUserIds = Set(userService.currentUser?.blockedUserIds ?? [])
                 roomService.startListeningMyRooms(userId: uid)
             }
+        }
+        .onChange(of: userService.currentUser?.blockedUserIds) { _, blocked in
+            // 차단/해제 즉시 피드·댓글 필터에 반영
+            roomService.blockedUserIds = Set(blocked ?? [])
         }
         .onChange(of: roomService.myRooms) { _, _ in
             guard let uid = authService.currentUser?.uid else { return }

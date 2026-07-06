@@ -11,6 +11,10 @@ const appleTeamId = defineSecret("APPLE_TEAM_ID");
 const appleKeyId = defineSecret("APPLE_KEY_ID");
 const applePrivateKey = defineSecret("APPLE_PRIVATE_KEY");
 
+// 앱의 실제 번들 ID (Xcode PRODUCT_BUNDLE_IDENTIFIER와 반드시 일치해야
+// Apple 토큰 revoke가 성공한다 — 불일치 시 invalid_client)
+const APPLE_CLIENT_ID = "com.seoktaedev.tteona";
+
 async function generateAppleClientSecret(): Promise<string> {
   const privateKey = applePrivateKey.value().replace(/\\n/g, "\n");
   return jwt.sign({}, privateKey, {
@@ -18,7 +22,7 @@ async function generateAppleClientSecret(): Promise<string> {
     expiresIn: "1h",
     audience: "https://appleid.apple.com",
     issuer: appleTeamId.value(),
-    subject: "com.seoktae.tteona",
+    subject: APPLE_CLIENT_ID,
     keyid: appleKeyId.value(),
   });
 }
@@ -287,7 +291,7 @@ export const deleteMyAccount = onCall({ secrets: [appleTeamId, appleKeyId, apple
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
           body: new URLSearchParams({
-            client_id: "com.seoktae.tteona",
+            client_id: APPLE_CLIENT_ID,
             client_secret: await generateAppleClientSecret(),
             token: appleAuthCode,
             token_type_hint: "authorization_code",

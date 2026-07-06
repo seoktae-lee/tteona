@@ -37,7 +37,8 @@ struct PlaceDetailSheet: View {
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.hidden)
         .task {
-            async let detailFetch = PlaceDetailService.shared.fetchDetail(for: place.placeName)
+            async let detailFetch = PlaceDetailService.shared.fetchDetail(
+                for: place.placeName, latitude: place.latitude, longitude: place.longitude)
             let key = PlaceDetailService.cacheKey(for: place.placeName)
             let blockedIds = userService.currentUser?.blockedUserIds ?? []
             async let reviewFetch = PlaceReviewService.shared.fetchReviews(placeKey: key, blockedUserIds: blockedIds)

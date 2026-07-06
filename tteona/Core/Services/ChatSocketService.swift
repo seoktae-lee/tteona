@@ -31,6 +31,8 @@ struct ChatMessage: Identifiable, Equatable {
 class ChatSocketService: ObservableObject {
     @Published var messages: [ChatMessage] = []
     @Published var isConnected = false
+    /// 금칙어로 서버가 메시지를 차단했을 때 true — 뷰에서 안내 알림 표시 후 리셋
+    @Published var moderationBlocked = false
 
     private var wsTask: URLSessionWebSocketTask?
     private var roomId: String?
@@ -56,7 +58,7 @@ class ChatSocketService: ObservableObject {
 
     private func loadHistory(roomId: String) async {
         guard let url = URL(string: "\(apiBase)/rooms/\(roomId)/messages?limit=50") else { return }
-        guard let (data, _) = try? await URLSession.shared.data(from: url),
+        guard let (data, _) = try? await APIAuth.get(url),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let rows = json["messages"] as? [[String: Any]] else { return }
 
@@ -90,10 +92,19 @@ class ChatSocketService: ObservableObject {
         let session = URLSession(configuration: .default)
         wsTask = session.webSocketTask(with: wsURL)
         wsTask?.resume()
-        send(["type": "join", "roomId": roomId ?? "", "userId": userId ?? "", "nickname": nickname])
-        isConnected = true
         listen()
         startPing()
+        // 서버가 join 시 Firebase ID 토큰으로 본인·방 멤버십을 검증한다
+        Task { [weak self] in
+            guard let self else { return }
+            let token = await APIAuth.bearerToken()
+            self.send(["type": "join",
+                       "roomId": self.roomId ?? "",
+                       "userId": self.userId ?? "",
+                       "nickname": self.nickname,
+                       "idToken": token ?? ""])
+            self.isConnected = true
+        }
     }
 
     // MARK: - 전송 (낙관적 추가)
@@ -153,6 +164,15 @@ class ChatSocketService: ObservableObject {
 
     private func handle(_ json: [String: Any]) {
         guard let type = json["type"] as? String else { return }
+
+        // 금칙어 차단 — 낙관적으로 띄웠던 내 메시지를 제거하고 안내
+        if type == "chat_blocked" {
+            if let clientMsgId = json["clientMsgId"] as? String {
+                messages.removeAll { $0.id == clientMsgId }
+            }
+            moderationBlocked = true
+            return
+        }
 
         // 이모지 반응 업데이트
         if type == "reaction" {

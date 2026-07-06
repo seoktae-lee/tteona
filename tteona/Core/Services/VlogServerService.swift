@@ -111,10 +111,12 @@ actor VlogServerService {
         // 3) 합성 시작
         try await startJob(jobId: jobId)
 
-        // 4) 진행률 폴링 (0.45 → 0.88) — 최대 10분
+        // 4) 진행률 폴링 (0.45 → 0.88) — 최대 30분
+        //    (멀티포맷 × 클립 다수 잡은 10분을 넘길 수 있음 — 조기 타임아웃하면
+        //     서버가 렌더링 중인데 폰이 로컬 합성을 중복 수행하게 된다)
         var outputUrl: String?
         var outputs: [OutputItem] = []
-        for _ in 0..<300 {
+        for _ in 0..<900 {
             try await Task.sleep(for: .seconds(2))
             let st = try await status(jobId: jobId)
             switch st.status {
@@ -152,10 +154,7 @@ actor VlogServerService {
                            formats: [String], bgm: String, watermark: Bool, priority: Bool,
                            placesPayload: [[String: Any]]) async throws -> Int {
         guard let url = URL(string: "\(baseURL)/jobs") else { throw ServerVlogError.badResponse("bad url") }
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = try JSONSerialization.data(withJSONObject: [
+        let req = await APIAuth.request(url: url, method: "POST", jsonBody: [
             "userId": userId,
             "courseId": courseId,
             "courseName": courseName,
@@ -184,6 +183,7 @@ actor VlogServerService {
         req.httpMethod = "POST"
         req.timeoutInterval = 300
         req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        await APIAuth.authorize(&req)
 
         // 영상은 크므로 메모리에 올리지 않고, multipart 바디를 임시 파일로 조립해 스트리밍 업로드
         let bodyFile = FileManager.default.temporaryDirectory
@@ -215,8 +215,7 @@ actor VlogServerService {
 
     private func startJob(jobId: Int) async throws {
         guard let url = URL(string: "\(baseURL)/jobs/\(jobId)/start") else { throw ServerVlogError.badResponse("bad url") }
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
+        let req = await APIAuth.request(url: url, method: "POST")
         let (_, resp) = try await URLSession.shared.data(for: req)
         guard (resp as? HTTPURLResponse)?.statusCode == 200 else {
             throw ServerVlogError.badResponse("start failed")
@@ -225,7 +224,7 @@ actor VlogServerService {
 
     private func status(jobId: Int) async throws -> JobStatus {
         guard let url = URL(string: "\(baseURL)/jobs/\(jobId)") else { throw ServerVlogError.badResponse("bad url") }
-        let (data, resp) = try await URLSession.shared.data(from: url)
+        let (data, resp) = try await APIAuth.get(url)
         guard (resp as? HTTPURLResponse)?.statusCode == 200 else {
             throw ServerVlogError.badResponse("status failed")
         }
@@ -234,7 +233,9 @@ actor VlogServerService {
 
     private func download(urlString: String) async throws -> URL {
         guard let url = URL(string: urlString) else { throw ServerVlogError.badResponse("bad output url") }
-        let (tmp, resp) = try await URLSession.shared.download(from: url)
+        // 완성본은 서버에서 소유자 검증을 하므로 인증 헤더 필수
+        let req = await APIAuth.request(url: url)
+        let (tmp, resp) = try await URLSession.shared.download(for: req)
         guard (resp as? HTTPURLResponse)?.statusCode == 200 else {
             throw ServerVlogError.badResponse("download failed")
         }

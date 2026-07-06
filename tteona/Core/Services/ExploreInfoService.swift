@@ -84,14 +84,11 @@ actor ExploreInfoService {
     // 서버 통합 경로 (한국 자동차=카카오모빌리티 실측, 그 외=추정). 실패 시 nil.
     func computeServerRoute(places: [Place], mode: String) async -> RouteInfo? {
         guard places.count >= 2, let url = URL(string: "https://tteona.kr/api/route") else { return nil }
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let body: [String: Any] = [
             "mode": mode,
             "places": places.map { ["lat": $0.latitude, "lng": $0.longitude] }
         ]
-        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        let req = await APIAuth.request(url: url, method: "POST", jsonBody: body)
         do {
             let (data, _) = try await URLSession.shared.data(for: req)
             guard let j = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
@@ -151,10 +148,7 @@ actor ExploreInfoService {
         guard let url = URL(string: "https://tteona.kr/api/courses/transit-route") else { return nil }
 
         let coords = places.map { ["lat": $0.latitude, "lng": $0.longitude] }
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = try? JSONSerialization.data(withJSONObject: ["places": coords])
+        let req = await APIAuth.request(url: url, method: "POST", jsonBody: ["places": coords])
         do {
             let (data, resp) = try await URLSession.shared.data(for: req)
             guard let http = resp as? HTTPURLResponse, http.statusCode == 200,

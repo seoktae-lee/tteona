@@ -24,6 +24,9 @@ class RoomService: ObservableObject {
     }
     private var locationUploadStates: [String: LocationUploadState] = [:]
 
+    /// 차단한 유저의 피드·댓글을 숨기기 위한 목록 — MainTabView가 유저 로드/차단 변경 시 갱신
+    var blockedUserIds: Set<String> = []
+
     // MARK: - 방 생성
     func createRoom(name: String, userId: String, nickname: String) async throws -> Room {
         let roomId = UUID().uuidString
@@ -61,31 +64,34 @@ class RoomService: ObservableObject {
         return room
     }
 
-    // MARK: - 초대코드로 방 참여
+    // MARK: - 초대코드로 방 참여 (서버 경유)
+    // Firestore rules가 "멤버만 읽기"라 초대코드 검색은 서버 Admin SDK가 수행한다.
     func joinRoom(inviteCode: String, userId: String, nickname: String) async throws -> Room {
-        let snapshot = try await db.collection("rooms")
-            .whereField("inviteCode", isEqualTo: inviteCode.uppercased())
-            .getDocuments()
-
-        guard let doc = snapshot.documents.first,
-              let room = try? doc.data(as: Room.self) else {
+        guard let url = URL(string: "https://tteona.kr/api/rooms/join") else {
             throw RoomError.roomNotFound
         }
-
-        if room.memberIds.contains(userId) {
-            return room
-        }
-
-        try await db.collection("rooms").document(room.roomId)
-            .updateData(["memberIds": FieldValue.arrayUnion([userId])])
-
-        let memberData: [String: Any] = [
+        let req = await APIAuth.request(url: url, method: "POST", jsonBody: [
+            "inviteCode": inviteCode.uppercased(),
             "userId": userId,
             "nickname": nickname,
-            "joinedAt": FieldValue.serverTimestamp()
-        ]
-        try await db.collection("rooms").document(room.roomId)
-            .collection("members").document(userId).setData(memberData)
+        ])
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? -1
+        if status == 404 { throw RoomError.roomNotFound }
+        guard status == 200,
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let roomId = json["roomId"] as? String else {
+            throw RoomError.joinFailed
+        }
+
+        let room = Room(
+            roomId: roomId,
+            name: json["name"] as? String ?? "그룹",
+            inviteCode: json["inviteCode"] as? String ?? inviteCode.uppercased(),
+            creatorId: json["creatorId"] as? String ?? "",
+            memberIds: json["memberIds"] as? [String] ?? [userId],
+            createdAt: Date()
+        )
 
         // 기본 피드 생성 (댓글 작성 보장)
         postFeed(roomId: room.roomId, type: .tripStart, userId: userId, nickname: nickname, courseId: "system", courseName: "그룹 참여 여행")
@@ -183,51 +189,24 @@ class RoomService: ObservableObject {
         locationsListener = nil
     }
 
-    // MARK: - 방 나가기 및 자동 파기
+    // MARK: - 방 나가기 및 자동 파기 (서버 경유)
+    // 마지막 멤버의 방 정리는 다른 멤버가 남긴 피드/문서 삭제 권한이 클라이언트에
+    // 없으므로 서버 Admin SDK가 recursiveDelete로 처리한다. 서버 실패 시
+    // 멤버 제거만 클라이언트에서 폴백 수행.
     func leaveRoom(roomId: String, userId: String) async throws {
+        if let url = URL(string: "https://tteona.kr/api/rooms/\(roomId)/leave") {
+            let req = await APIAuth.request(url: url, method: "POST", jsonBody: ["userId": userId])
+            if let (_, resp) = try? await URLSession.shared.data(for: req),
+               (resp as? HTTPURLResponse)?.statusCode == 200 {
+                return
+            }
+        }
+        // 폴백: 멤버 목록에서 나만 제거 (빈 방 정리는 서버 복구 후 재시도 가능)
         let roomRef = db.collection("rooms").document(roomId)
-        let roomDoc = try await roomRef.getDocument()
-        guard let room = try? roomDoc.data(as: Room.self) else { return }
-
-        if room.memberIds.count <= 1 {
-            // 마지막 멤버라면 방 전체 데이터 삭제
-            try await deleteRoomCompletely(roomId: roomId)
-        } else {
-            // 다른 멤버가 있다면 나만 멤버 리스트에서 제거
-            try await roomRef.updateData([
-                "memberIds": FieldValue.arrayRemove([userId])
-            ])
-            // members 서브컬렉션에서도 삭제
-            try await roomRef.collection("members").document(userId).delete()
-        }
-    }
-
-    private func deleteRoomCompletely(roomId: String) async throws {
-        let roomRef = db.collection("rooms").document(roomId)
-        
-        // 1. 하위 컬렉션 삭제 (locations, members)
-        try await deleteCollection(ref: roomRef.collection("locations"))
-        try await deleteCollection(ref: roomRef.collection("members"))
-        
-        // 2. 피드 및 댓글 삭제
-        let feedsSnapshot = try await roomRef.collection("feed").getDocuments()
-        for feedDoc in feedsSnapshot.documents {
-            // 피드 하위의 댓글 삭제
-            try await deleteCollection(ref: feedDoc.reference.collection("comments"))
-            // 피드 문서 삭제
-            try await feedDoc.reference.delete()
-        }
-        
-        // 3. 마지막으로 메인 방 문서 삭제
-        try await roomRef.delete()
-        print("[Room] Room \(roomId) and all associated data deleted successfully.")
-    }
-
-    private func deleteCollection(ref: CollectionReference) async throws {
-        let snapshot = try await ref.getDocuments()
-        for doc in snapshot.documents {
-            try await doc.reference.delete()
-        }
+        try await roomRef.updateData([
+            "memberIds": FieldValue.arrayRemove([userId])
+        ])
+        try? await roomRef.collection("members").document(userId).delete()
     }
 
     // MARK: - 피드 자동 기록
@@ -262,6 +241,7 @@ class RoomService: ObservableObject {
             .addSnapshotListener { [weak self] snapshot, _ in
                 guard let self, let docs = snapshot?.documents else { return }
                 self.feedItems = docs.compactMap { try? $0.data(as: FeedItem.self) }
+                    .filter { !self.blockedUserIds.contains($0.userId) }
             }
     }
 
@@ -357,7 +337,8 @@ class RoomService: ObservableObject {
             .collection("comments")
             .order(by: "createdAt")
             .getDocuments()
-        return snapshot?.documents.compactMap { try? $0.data(as: FeedComment.self) } ?? []
+        return (snapshot?.documents.compactMap { try? $0.data(as: FeedComment.self) } ?? [])
+            .filter { !blockedUserIds.contains($0.userId) }
     }
 
     // MARK: - 멤버 피드 실시간 구독
@@ -367,9 +348,11 @@ class RoomService: ObservableObject {
             .collection("feed")
             .whereField("userId", isEqualTo: userId)
             .order(by: "createdAt")
-            .addSnapshotListener { snapshot, _ in
+            .addSnapshotListener { [weak self] snapshot, _ in
                 guard let docs = snapshot?.documents else { return }
+                let blocked = self?.blockedUserIds ?? []
                 let items = docs.compactMap { try? $0.data(as: FeedItem.self) }
+                    .filter { !blocked.contains($0.userId) }
                 onChange(items)
             }
     }
@@ -471,11 +454,13 @@ class RoomService: ObservableObject {
 
 enum RoomError: LocalizedError {
     case roomNotFound
+    case joinFailed
     case inappropriateContent
 
     var errorDescription: String? {
         switch self {
         case .roomNotFound: return "해당 초대 코드의 방을 찾을 수 없어요."
+        case .joinFailed: return "그룹 참여에 실패했어요. 네트워크 상태를 확인하고 다시 시도해주세요."
         case .inappropriateContent: return "부적절한 표현이 포함되어 있어 등록할 수 없어요."
         }
     }

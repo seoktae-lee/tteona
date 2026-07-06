@@ -1,3 +1,6 @@
+// .env 파일이 있으면 로드 (dotenv 미설치 시 무시 — pm2/systemd 환경변수로도 동작)
+try { require('dotenv').config(); } catch {}
+
 const http    = require('http');
 const express = require('express');
 const cors    = require('cors');
@@ -13,17 +16,38 @@ const path   = require('path');
 const fs     = require('fs');
 const { randomUUID } = require('crypto');
 const { initializeApp, cert } = require('firebase-admin/app');
-const { getFirestore } = require('firebase-admin/firestore');
+const { getFirestore, FieldValue, Timestamp } = require('firebase-admin/firestore');
+const { getAuth } = require('firebase-admin/auth');
 
 const serviceAccount = require('./firebase-service-account.json');
 initializeApp({ credential: cert(serviceAccount) });
 const db = getFirestore();
 
+// ─── 필수 환경변수 (하드코딩 금지 — 미설정 시 기동 실패) ─────────────────────────
+// .env.example 참고. 기존에 소스에 박혀 있던 값들은 git 이력에 남아 있으므로
+// 반드시 새 값으로 로테이션한 뒤 환경변수로만 주입할 것.
+function requiredEnv(name) {
+  const v = process.env[name];
+  if (!v) {
+    console.error(`[Config] 필수 환경변수 ${name} 이(가) 설정되지 않았습니다. 서버를 시작할 수 없습니다.`);
+    process.exit(1);
+  }
+  return v;
+}
+
+const PG_PASSWORD    = requiredEnv('PG_PASSWORD');
+const ADMIN_PASSWORD = requiredEnv('ADMIN_PASSWORD');
+const ADMIN_TOKEN    = requiredEnv('ADMIN_TOKEN');
+
+// 인증 강제 여부 — 기본 true. 구버전 앱(토큰 미전송)이 남아 있는 전환 기간에만
+// AUTH_ENFORCE=false로 완화 운영 (완화 모드에서도 토큰이 오면 검증·활용한다).
+const AUTH_ENFORCE = process.env.AUTH_ENFORCE !== 'false';
+
 const pgPool = new Pool({
   host: process.env.PG_HOST || '10.30.10.170',
   port: 5432,
   user: process.env.PG_USER || 'tteona',
-  password: process.env.PG_PASSWORD || 'tteona2026!Secure',
+  password: PG_PASSWORD,
   database: process.env.PG_DB || 'tteona_db',
   max: 10,
   idleTimeoutMillis: 30000,
@@ -31,13 +55,36 @@ const pgPool = new Pool({
 });
 pgPool.on('error', (err) => console.error('PostgreSQL pool error:', err));
 
+// ─── Firebase ID 토큰 인증 미들웨어 ──────────────────────────────────────────
+// 성공 시 req.uid에 검증된 Firebase uid가 들어간다. 클라이언트가 보내는
+// body.userId는 신뢰하지 않고 req.uid를 우선 사용한다.
+
+async function verifyBearer(req) {
+  const header = req.headers['authorization'] || '';
+  if (!header.startsWith('Bearer ')) return null;
+  try {
+    const decoded = await getAuth().verifyIdToken(header.slice(7));
+    return decoded.uid;
+  } catch {
+    return undefined; // 토큰이 왔는데 무효 — 완화 모드에서도 거부
+  }
+}
+
+async function requireAuth(req, res, next) {
+  const uid = await verifyBearer(req);
+  if (uid === undefined) return res.status(401).json({ error: 'invalid token' });
+  if (uid === null && AUTH_ENFORCE) return res.status(401).json({ error: 'auth required' });
+  req.uid = uid; // 완화 모드에서 토큰 미전송이면 null
+  next();
+}
+
 // ─── APNs Provider ────────────────────────────────────────────────────────────
 
 const apnProvider = new apn.Provider({
   token: {
-    key:    '/home/ubuntu/tteona-api/keys/AuthKey_Z255DQRVA2.p8',
-    keyId:  'Z255DQRVA2',
-    teamId: 'M576JMA5A7',
+    key:    process.env.APNS_KEY_PATH || '/home/ubuntu/tteona-api/keys/AuthKey_Z255DQRVA2.p8',
+    keyId:  process.env.APNS_KEY_ID   || 'Z255DQRVA2',
+    teamId: process.env.APNS_TEAM_ID  || 'M576JMA5A7',
   },
   production: true,
 });
@@ -85,7 +132,27 @@ app.use(express.json());
 
 const THUMB_DIR = path.join(__dirname, 'uploads', 'thumbnails');
 const AVATAR_DIR = path.join(__dirname, 'uploads', 'avatars');
+fs.mkdirSync(THUMB_DIR, { recursive: true });
 fs.mkdirSync(AVATAR_DIR, { recursive: true });
+
+// Vlog 완성본은 본인만 다운로드 가능 — jobId가 순번이라 추측 가능하므로 소유자 검증
+// (썸네일·아바타는 공개 프로필/공유 페이지에서 쓰이므로 그대로 공개)
+app.use('/uploads/vlog', requireAuth, async (req, res, next) => {
+  const m = req.path.match(/^\/(\d+)\//);
+  if (!m) return res.status(404).json({ error: 'not found' });
+  if (req.uid) {
+    try {
+      const r = await pgPool.query('SELECT user_id FROM vlog_jobs WHERE id = $1', [m[1]]);
+      if (r.rows.length === 0 || r.rows[0].user_id !== req.uid) {
+        return res.status(403).json({ error: 'forbidden' });
+      }
+    } catch (err) {
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+  next();
+});
+
 app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
   maxAge: '30d',
   immutable: false,
@@ -112,8 +179,10 @@ app.get('/api', (req, res) => {
 // ─── JSON API ────────────────────────────────────────────────────────────────
 
 // GET /api/courses/recommend — 동적 라우트(:courseId)보다 먼저 등록해야 함
-app.get('/api/courses/recommend', async (req, res) => {
-  const { userId, lat, lng, tag, limit = 20 } = req.query;
+app.get('/api/courses/recommend', requireAuth, async (req, res) => {
+  const { lat, lng, tag } = req.query;
+  const userId = req.uid || req.query.userId; // 검증된 uid 우선
+  const limit = Math.max(1, Math.min(50, parseInt(req.query.limit) || 20));
   const userLat = parseFloat(lat);
   const userLng = parseFloat(lng);
 
@@ -174,7 +243,7 @@ app.get('/api/courses/recommend', async (req, res) => {
 
     scored.sort((a, b) => b.score - a.score);
     const result = {
-      courseIds: scored.slice(0, parseInt(limit)).map(s => s.courseId),
+      courseIds: scored.slice(0, limit).map(s => s.courseId),
       season: season.name,
     };
 
@@ -196,7 +265,7 @@ app.get('/api/courses/recommend', async (req, res) => {
 
 // 전체 썸네일 맵 조회 — 탐색 그리드가 코스 목록에 병합해서 사용
 // (동적 :courseId 라우트보다 먼저 등록)
-app.get('/api/courses/thumbnails', async (req, res) => {
+app.get('/api/courses/thumbnails', requireAuth, async (req, res) => {
   try {
     const result = await pgPool.query('SELECT course_id, url FROM course_thumbnails');
     const map = {};
@@ -209,7 +278,7 @@ app.get('/api/courses/thumbnails', async (req, res) => {
 });
 
 // 단일 코스 썸네일 조회
-app.get('/api/courses/:courseId/thumbnail', async (req, res) => {
+app.get('/api/courses/:courseId/thumbnail', requireAuth, async (req, res) => {
   try {
     const result = await pgPool.query(
       'SELECT url FROM course_thumbnails WHERE course_id = $1',
@@ -222,12 +291,18 @@ app.get('/api/courses/:courseId/thumbnail', async (req, res) => {
   }
 });
 
-// 썸네일 업로드 — multipart/form-data, 필드명 "image"
-app.post('/api/courses/:courseId/thumbnail', upload.single('image'), async (req, res) => {
+// 썸네일 업로드 — multipart/form-data, 필드명 "image" (코스 작성자만 가능)
+app.post('/api/courses/:courseId/thumbnail', requireAuth, upload.single('image'), async (req, res) => {
   const { courseId } = req.params;
   if (!req.file) return res.status(400).json({ error: 'image file required' });
 
   try {
+    if (req.uid) {
+      const courseDoc = await db.collection('courses').doc(courseId).get();
+      if (!courseDoc.exists || courseDoc.data().authorId !== req.uid) {
+        return res.status(403).json({ error: 'not course author' });
+      }
+    }
     const filename = `${courseId}.jpg`;
     const filepath = path.join(THUMB_DIR, filename);
 
@@ -255,10 +330,11 @@ app.post('/api/courses/:courseId/thumbnail', upload.single('image'), async (req,
 
 // ─── 프로필 이미지 (WAS 로컬 저장 + PostgreSQL) ───────────────────────────────
 
-// 프로필 이미지 업로드 — multipart/form-data, 필드명 "image"
-app.post('/api/users/:uid/avatar', upload.single('image'), async (req, res) => {
+// 프로필 이미지 업로드 — multipart/form-data, 필드명 "image" (본인만 가능)
+app.post('/api/users/:uid/avatar', requireAuth, upload.single('image'), async (req, res) => {
   const { uid } = req.params;
   if (!req.file) return res.status(400).json({ error: 'image file required' });
+  if (req.uid && req.uid !== uid) return res.status(403).json({ error: 'not your account' });
 
   try {
     const filename = `${uid}.jpg`;
@@ -290,8 +366,9 @@ app.post('/api/users/:uid/avatar', upload.single('image'), async (req, res) => {
 
 // ─── 대중교통 경로 (ODsay) ─────────────────────────────────────────────────────
 
-const ODSAY_KEY = process.env.ODSAY_KEY || 'R7vAt5tF3lN95klpZbaWvSXMA7g+TtjbHT+4shfEgQ4';
-const KAKAO_REST_KEY = process.env.KAKAO_REST_KEY || 'b31c03c128d37a877e6cb407f59b8911';
+// 외부 API 키 — env 미설정 시 해당 기능만 폴백(추정치)으로 동작
+const ODSAY_KEY = process.env.ODSAY_KEY || '';
+const KAKAO_REST_KEY = process.env.KAKAO_REST_KEY || '';
 
 // 두 지점 간 대중교통 소요시간/거리 (실패 시 도보 추정 폴백)
 async function odsayLeg(sLat, sLng, eLat, eLng) {
@@ -299,6 +376,7 @@ async function odsayLeg(sLat, sLng, eLat, eLng) {
     + `?SX=${sLng}&SY=${sLat}&EX=${eLng}&EY=${eLat}`
     + `&apiKey=${encodeURIComponent(ODSAY_KEY)}&output=json`;
   try {
+    if (!ODSAY_KEY) throw new Error('ODSAY_KEY not set');
     const r = await fetch(url);
     const j = await r.json();
     const info = j?.result?.path?.[0]?.info;
@@ -314,7 +392,7 @@ async function odsayLeg(sLat, sLng, eLat, eLng) {
 }
 
 // POST /api/courses/transit-route  body: { places: [{lat,lng}, ...] }
-app.post('/api/courses/transit-route', async (req, res) => {
+app.post('/api/courses/transit-route', requireAuth, async (req, res) => {
   const places = Array.isArray(req.body?.places) ? req.body.places : [];
   if (places.length < 2) return res.status(400).json({ error: 'need >= 2 places' });
 
@@ -350,7 +428,7 @@ app.post('/api/courses/transit-route', async (req, res) => {
   }
 });
 
-app.get('/api/courses/:courseId', async (req, res) => {
+app.get('/api/courses/:courseId', requireAuth, async (req, res) => {
   try {
     const doc = await db.collection('courses').doc(req.params.courseId).get();
     if (!doc.exists) return res.status(404).json({ error: 'Course not found' });
@@ -364,8 +442,9 @@ app.get('/api/courses/:courseId', async (req, res) => {
 // ─── 사용자 통계 ──────────────────────────────────────────────────────────────
 
 // 이벤트 적재 — iOS가 코스 생성/장소 방문/좋아요/공유 시 호출 (user_stats·daily_stats 축적)
-app.post('/api/stats/event', async (req, res) => {
-  const { userId, type } = req.body;
+app.post('/api/stats/event', requireAuth, async (req, res) => {
+  const { type } = req.body;
+  const userId = req.uid || req.body.userId; // 검증된 uid 우선 — 타인 통계 조작 방지
   const COLS = {
     course_created: 'courses_created',
     place_visited:  'places_visited',
@@ -398,9 +477,10 @@ app.post('/api/stats/event', async (req, res) => {
   }
 });
 
-// 개인 누적 여행 통계
-app.get('/api/users/:uid/stats', async (req, res) => {
+// 개인 누적 여행 통계 (본인 것만 조회 가능)
+app.get('/api/users/:uid/stats', requireAuth, async (req, res) => {
   const uid = req.params.uid;
+  if (req.uid && req.uid !== uid) return res.status(403).json({ error: 'not your account' });
   try {
     const [coursesSnap, roomsCount, pg] = await Promise.all([
       db.collection('courses').where('authorId', '==', uid).get(),
@@ -435,7 +515,7 @@ app.get('/api/users/:uid/stats', async (req, res) => {
 // ─── 크리에이터 랭킹 ──────────────────────────────────────────────────────────
 
 // 이번 주 인기 크리에이터 TOP 10 (좋아요 합계 → 코스 수 순, 10분 캐시)
-app.get('/api/creators/ranking', async (req, res) => {
+app.get('/api/creators/ranking', requireAuth, async (req, res) => {
   const cacheKey = 'creators:weekly';
   try {
     const cached = await pgPool.query(
@@ -501,8 +581,14 @@ function normalizeForModeration(text) {
   return String(text).toLowerCase().replace(/[\s\.\,\-\_\!\?\*\@\#\$\%\^\&\(\)\[\]0-9]/g, '');
 }
 
+// 금칙어 포함 여부 (WS 채팅·닉네임 검사에서 재사용)
+function findBannedWord(text) {
+  const normalized = normalizeForModeration(text);
+  return BANNED_WORDS.find(w => normalized.includes(normalizeForModeration(w))) || null;
+}
+
 // POST /api/moderate  body: { text }  →  { ok, blocked, matched? }
-app.post('/api/moderate', (req, res) => {
+app.post('/api/moderate', requireAuth, (req, res) => {
   const text = req.body?.text;
   if (typeof text !== 'string') return res.status(400).json({ error: 'text required' });
 
@@ -514,9 +600,10 @@ app.post('/api/moderate', (req, res) => {
 
 // ─── Push 알림 API ───────────────────────────────────────────────────────────
 
-// iOS 앱이 로그인 시 APNs device token 등록
-app.post('/api/push/register', async (req, res) => {
-  const { userId, token } = req.body;
+// iOS 앱이 로그인 시 APNs device token 등록 — 본인 토큰만 등록 가능
+app.post('/api/push/register', requireAuth, async (req, res) => {
+  const { token } = req.body;
+  const userId = req.uid || req.body.userId; // 검증된 uid 우선 — 타인 토큰 탈취 방지
   if (!userId || !token) return res.status(400).json({ error: 'userId and token required' });
 
   try {
@@ -532,29 +619,44 @@ app.post('/api/push/register', async (req, res) => {
   }
 });
 
+// 발신자 닉네임 — 사칭 방지를 위해 body 값 대신 Firestore users 문서에서 조회
+async function nicknameOf(uid, fallback) {
+  if (!uid) return fallback || '여행자';
+  try {
+    const doc = await db.collection('users').doc(uid).get();
+    return (doc.exists && doc.data().nickname) || fallback || '여행자';
+  } catch {
+    return fallback || '여행자';
+  }
+}
+
 // 코스 좋아요 알림 — 코스 작성자에게 발송
-app.post('/api/push/course-liked', async (req, res) => {
+app.post('/api/push/course-liked', requireAuth, async (req, res) => {
   const { courseOwnerId, likerNickname, courseName } = req.body;
   if (!courseOwnerId || !likerNickname) return res.status(400).json({ error: 'missing fields' });
+  if (req.uid === courseOwnerId) return res.json({ skipped: true, reason: 'self' });
 
+  const nickname = await nicknameOf(req.uid, likerNickname);
   const result = await sendPush({
     userId: courseOwnerId,
     title:  '코스에 좋아요가 달렸어요 ❤️',
-    body:   `${likerNickname}님이 "${courseName}" 코스를 좋아합니다`,
+    body:   `${nickname}님이 "${courseName}" 코스를 좋아합니다`,
     data:   { type: 'course_liked', courseName },
   });
   res.json(result);
 });
 
 // 코스 따라가기 알림 — 코스 작성자에게 발송
-app.post('/api/push/course-followed', async (req, res) => {
+app.post('/api/push/course-followed', requireAuth, async (req, res) => {
   const { courseOwnerId, followerNickname, courseName } = req.body;
   if (!courseOwnerId || !followerNickname) return res.status(400).json({ error: 'missing fields' });
+  if (req.uid === courseOwnerId) return res.json({ skipped: true, reason: 'self' });
 
+  const nickname = await nicknameOf(req.uid, followerNickname);
   const result = await sendPush({
     userId: courseOwnerId,
     title:  '누군가 내 코스를 따라가고 있어요 🗺️',
-    body:   `${followerNickname}님이 "${courseName}" 코스 여행을 시작했어요`,
+    body:   `${nickname}님이 "${courseName}" 코스 여행을 시작했어요`,
     data:   { type: 'course_followed', courseName },
   });
   res.json(result);
@@ -604,7 +706,7 @@ cron.schedule('0 9 * * 1', async () => {
 // iOS가 Google Places API 결과를 PostgreSQL에 저장/조회
 // 장소 이름 기반 캐시 키 (PlaceDetailService.cacheKey 로직과 동일)
 
-app.get('/api/places/cache', async (req, res) => {
+app.get('/api/places/cache', requireAuth, async (req, res) => {
   const key = req.query.key;
   if (!key) return res.status(400).json({ error: 'key required' });
 
@@ -621,7 +723,7 @@ app.get('/api/places/cache', async (req, res) => {
   }
 });
 
-app.post('/api/places/cache', async (req, res) => {
+app.post('/api/places/cache', requireAuth, async (req, res) => {
   const { cacheKey, photos, rating, reviewCount, reviews } = req.body;
   if (!cacheKey) return res.status(400).json({ error: 'cacheKey required' });
 
@@ -649,8 +751,7 @@ app.post('/api/places/cache', async (req, res) => {
 // iOS가 좌표와 함께 장소명을 넘기면 좌표가 가장 가까운 관광공사 콘텐츠의
 // 큐레이션 대표 이미지를 반환. 사진 없으면 404 → iOS가 Google Places로 폴백.
 
-const TOUR_API_KEY = process.env.TOUR_API_KEY
-  || '7748c2f036dd997dd949629a45f1b89ce3bf6dce73ed160c5600fcb777351c8c';
+const TOUR_API_KEY = process.env.TOUR_API_KEY || '';
 
 // contenttypeid → 사람이 읽는 카테고리
 const TOUR_CONTENT_TYPE = {
@@ -666,7 +767,7 @@ function tourPlaceKey(name, lat, lng) {
   return `${n}|${latR}|${lngR}`;
 }
 
-app.get('/api/places/tour-photo', async (req, res) => {
+app.get('/api/places/tour-photo', requireAuth, async (req, res) => {
   const name = (req.query.name || '').trim();
   if (!name) return res.status(400).json({ error: 'name required' });
   const lat = parseFloat(req.query.lat);
@@ -693,6 +794,7 @@ app.get('/api/places/tour-photo', async (req, res) => {
 
     let items = [];
     try {
+      if (!TOUR_API_KEY) throw new Error('TOUR_API_KEY not set');
       const r = await fetch(url);
       const j = await r.json();
       const raw = j?.response?.body?.items?.item;
@@ -767,6 +869,7 @@ async function kakaoCarLeg(sLat, sLng, eLat, eLng) {
   const url = `https://apis-navi.kakaomobility.com/v1/directions`
     + `?origin=${sLng},${sLat}&destination=${eLng},${eLat}`;
   try {
+    if (!KAKAO_REST_KEY) return null;
     const r = await fetch(url, { headers: { Authorization: `KakaoAK ${KAKAO_REST_KEY}` } });
     const j = await r.json();
     const route = j?.routes?.[0];
@@ -780,7 +883,7 @@ async function kakaoCarLeg(sLat, sLng, eLat, eLng) {
 }
 
 // POST /api/route  body: { places: [{lat,lng}, ...], mode: 'car'|'walk' }
-app.post('/api/route', async (req, res) => {
+app.post('/api/route', requireAuth, async (req, res) => {
   const places = Array.isArray(req.body?.places) ? req.body.places : [];
   const mode = req.body?.mode === 'walk' ? 'walk' : 'car';
   if (places.length < 2) return res.json({ distanceMeters: 0, travelTimeSec: 0, source: 'none' });
@@ -872,8 +975,9 @@ const vlogUpload = multer({
 // 잡 생성 — body: { userId, courseId?, courseName?, tag?, formats?: ['reels'|'youtube'|'insta'],
 //                   bgm?: 'auto'|'none'|'mood/파일명',
 //                   places: [{order, placeName, shotAt?}] }  (shotAt: 클립 촬영시각 표시 문자열)
-app.post('/api/vlog/jobs', async (req, res) => {
-  const { userId, courseId, courseName, tag, formats, bgm, places, watermark, priority } = req.body || {};
+app.post('/api/vlog/jobs', requireAuth, async (req, res) => {
+  const { courseId, courseName, tag, formats, bgm, places, watermark, priority } = req.body || {};
+  const userId = req.uid || req.body?.userId; // 검증된 uid 우선
   if (!userId || !Array.isArray(places) || places.length === 0) {
     return res.status(400).json({ error: 'userId and places required' });
   }
@@ -897,14 +1001,29 @@ app.post('/api/vlog/jobs', async (req, res) => {
   }
 });
 
+// 잡 소유자 검증 미들웨어 — 다른 유저의 잡에 클립 주입/조회 방지
+async function requireJobOwner(req, res, next) {
+  const id = parseInt(req.params.jobId);
+  if (isNaN(id)) return res.status(400).json({ error: 'invalid jobId' });
+  if (!req.uid) return next(); // 완화 모드(구버전 앱) 통과
+  try {
+    const r = await pgPool.query('SELECT user_id FROM vlog_jobs WHERE id = $1', [id]);
+    if (r.rows.length === 0) return res.status(404).json({ error: 'job not found' });
+    if (r.rows[0].user_id !== req.uid) return res.status(403).json({ error: 'not your job' });
+    next();
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
 // 클립 업로드 — multipart 필드 "clip", 쿼리 ?order=N (장소 순번)
-app.post('/api/vlog/jobs/:jobId/clips', vlogUpload.single('clip'), (req, res) => {
+app.post('/api/vlog/jobs/:jobId/clips', requireAuth, requireJobOwner, vlogUpload.single('clip'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'clip file required' });
   res.json({ ok: true, size: req.file.size });
 });
 
 // 업로드 완료 → 처리 큐 투입
-app.post('/api/vlog/jobs/:jobId/start', async (req, res) => {
+app.post('/api/vlog/jobs/:jobId/start', requireAuth, requireJobOwner, async (req, res) => {
   const id = parseInt(req.params.jobId);
   try {
     const r = await pgPool.query(
@@ -919,7 +1038,7 @@ app.post('/api/vlog/jobs/:jobId/start', async (req, res) => {
 });
 
 // 상태 조회 — iOS 진행률 폴링용 (altUrl = 반대 방향 멀티포맷 버전)
-app.get('/api/vlog/jobs/:jobId', async (req, res) => {
+app.get('/api/vlog/jobs/:jobId', requireAuth, requireJobOwner, async (req, res) => {
   try {
     const r = await pgPool.query(
       'SELECT status, progress, output_url, error_msg, options FROM vlog_jobs WHERE id = $1',
@@ -1300,13 +1419,121 @@ setInterval(async () => {
   }
 }, 5000);
 
+// ─── 그룹 방 참여/나가기 (서버 경유) ──────────────────────────────────────────
+// Firestore rules를 "멤버만 읽기"로 잠그기 위해 초대코드 조회·참여를 Admin SDK로 처리.
+// 나가기도 서버에서 처리 — 마지막 멤버가 방을 정리할 때 다른 멤버의 피드/문서 삭제가
+// 클라이언트 권한으로는 불가능해 "방을 못 나가는" 문제가 있었다.
+
+app.post('/api/rooms/join', requireAuth, async (req, res) => {
+  const uid = req.uid || req.body?.userId;
+  const code = String(req.body?.inviteCode || '').trim().toUpperCase();
+  if (!uid) return res.status(401).json({ error: 'auth required' });
+  if (code.length < 4) return res.status(400).json({ error: 'invalid code' });
+
+  try {
+    const snap = await db.collection('rooms').where('inviteCode', '==', code).limit(1).get();
+    if (snap.empty) return res.status(404).json({ error: 'room not found' });
+
+    const doc = snap.docs[0];
+    const room = doc.data();
+    const memberIds = room.memberIds || [];
+
+    if (!memberIds.includes(uid)) {
+      const nickname = await nicknameOf(uid, req.body?.nickname);
+      await doc.ref.update({ memberIds: FieldValue.arrayUnion(uid) });
+      await doc.ref.collection('members').doc(uid).set({
+        userId: uid, nickname, joinedAt: FieldValue.serverTimestamp(),
+      });
+      memberIds.push(uid);
+      roomInfoCache.delete(doc.id); // 멤버십 캐시 즉시 갱신
+    }
+
+    res.json({
+      roomId: doc.id,
+      name: room.name || '그룹',
+      inviteCode: room.inviteCode || code,
+      creatorId: room.creatorId || '',
+      memberIds,
+    });
+  } catch (err) {
+    console.error('[Rooms] join error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.post('/api/rooms/:roomId/leave', requireAuth, async (req, res) => {
+  const uid = req.uid || req.body?.userId;
+  if (!uid) return res.status(401).json({ error: 'auth required' });
+  const roomId = req.params.roomId;
+
+  try {
+    const ref = db.collection('rooms').doc(roomId);
+    const doc = await ref.get();
+    if (!doc.exists) return res.json({ ok: true, deleted: false });
+
+    const memberIds = doc.data().memberIds || [];
+    if (!memberIds.includes(uid)) return res.json({ ok: true, deleted: false });
+
+    if (memberIds.length <= 1) {
+      // 마지막 멤버 → 하위 컬렉션(members/locations/feed/comments) 포함 방 전체 삭제
+      await db.recursiveDelete(ref);
+      roomInfoCache.delete(roomId);
+      return res.json({ ok: true, deleted: true });
+    }
+
+    await ref.update({ memberIds: FieldValue.arrayRemove(uid) });
+    await ref.collection('members').doc(uid).delete().catch(() => {});
+    await ref.collection('locations').doc(uid).delete().catch(() => {});
+    roomInfoCache.delete(roomId);
+    res.json({ ok: true, deleted: false });
+  } catch (err) {
+    console.error('[Rooms] leave error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── 회원탈퇴: WAS 측 개인정보 삭제 ───────────────────────────────────────────
+// iOS deleteAccount가 Cloud Function(deleteMyAccount) 호출 전에 부른다.
+// (Auth 계정이 지워지기 전, 토큰이 유효할 때 실행되어야 함)
+app.post('/api/users/me/purge', requireAuth, async (req, res) => {
+  const uid = req.uid || req.body?.userId;
+  if (!uid) return res.status(400).json({ error: 'auth required' });
+  try {
+    await pgPool.query('DELETE FROM device_tokens WHERE user_id = $1', [uid]).catch(() => {});
+    await pgPool.query('DELETE FROM user_stats WHERE user_id = $1', [uid]).catch(() => {});
+    await pgPool.query('DELETE FROM user_avatars WHERE user_id = $1', [uid]).catch(() => {});
+    // 채팅 본문은 대화 맥락 유지를 위해 남기되 닉네임은 익명화
+    await pgPool.query(
+      `UPDATE room_messages SET nickname = '탈퇴한 사용자' WHERE user_id = $1`, [uid]
+    ).catch(() => {});
+    try { fs.rmSync(path.join(AVATAR_DIR, `${uid}.jpg`), { force: true }); } catch {}
+    // Vlog 잡 파일 + 레코드 삭제
+    const jobs = await pgPool.query('SELECT id FROM vlog_jobs WHERE user_id = $1', [uid]).catch(() => ({ rows: [] }));
+    for (const j of jobs.rows) {
+      try { fs.rmSync(path.join(VLOG_DIR, String(j.id)), { recursive: true, force: true }); } catch {}
+    }
+    await pgPool.query('DELETE FROM vlog_jobs WHERE user_id = $1', [uid]).catch(() => {});
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[Purge] error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // ─── 그룹 채팅 기록 ───────────────────────────────────────────────────────────
 // 최근 메시지 조회 (오래된 → 최신 순으로 반환). WebSocket 접속 전 히스토리 로드용.
-app.get('/api/rooms/:roomId/messages', async (req, res) => {
+// 방 멤버만 조회 가능 — 사적 대화 유출 방지.
+app.get('/api/rooms/:roomId/messages', requireAuth, async (req, res) => {
   const { roomId } = req.params;
   const limit = Math.min(parseInt(req.query.limit) || 50, 200);
   const before = req.query.before; // ISO 타임스탬프 — 페이지네이션(더 이전 메시지)
   try {
+    if (req.uid) {
+      const info = await getRoomInfo(roomId, { refreshIfMissing: req.uid });
+      if (!info || !info.memberIds.includes(req.uid)) {
+        return res.status(403).json({ error: 'not a room member' });
+      }
+    }
     const params = [roomId, limit];
     let where = 'room_id = $1';
     if (before) { params.splice(1, 0, before); where += ' AND created_at < $2'; }
@@ -1795,7 +2022,8 @@ function courseHtml({ courseId, courseName, ogDescription, placeNames, placeCoun
 
   <script>
     function openApp() {
-      window.location.href = 'tteona://course?id=${courseId}';
+      // courseId를 JSON 직렬화로 안전하게 삽입 (스크립트 주입 방지)
+      window.location.href = 'tteona://course?id=' + encodeURIComponent(${JSON.stringify(String(courseId)).replace(/</g, '\\u003c')});
       setTimeout(function() {
         document.getElementById('storeBtn').click();
       }, 2500);
@@ -1907,8 +2135,7 @@ function courseNotFoundHtml() {
 
 // ─── Admin API ───────────────────────────────────────────────────────────────
 
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'tteona-admin-2026';
-const ADMIN_TOKEN    = process.env.ADMIN_TOKEN    || 'tteona-admin-secret-token';
+// ADMIN_PASSWORD / ADMIN_TOKEN 은 파일 상단에서 환경변수 필수로 로드됨
 
 function adminAuth(req, res, next) {
   const auth = req.headers['authorization'] || '';
@@ -1916,23 +2143,46 @@ function adminAuth(req, res, next) {
   res.status(401).json({ error: 'Unauthorized' });
 }
 
+// 로그인 브루트포스 방어 — IP당 15분에 5회
+const adminLoginAttempts = new Map(); // ip → { count, resetAt }
 app.post('/api/admin/login', (req, res) => {
+  const ip = req.ip || 'unknown';
+  const now = Date.now();
+  const entry = adminLoginAttempts.get(ip);
+  if (entry && now < entry.resetAt && entry.count >= 5) {
+    return res.status(429).json({ error: '시도 횟수를 초과했습니다. 잠시 후 다시 시도해주세요.' });
+  }
   const { password } = req.body;
-  if (password === ADMIN_PASSWORD) return res.json({ token: ADMIN_TOKEN });
+  if (password === ADMIN_PASSWORD) {
+    adminLoginAttempts.delete(ip);
+    return res.json({ token: ADMIN_TOKEN });
+  }
+  if (!entry || now >= entry.resetAt) {
+    adminLoginAttempts.set(ip, { count: 1, resetAt: now + 15 * 60 * 1000 });
+  } else {
+    entry.count += 1;
+  }
   res.status(401).json({ error: '비밀번호가 틀렸습니다' });
 });
 
 app.get('/api/admin/stats', adminAuth, async (req, res) => {
   try {
-    const [usersSnap, coursesSnap, reportsSnap, pgStats, cacheStats] = await Promise.all([
+    const weekAgo = Timestamp.fromMillis(Date.now() - 7 * 86400000);
+    const [usersSnap, newUsersSnap, coursesSnap, reportsSnap, pgStats, activeStats, cacheStats] = await Promise.all([
       db.collection('users').count().get(),
+      // 신규 가입: users 문서 createdAt 기준 (daily_stats.new_users는 적재 로직이 없어 항상 0이었음)
+      db.collection('users').where('createdAt', '>=', weekAgo).count().get(),
       db.collection('courses').count().get(),
       db.collection('reports').where('processed', '!=', true).count().get(),
       pgPool.query(`
-        SELECT COALESCE(SUM(new_users),0)       AS new_users_7d,
-               COALESCE(SUM(active_users),0)    AS active_users_7d,
-               COALESCE(SUM(courses_created),0) AS courses_7d
+        SELECT COALESCE(SUM(courses_created),0) AS courses_7d
         FROM daily_stats
+        WHERE stat_date >= CURRENT_DATE - INTERVAL '7 days'
+      `),
+      // 활성 유저: 최근 7일 user_stats에 이벤트가 있는 고유 유저 수
+      pgPool.query(`
+        SELECT COUNT(DISTINCT user_id) AS active_users_7d
+        FROM user_stats
         WHERE stat_date >= CURRENT_DATE - INTERVAL '7 days'
       `),
       pgPool.query('SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE expires_at > NOW()) AS valid FROM places_cache'),
@@ -1942,8 +2192,8 @@ app.get('/api/admin/stats', adminAuth, async (req, res) => {
       totalUsers:       usersSnap.data().count,
       totalCourses:     coursesSnap.data().count,
       pendingReports:   reportsSnap.data().count,
-      newUsers7d:       Number(pgStats.rows[0].new_users_7d),
-      activeUsers7d:    Number(pgStats.rows[0].active_users_7d),
+      newUsers7d:       newUsersSnap.data().count,
+      activeUsers7d:    Number(activeStats.rows[0].active_users_7d),
       coursesCreated7d: Number(pgStats.rows[0].courses_7d),
       placesCacheTotal: Number(cacheStats.rows[0].total),
       placesCacheValid: Number(cacheStats.rows[0].valid),
@@ -2065,9 +2315,13 @@ app.use((req, res) => res.status(404).json({ error: 'Not found' }));
 // 방 정보(이름 + 멤버) 캐시 — 메시지마다 Firestore 조회 방지 (5분 TTL)
 const roomInfoCache = new Map(); // roomId → { name, memberIds, at }
 
-async function getRoomInfo(roomId) {
+// refreshIfMissing: 해당 uid가 캐시에 없으면 캐시를 무시하고 새로 조회
+// (방금 초대코드로 참여한 멤버가 5분 캐시 때문에 거부되는 것 방지)
+async function getRoomInfo(roomId, { refreshIfMissing } = {}) {
   const c = roomInfoCache.get(roomId);
-  if (c && Date.now() - c.at < 5 * 60 * 1000) return c;
+  if (c && Date.now() - c.at < 5 * 60 * 1000) {
+    if (!refreshIfMissing || c.memberIds.includes(refreshIfMissing)) return c;
+  }
   const doc = await db.collection('rooms').doc(roomId).get();
   if (!doc.exists) return null;
   const d = doc.data();
@@ -2112,12 +2366,39 @@ wss.on('connection', (ws) => {
     try { msg = JSON.parse(raw); } catch { return; }
 
     if (msg.type === 'join') {
-      ws.roomId  = msg.roomId;
-      ws.userId  = msg.userId;
-      ws.nickname = msg.nickname || '';
-      if (!wsRooms.has(msg.roomId)) wsRooms.set(msg.roomId, new Set());
-      wsRooms.get(msg.roomId).add(ws);
-      console.log(`[WS] ${msg.userId} joined room ${msg.roomId}`);
+      // Firebase ID 토큰 검증 + 방 멤버십 확인 후에만 입장
+      // (위치·채팅이 실시간으로 흐르는 방이므로 도청/사칭 차단이 필수)
+      (async () => {
+        let uid = null;
+        if (msg.idToken) {
+          try {
+            uid = (await getAuth().verifyIdToken(String(msg.idToken))).uid;
+          } catch {
+            ws.send(JSON.stringify({ type: 'auth_error', reason: 'invalid token' }));
+            return ws.close(4001, 'invalid token');
+          }
+        } else if (AUTH_ENFORCE) {
+          ws.send(JSON.stringify({ type: 'auth_error', reason: 'auth required' }));
+          return ws.close(4001, 'auth required');
+        }
+
+        const effectiveUid = uid || msg.userId; // 완화 모드(구버전 앱)만 msg.userId 허용
+        if (uid) {
+          const info = await getRoomInfo(msg.roomId, { refreshIfMissing: uid }).catch(() => null);
+          if (!info || !info.memberIds.includes(uid)) {
+            ws.send(JSON.stringify({ type: 'auth_error', reason: 'not a room member' }));
+            return ws.close(4003, 'not a room member');
+          }
+        }
+
+        ws.roomId   = msg.roomId;
+        ws.userId   = effectiveUid;
+        ws.nickname = uid ? await nicknameOf(uid, msg.nickname) : (msg.nickname || '');
+        if (!wsRooms.has(msg.roomId)) wsRooms.set(msg.roomId, new Set());
+        wsRooms.get(msg.roomId).add(ws);
+        ws.send(JSON.stringify({ type: 'joined', roomId: msg.roomId }));
+        console.log(`[WS] ${effectiveUid} joined room ${msg.roomId}`);
+      })().catch(e => console.error('[WS join] error:', e.message));
     }
 
     if (msg.type === 'location' && ws.roomId) {
@@ -2144,6 +2425,14 @@ wss.on('connection', (ws) => {
       const text = (msg.text || '').toString().slice(0, 2000).trim();
       if (!text) return;
       const clientMsgId = msg.clientMsgId || null;  // 발신자 중복 제거용
+
+      // 금칙어 검사 — 댓글/코스명과 동일 기준. 차단 시 발신자에게만 알리고 전파하지 않음
+      if (findBannedWord(text)) {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'chat_blocked', clientMsgId }));
+        }
+        return;
+      }
       const messageId = randomUUID();  // 반응·답장 기준이 되는 안정적 고유 ID
       // 답장(인용) 정보 — 상대 메시지 꾹 눌러 답장 시
       const replyToNickname = msg.replyToNickname ? String(msg.replyToNickname).slice(0, 60) : null;

@@ -137,6 +137,10 @@ struct MainView: View {
         .ignoresSafeArea()
         .task {
             isLoadingCourses = true
+            // 차단 목록이 아직 로드 전이면 먼저 로드 — 차단 필터 누락 방지
+            if userService.currentUser == nil, let uid = authService.currentUser?.uid {
+                await userService.fetchUser(uid: uid)
+            }
             await courseService.fetchCourses(blockedUserIds: userService.currentUser?.blockedUserIds ?? [])
             if let uid = authService.currentUser?.uid {
                 await courseService.fetchLikedCourseIds(userId: uid)
@@ -227,6 +231,13 @@ struct MainView: View {
             guard should else { return }
             notificationManager.shouldOpenTodaySession = false
             handleImpromptuTap()
+        }
+        .onAppear {
+            // 콜드 스타트: 잠금화면 촬영 버튼/알림이 MainView 등장 전에 신호를 세팅한 경우
+            if notificationManager.shouldOpenTodaySession {
+                notificationManager.shouldOpenTodaySession = false
+                handleImpromptuTap()
+            }
         }
     }
 

@@ -25,7 +25,7 @@ actor RecommendationService {
 
         guard let url = components.url else { return [] }
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
+            let (data, _) = try await APIAuth.get(url)
             return try JSONDecoder().decode(RecommendResponse.self, from: data).courseIds
         } catch {
             print("[RecommendationService] error:", error)

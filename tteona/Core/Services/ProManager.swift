@@ -7,8 +7,11 @@ import RevenueCat
 final class ProManager: ObservableObject {
     static let shared = ProManager()
 
-    /// RevenueCat 콘솔 → 프로젝트 → API Keys의 Apple 공개 SDK 키(appl_...)로 교체할 것
-    private static let apiKey = "appl_REPLACE_WITH_REVENUECAT_KEY"
+    /// RevenueCat Apple 공개 SDK 키(appl_...) — Info.plist의 REVENUECAT_API_KEY에 설정.
+    /// 미설정(빈 값)이면 무료 모드로 동작하고 결제 UI는 잠긴다.
+    private static var apiKey: String {
+        Bundle.main.object(forInfoDictionaryKey: "REVENUECAT_API_KEY") as? String ?? ""
+    }
     static let entitlementId = "pro"
 
     @Published private(set) var isPro = false
@@ -25,12 +28,13 @@ final class ProManager: ObservableObject {
     private init() {}
 
     func configure(userId: String?) {
-        guard !Self.apiKey.contains("REPLACE") else {
-            print("[Pro] RevenueCat API 키 미설정 — 무료 모드로 동작")
+        let key = Self.apiKey
+        guard !key.isEmpty, key.hasPrefix("appl_") else {
+            print("[Pro] RevenueCat API 키 미설정 — 무료 모드로 동작 (Info.plist REVENUECAT_API_KEY 확인)")
             return
         }
         Purchases.logLevel = .warn
-        Purchases.configure(withAPIKey: Self.apiKey, appUserID: userId)
+        Purchases.configure(withAPIKey: key, appUserID: userId)
         Task {
             await refresh()
             await loadOfferings()

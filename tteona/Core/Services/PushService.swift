@@ -12,20 +12,15 @@ actor PushService {
               !token.isEmpty else { return }
 
         guard let url = URL(string: "\(baseURL)/register") else { return }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try? JSONSerialization.data(withJSONObject: ["userId": userId, "token": token])
+        let request = await APIAuth.request(url: url, method: "POST",
+                                            jsonBody: ["userId": userId, "token": token])
         _ = try? await URLSession.shared.data(for: request)
     }
 
     // 코스 좋아요 알림 트리거 (좋아요 누른 쪽 앱에서 호출)
     func notifyCourseLiked(courseOwnerId: String, likerNickname: String, courseName: String) async {
         guard let url = URL(string: "\(baseURL)/course-liked") else { return }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try? JSONSerialization.data(withJSONObject: [
+        let request = await APIAuth.request(url: url, method: "POST", jsonBody: [
             "courseOwnerId": courseOwnerId,
             "likerNickname": likerNickname,
             "courseName": courseName
@@ -36,10 +31,7 @@ actor PushService {
     // 코스 따라가기 알림 트리거 (코스 여행 시작 시 호출)
     func notifyCourseFollowed(courseOwnerId: String, followerNickname: String, courseName: String) async {
         guard let url = URL(string: "\(baseURL)/course-followed") else { return }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try? JSONSerialization.data(withJSONObject: [
+        let request = await APIAuth.request(url: url, method: "POST", jsonBody: [
             "courseOwnerId": courseOwnerId,
             "followerNickname": followerNickname,
             "courseName": courseName

@@ -56,6 +56,8 @@ final class CameraViewController: UIViewController {
     private var recordStart: Date?
     // 세션 총 촬영 예산 — 무료 30초(장소당 5초) / PRO 5분(장소당 제한 없음). 기존 클립 합계 + 현재 클립으로 계산
     private var usedSeconds: Double = 0
+    // 이 장소에 이미 저장된 클립 길이 — 재촬영 시 덮어써지므로 예산에서 돌려받는다
+    private var currentPlaceClipSeconds: Double = 0
     private var budgetSeconds: Double { ProManager.shared.vlogBudgetSeconds }
     private var tipChip: UIView?
     private var savingOverlay: UIView?
@@ -379,16 +381,21 @@ final class CameraViewController: UIViewController {
     private func refreshUsedSeconds() {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let dir = docs.appendingPathComponent("Tteona/Sessions/\(sessionId)")
+        let currentClipURL = VlogService.clipURL(place: place, sessionId: sessionId)
         Task { [weak self] in
             guard let self else { return }
             var total: Double = 0
+            var currentClip: Double = 0
             let files = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
             for f in files where f.pathExtension.lowercased() == "mp4" {
                 if let d = try? await AVURLAsset(url: f).load(.duration) {
-                    total += CMTimeGetSeconds(d)
+                    let sec = CMTimeGetSeconds(d)
+                    total += sec
+                    if f.lastPathComponent == currentClipURL.lastPathComponent { currentClip = sec }
                 }
             }
             self.usedSeconds = total
+            self.currentPlaceClipSeconds = currentClip
             self.updateBudgetUI(extraElapsed: 0)
         }
     }
@@ -521,6 +528,12 @@ final class CameraViewController: UIViewController {
         if service.isRecording {
             stopRecordingUI()
             return
+        }
+        // 재촬영이면 기존 클립이 덮어써지므로 그 길이만큼 예산을 돌려받는다
+        if currentPlaceClipSeconds > 0 {
+            usedSeconds = max(0, usedSeconds - currentPlaceClipSeconds)
+            currentPlaceClipSeconds = 0
+            updateBudgetUI(extraElapsed: 0)
         }
         let remaining = budgetSeconds - usedSeconds
         guard remaining >= 1 else {

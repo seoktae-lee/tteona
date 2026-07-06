@@ -128,14 +128,18 @@ struct JoinRoomView: View {
     @State private var inviteCode = ""
     @State private var isLoading = false
     @State private var errorMessage: String?
-    @State private var failCount = 0
-    @State private var lockUntil: Date? = nil
+    // 화면을 닫았다 열어도 잠금이 리셋되지 않도록 영속 저장
+    @AppStorage("joinRoomFailCount") private var failCount = 0
+    @AppStorage("joinRoomLockUntil") private var lockUntilTimestamp: Double = 0
     @State private var cooldownRemaining = 0
     @State private var cooldownTimer: Timer? = nil
 
     private let maxAttempts = 5
     private let lockSeconds = 3600
 
+    private var lockUntil: Date? {
+        lockUntilTimestamp > 0 ? Date(timeIntervalSince1970: lockUntilTimestamp) : nil
+    }
     private var isLocked: Bool { lockUntil.map { Date() < $0 } ?? false }
 
     var body: some View {
@@ -216,6 +220,20 @@ struct JoinRoomView: View {
                 if !initialCode.isEmpty {
                     inviteCode = String(initialCode.uppercased().prefix(6))
                 }
+                // 잠금 상태 복원 (만료됐으면 리셋)
+                if let until = lockUntil {
+                    if Date() < until {
+                        cooldownRemaining = Int(until.timeIntervalSinceNow)
+                        startCooldownTimer()
+                    } else {
+                        lockUntilTimestamp = 0
+                        failCount = 0
+                    }
+                }
+            }
+            .onDisappear {
+                cooldownTimer?.invalidate()
+                cooldownTimer = nil
             }
         }
     }
@@ -227,11 +245,13 @@ struct JoinRoomView: View {
         errorMessage = nil
         do {
             _ = try await roomService.joinRoom(inviteCode: inviteCode, userId: uid, nickname: nickname)
+            failCount = 0
+            lockUntilTimestamp = 0
             dismiss()
         } catch {
             failCount += 1
             if failCount >= maxAttempts {
-                lockUntil = Date().addingTimeInterval(TimeInterval(lockSeconds))
+                lockUntilTimestamp = Date().addingTimeInterval(TimeInterval(lockSeconds)).timeIntervalSince1970
                 cooldownRemaining = lockSeconds
                 startCooldownTimer()
                 errorMessage = nil
@@ -249,7 +269,7 @@ struct JoinRoomView: View {
             if cooldownRemaining <= 0 {
                 cooldownTimer?.invalidate()
                 cooldownTimer = nil
-                lockUntil = nil
+                lockUntilTimestamp = 0
                 failCount = 0
             }
         }

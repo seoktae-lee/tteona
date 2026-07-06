@@ -36,7 +36,7 @@ actor StatsService {
     func fetchMyStats(userId: String) async -> TravelStats? {
         guard let url = URL(string: "\(baseURL)/users/\(userId)/stats") else { return nil }
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
+            let (data, _) = try await APIAuth.get(url)
             return try JSONDecoder().decode(TravelStats.self, from: data)
         } catch {
             print("[StatsService] fetch error:", error)
@@ -48,10 +48,8 @@ actor StatsService {
 
     func postEvent(_ event: StatsEvent, userId: String) async {
         guard let url = URL(string: "\(baseURL)/stats/event") else { return }
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = try? JSONSerialization.data(withJSONObject: ["userId": userId, "type": event.rawValue])
+        let req = await APIAuth.request(url: url, method: "POST",
+                                        jsonBody: ["userId": userId, "type": event.rawValue])
         _ = try? await URLSession.shared.data(for: req)
     }
 
@@ -60,7 +58,7 @@ actor StatsService {
     func fetchCreatorRanking() async -> [CreatorRank] {
         guard let url = URL(string: "\(baseURL)/creators/ranking") else { return [] }
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
+            let (data, _) = try await APIAuth.get(url)
             struct Response: Decodable { let ranking: [CreatorRank] }
             return try JSONDecoder().decode(Response.self, from: data).ranking
         } catch {
@@ -73,10 +71,7 @@ actor StatsService {
 
     func isTextAllowed(_ text: String) async -> Bool {
         guard let url = URL(string: "\(baseURL)/moderate") else { return true }
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = try? JSONSerialization.data(withJSONObject: ["text": text])
+        let req = await APIAuth.request(url: url, method: "POST", jsonBody: ["text": text])
         do {
             let (data, _) = try await URLSession.shared.data(for: req)
             let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]

@@ -46,9 +46,13 @@ struct GroupChatView: View {
     ]
 
     private var entries: [ChatTimelineEntry] {
-        var all: [ChatTimelineEntry] = chat.messages.map { .message($0) }
+        // 차단한 유저의 메시지·활동은 숨긴다
+        let blocked = Set(userService.currentUser?.blockedUserIds ?? [])
+        var all: [ChatTimelineEntry] = chat.messages
+            .filter { !blocked.contains($0.userId) }
+            .map { .message($0) }
         all += roomService.feedItems
-            .filter { Self.chatVisibleFeedTypes.contains($0.type) }
+            .filter { Self.chatVisibleFeedTypes.contains($0.type) && !blocked.contains($0.userId) }
             .map { .system($0) }
         return all.sorted { $0.date < $1.date }
     }
@@ -110,6 +114,11 @@ struct GroupChatView: View {
             if AppNotificationManager.shared.activeChatRoom?.roomId == room.roomId {
                 AppNotificationManager.shared.activeChatRoom = nil
             }
+        }
+        .alert("전송할 수 없는 메시지예요", isPresented: $chat.moderationBlocked) {
+            Button("확인", role: .cancel) {}
+        } message: {
+            Text("부적절한 표현이 포함되어 있어 메시지가 전송되지 않았어요.")
         }
     }
 

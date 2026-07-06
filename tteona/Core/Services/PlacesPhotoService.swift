@@ -50,7 +50,7 @@ actor PlacesPhotoService {
         guard let url = comps?.url else { return nil }
 
         do {
-            let (data, response) = try await URLSession.shared.data(from: url)
+            let (data, response) = try await APIAuth.get(url)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return nil }
             guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let photoURL = json["url"] as? String, !photoURL.isEmpty else { return nil }

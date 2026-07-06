@@ -366,7 +366,14 @@ class AuthService: NSObject, ObservableObject {
 
     // MARK: - 회원탈퇴
     func deleteAccount(userId: String) async throws {
-        // 서버(Cloud Function)에서 데이터 + Auth 계정을 일괄 삭제
+        // 1) WAS 측 개인정보(푸시 토큰·통계·아바타·Vlog 파일) 삭제 —
+        //    Auth 계정이 지워지기 전, 토큰이 유효할 때 먼저 호출
+        if let url = URL(string: "https://tteona.kr/api/users/me/purge") {
+            let req = await APIAuth.request(url: url, method: "POST")
+            _ = try? await URLSession.shared.data(for: req)
+        }
+
+        // 2) 서버(Cloud Function)에서 Firestore 데이터 + Auth 계정을 일괄 삭제
         let functions = Functions.functions(region: "us-central1")
         _ = try await functions.httpsCallable("deleteMyAccount").call()
 

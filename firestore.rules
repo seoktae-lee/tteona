@@ -44,23 +44,22 @@ service cloud.firestore {
     }
 
     // rooms 컬렉션
+    // ⚠️ 배포 시점 주의: 초대코드 참여가 서버 API(/api/rooms/join) 경유로 바뀐
+    //    앱 버전이 충분히 배포된 뒤에 이 규칙을 배포할 것 — 구버전 앱은
+    //    클라이언트에서 inviteCode 쿼리로 참여하므로 이 규칙에서 막힌다.
     match /rooms/{roomId} {
-      // 방 목록 조회: 로그인한 사용자 (초대코드 검색 쿼리 허용 포함)
-      allow read: if isSignedIn();
+      // 방 조회: 멤버만 (초대코드·멤버 목록이 전체 유저에게 노출되던 문제 차단)
+      allow read: if isSignedIn() && resource.data.memberIds.hasAny([request.auth.uid]);
 
-      // 방 생성: 로그인한 사용자
-      allow create: if isSignedIn();
+      // 방 생성: 본인이 방장 + 본인이 멤버에 포함된 방만
+      allow create: if isSignedIn() &&
+        request.resource.data.creatorId == request.auth.uid &&
+        request.resource.data.memberIds.hasAll([request.auth.uid]);
 
-      // 방 수정: 방 멤버이거나 (초대코드로 참여 시 memberIds 업데이트)
-      allow update: if isSignedIn() && (
-        resource.data.memberIds.hasAny([request.auth.uid]) ||
-        // 초대 참여: memberIds에 본인 추가만 허용
-        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds']) &&
-         request.resource.data.memberIds.hasAll(resource.data.memberIds) &&
-         request.resource.data.memberIds.hasAny([request.auth.uid]))
-      );
+      // 방 수정: 방 멤버만 (초대 참여는 서버 Admin SDK가 처리)
+      allow update: if isSignedIn() && resource.data.memberIds.hasAny([request.auth.uid]);
 
-      // 방 삭제: creatorId 기준으로 방장만 허용
+      // 방 삭제: creatorId 기준으로 방장만 허용 (마지막 멤버 정리는 서버가 처리)
       allow delete: if isSignedIn() && resource.data.creatorId == request.auth.uid;
 
       // members 서브컬렉션

@@ -71,7 +71,19 @@ class LocationService: NSObject, ObservableObject {
         for region in manager.monitoredRegions {
             manager.stopMonitoring(for: region)
         }
-        for place in places {
+        // iOS는 앱당 최대 20개 region만 감시 가능 — 초과분은 조용히 실패하므로
+        // 현재 위치에서 가까운 순으로 20개만 등록 (도착 감지는 거리 기반 버튼이 보완)
+        var targets = places
+        if targets.count > 20 {
+            if let current = currentLocation {
+                targets = targets.sorted {
+                    current.distance(from: CLLocation(latitude: $0.latitude, longitude: $0.longitude))
+                    < current.distance(from: CLLocation(latitude: $1.latitude, longitude: $1.longitude))
+                }
+            }
+            targets = Array(targets.prefix(20))
+        }
+        for place in targets {
             let region = CLCircularRegion(
                 center: place.coordinate,
                 radius: arrivalRadius,

@@ -30,8 +30,10 @@ actor PlaceDetailService {
         Bundle.main.object(forInfoDictionaryKey: "GOOGLE_PLACES_API_KEY") as? String ?? ""
     }
 
-    func fetchDetail(for placeName: String) async -> PlaceDetail? {
-        let key = Self.cacheKey(for: placeName)
+    func fetchDetail(for placeName: String, latitude: Double? = nil, longitude: Double? = nil) async -> PlaceDetail? {
+        // 사진·평점 캐시는 좌표 버킷을 키에 포함 — "스타벅스"처럼 동명 장소끼리
+        // 사진/리뷰가 섞이는 문제 방지. (placeReviews 문서 키는 기존 cacheKey 유지)
+        let key = Self.detailCacheKey(for: placeName, latitude: latitude, longitude: longitude)
 
         // 1. 메모리 캐시
         if let cached = memoryCache[key] { return cached }
@@ -50,13 +52,15 @@ actor PlaceDetailService {
         }
 
         // 4. Google Places API
-        guard let detail = await fetchFromGoogle(placeName: placeName, key: key) else { return nil }
+        guard let detail = await fetchFromGoogle(placeName: placeName, key: key,
+                                                 latitude: latitude, longitude: longitude) else { return nil }
         memoryCache[key] = detail
         await saveToFirestore(detail: detail, key: key)
         Task { await self.saveToWAS(detail: detail, key: key) }
         return detail
     }
 
+    /// 리뷰(placeReviews) 문서 키 — 기존 데이터 호환을 위해 이름 기반 유지
     static func cacheKey(for placeName: String) -> String {
         placeName.lowercased()
             .trimmingCharacters(in: .whitespaces)
@@ -64,11 +68,19 @@ actor PlaceDetailService {
             .joined(separator: "_")
     }
 
+    /// 사진·평점 캐시 키 — 이름 + 좌표(약 1km 버킷)로 동명이소 구분
+    static func detailCacheKey(for placeName: String, latitude: Double?, longitude: Double?) -> String {
+        let base = cacheKey(for: placeName)
+        guard let latitude, let longitude else { return base }
+        return String(format: "%@|%.2f|%.2f", base, latitude, longitude)
+    }
+
     // MARK: - WAS PostgreSQL 캐시
 
     private func fetchFromWAS(key: String) async -> PlaceDetail? {
-        guard let url = URL(string: "\(wasBaseURL)?key=\(key)") else { return nil }
-        guard let (data, resp) = try? await URLSession.shared.data(from: url),
+        guard let encoded = key.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let url = URL(string: "\(wasBaseURL)?key=\(encoded)") else { return nil }
+        guard let (data, resp) = try? await APIAuth.get(url),
               (resp as? HTTPURLResponse)?.statusCode == 200,
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return nil }
@@ -102,10 +114,7 @@ actor PlaceDetailService {
         ]
         if let rating = detail.rating { body["rating"] = rating }
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        let request = await APIAuth.request(url: url, method: "POST", jsonBody: body)
         _ = try? await URLSession.shared.data(for: request)
     }
 
@@ -151,7 +160,8 @@ actor PlaceDetailService {
 
     // MARK: - Google Places API
 
-    private func fetchFromGoogle(placeName: String, key: String) async -> PlaceDetail? {
+    private func fetchFromGoogle(placeName: String, key: String,
+                                 latitude: Double? = nil, longitude: Double? = nil) async -> PlaceDetail? {
         guard !apiKey.isEmpty,
               let url = URL(string: "https://places.googleapis.com/v1/places:searchText")
         else { return nil }
@@ -165,7 +175,15 @@ actor PlaceDetailService {
             "places.photos,places.types,places.rating,places.userRatingCount,places.reviews",
             forHTTPHeaderField: "X-Goog-FieldMask"
         )
-        request.httpBody = try? JSONSerialization.data(withJSONObject: ["textQuery": placeName])
+        // 좌표가 있으면 5km 반경 우선 검색 — 동명 장소 오매칭 방지
+        var body: [String: Any] = ["textQuery": placeName]
+        if let latitude, let longitude {
+            body["locationBias"] = ["circle": [
+                "center": ["latitude": latitude, "longitude": longitude],
+                "radius": 5000.0
+            ]]
+        }
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
         guard let (data, _) = try? await URLSession.shared.data(for: request),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],

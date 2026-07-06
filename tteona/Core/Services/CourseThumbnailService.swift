@@ -18,6 +18,7 @@ actor CourseThumbnailService {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        await APIAuth.authorize(&request)
 
         var body = Data()
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
@@ -42,7 +43,7 @@ actor CourseThumbnailService {
     func fetchAllThumbnails() async -> [String: String] {
         guard let url = URL(string: "\(baseURL)/thumbnails") else { return [:] }
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
+            let (data, _) = try await APIAuth.get(url)
             return (try? JSONDecoder().decode([String: String].self, from: data)) ?? [:]
         } catch {
             print("[CourseThumbnailService] fetch error:", error)

@@ -1,6 +1,11 @@
 # GoogleService-Info (Firebase API 키 포함 — 절대 커밋 금지)
 GoogleService-Info.plist
 
+# 서버 환경변수 / 시크릿 (절대 커밋 금지)
+.env
+.env.*
+!.env.example
+
 # Xcode
 *.xcuserstate
 *.xcuserdatad
