@@ -42,7 +42,11 @@ class LocationService: NSObject, ObservableObject {
         manager.allowsBackgroundLocationUpdates = !places.isEmpty
         manager.startUpdatingLocation()
         setupGeofences(for: places)
-        requestNotificationPermission()
+        // 도착 알림이 실제 필요한 세션 시작 시에만 권한 요청 —
+        // 빈 목록(홈 지도 로드)에서 요청하면 앱 진입 직후 맥락 없는 팝업이 뜬다
+        if !places.isEmpty {
+            requestNotificationPermission()
+        }
     }
 
     func stopTracking() {

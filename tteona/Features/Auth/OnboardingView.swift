@@ -8,7 +8,6 @@ struct OnboardingView: View {
     @EnvironmentObject private var authService: AuthService
     @StateObject private var userService = UserService()
     @State private var step = 0
-    @State private var featureSlide = 0
     @State private var nickname = ""
     @State private var nicknameState: NicknameState = .idle
     @State private var debounceTask: Task<Void, Never>? = nil
@@ -24,19 +23,22 @@ struct OnboardingView: View {
     @State private var photoLibraryGranted = false
 
     private let totalSteps = 5
-    private let featureSlides: [(icon: String, title: String, description: String)] = [
-        ("map.fill", "코스 탐색", "전세계 다양한 코스를\n지도에서 찾아보세요"),
-        ("video.fill", "나의 오늘", "일상을 자유롭게\n기록하세요"),
-        ("film.fill", "Vlog 생성", "여행이 끝나면\n자동으로 영상이 완성돼요"),
-        ("person.2.fill", "그룹", "친구/가족과 함께 코스와\n나의 오늘을 공유해보세요"),
-    ]
+
+    init() {
+        #if DEBUG
+        // 시각 검증용: -previewOnboardingStep N 런치 아규먼트로 특정 단계 바로 진입
+        let previewStep = UserDefaults.standard.integer(forKey: "previewOnboardingStep")
+        if previewStep > 0 { _step = State(initialValue: previewStep) }
+        #endif
+    }
 
     var body: some View {
         ZStack {
             Color.tteBackground.ignoresSafeArea()
 
             VStack(spacing: 0) {
-                if step > 0 {
+                // 기능 소개(step 1)는 자체 페이지 도트가 있으므로 닉네임 단계부터 표시
+                if step > 1 {
                     progressBar
                         .padding(.top, 56)
                         .padding(.horizontal, 24)
@@ -75,112 +77,30 @@ struct OnboardingView: View {
 
     // MARK: - Step 0: 스플래시
     private var splashStep: some View {
-        VStack(spacing: 0) {
-            Spacer()
+        ZStack {
+            AuroraBackground(tint: .tteOrange)
 
-            VStack(spacing: 20) {
-                Image("tteona-logo")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(height: 46)
-                    .shadow(color: .tteOrange.opacity(0.25), radius: 16, y: 6)
+            VStack(spacing: 0) {
+                Spacer()
 
-                Text("특별한 순간을 영상으로 기록하세요")
-                    .font(.tte(16))
-                    .foregroundColor(.tteMediumGray)
+                SplashHeroView()
+
+                Spacer()
+
+                nextButton(title: "시작하기") {
+                    Haptics.light()
+                    withAnimation { step = 1 }
+                }
+                .padding(.horizontal, 24)
+                .padding(.bottom, 48)
             }
-
-            Spacer()
-
-            nextButton(title: "시작하기") {
-                withAnimation { step = 1 }
-            }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 48)
         }
     }
 
     // MARK: - Step 1: 기능 소개 슬라이드
     private var featureIntroStep: some View {
-        VStack(spacing: 0) {
-            // 상단 로고 헤더
-            HStack {
-                Image("tteona-logo")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(height: 22)
-                Spacer()
-                Button("건너뛰기") {
-                    withAnimation { step = 2 }
-                }
-                .font(.tte(14))
-                .foregroundColor(.tteMediumGray)
-            }
-            .padding(.horizontal, 24)
-            .padding(.top, 60)
-
-            Spacer()
-
-            // 슬라이드 콘텐츠
-            let slide = featureSlides[featureSlide]
-            VStack(spacing: 36) {
-                ZStack {
-                    Circle()
-                        .fill(Color.tteOrange.opacity(0.08))
-                        .frame(width: 160, height: 160)
-                    Circle()
-                        .fill(Color.tteOrange.opacity(0.14))
-                        .frame(width: 120, height: 120)
-                    Image(systemName: slide.icon)
-                        .font(.tte(48, .medium))
-                        .foregroundColor(.tteOrange)
-                }
-
-                VStack(spacing: 14) {
-                    Text(slide.title)
-                        .font(.tte(28, .bold))
-                        .foregroundColor(.tteDarkGray)
-                    Text(slide.description)
-                        .font(.tte(17))
-                        .foregroundColor(.tteMediumGray)
-                        .multilineTextAlignment(.center)
-                        .lineSpacing(5)
-                }
-            }
-            .id(featureSlide)
-            .transition(.asymmetric(
-                insertion: .move(edge: .trailing).combined(with: .opacity),
-                removal: .move(edge: .leading).combined(with: .opacity)
-            ))
-            .animation(.easeInOut(duration: 0.3), value: featureSlide)
-
-            Spacer()
-
-            // 페이지 인디케이터
-            HStack(spacing: 8) {
-                ForEach(0..<featureSlides.count, id: \.self) { i in
-                    Capsule()
-                        .fill(i == featureSlide ? Color.tteOrange : Color(UIColor.tertiarySystemFill))
-                        .frame(width: i == featureSlide ? 24 : 8, height: 8)
-                        .animation(.easeInOut(duration: 0.2), value: featureSlide)
-                }
-            }
-            .padding(.bottom, 32)
-
-            // 버튼
-            VStack(spacing: 12) {
-                if featureSlide < featureSlides.count - 1 {
-                    nextButton(title: "다음") {
-                        withAnimation { featureSlide += 1 }
-                    }
-                } else {
-                    nextButton(title: "시작하기") {
-                        withAnimation { step = 2 }
-                    }
-                }
-            }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 48)
+        OnboardingFeatureShowcase {
+            withAnimation { step = 2 }
         }
     }
 
@@ -464,6 +384,10 @@ struct OnboardingView: View {
             UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
                 DispatchQueue.main.async {
                     notificationGranted = granted
+                    // 앱 실행 시점 요청을 온보딩으로 미뤘으므로 허용 즉시 원격 알림 등록 (FCM 푸시 의존)
+                    if granted {
+                        UIApplication.shared.registerForRemoteNotifications()
+                    }
                     continuation.resume()
                 }
             }

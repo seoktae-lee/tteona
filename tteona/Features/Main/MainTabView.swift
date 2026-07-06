@@ -14,8 +14,36 @@ struct MainTabView: View {
     @State private var pendingSessionInfo: CourseSessionInfo? = nil
     @State private var selectedTab: Int = 0
     @State private var deepLinkTask: Task<Void, Never>? = nil
+    @State private var showNavGuide = false
+
+    // 내비게이션 가이드는 계정별로 1회 표시 (온보딩이 계정별인 것과 일관되게)
+    private var navGuideSeenKey: String? {
+        authService.currentUser.map { "hasSeenNavGuide_\($0.uid)" }
+    }
+
+    private var hasSeenNavGuide: Bool {
+        guard let key = navGuideSeenKey else { return true }
+        return UserDefaults.standard.bool(forKey: key)
+    }
 
     var body: some View {
+        ZStack {
+            tabContent
+
+            if showNavGuide {
+                NavGuideOverlay(selectedTab: $selectedTab) {
+                    if let key = navGuideSeenKey {
+                        UserDefaults.standard.set(true, forKey: key)
+                    }
+                    withAnimation(.easeOut(duration: 0.25)) { showNavGuide = false }
+                }
+                .transition(.opacity)
+                .zIndex(10)
+            }
+        }
+    }
+
+    private var tabContent: some View {
         TabView(selection: $selectedTab) {
             MainView()
                 .tabItem {
@@ -105,6 +133,22 @@ struct MainTabView: View {
             selectedTab = 2
         }
         .onAppear {
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("-previewNavGuide") {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                    withAnimation(.easeIn(duration: 0.3)) { showNavGuide = true }
+                }
+            }
+            #endif
+            // 첫 진입 시 나루 내비게이션 가이드 (딥링크 진입 시에는 방해하지 않음)
+            if !hasSeenNavGuide,
+               deepLinkHandler.pendingCourseId == nil,
+               deepLinkHandler.pendingRoomCode == nil {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                    guard !hasSeenNavGuide else { return }
+                    withAnimation(.easeIn(duration: 0.3)) { showNavGuide = true }
+                }
+            }
             // 콜드 스타트 딥링크: MainTabView 진입 전 이미 pendingCourseId가 설정된 경우
             guard let courseId = deepLinkHandler.pendingCourseId else { return }
             deepLinkTask?.cancel()

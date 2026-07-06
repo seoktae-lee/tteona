@@ -1061,59 +1061,59 @@ pm2 save</div>
       </div>
       <div class="tasks">
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
-            <div class="task-title">APNs 좋아요 / 팔로우 푸시 알림</div>
-            <div class="task-desc">PushService.swift · CourseService · CourseDetailView · ActiveSessionView 수정</div>
+            <div class="task-title">APNs 좋아요 / 팔로우 푸시 알림 (코드 완료)</div>
+            <div class="task-desc">PushService.notifyCourseLiked()/notifyCourseFollowed() 구현 확인. 코드는 완료, 아래 "Xcode 빌드 → App Store 제출" 전까지 유저에게는 미반영.</div>
           </div>
         </div>
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
-            <div class="task-title">Places 캐시 WAS 연동</div>
-            <div class="task-desc">PlaceDetailService.swift — 메모리 → PostgreSQL(WAS) → Firestore → Google 순서</div>
+            <div class="task-title">Places 캐시 WAS 연동 (코드 완료)</div>
+            <div class="task-desc">PlaceDetailService.swift 확인 — 메모리 → PostgreSQL(WAS, wasBaseURL) → Firestore → Google 순서로 구현됨.</div>
           </div>
         </div>
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
-            <div class="task-title">나루 추천 버튼 (⚡ → 나루 캐릭터)</div>
-            <div class="task-desc">RecommendationService.swift · MainView.swift — 필터바 4번째 버튼</div>
+            <div class="task-title">나루 추천 버튼 (코드 완료 — 위치는 MainView 아닌 탐색 그리드)</div>
+            <div class="task-desc">RecommendationService 연동 확인. MainView가 아니라 ExploreGridView의 "추천순" 정렬 칩으로 구현됨(위치 확보 시 재조회). 기능은 동일하게 완료.</div>
           </div>
         </div>
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
-            <div class="task-title">WebSocket 실시간 위치 공유</div>
-            <div class="task-desc">LocationSocketService.swift · ActiveSessionView.swift — Firestore 리스너 제거, 지연 3~5초 → 50~200ms</div>
+            <div class="task-title">WebSocket 실시간 위치 공유 (코드 완료)</div>
+            <div class="task-desc">LocationSocketService.swift 확인 — wss://tteona.kr/ws/location connect/sendLocation/disconnect 구현됨. ActiveSessionView 연동 확인.</div>
           </div>
         </div>
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
-            <div class="task-title">프로필 이미지 설정 + 크리에이터 랭킹 개선</div>
-            <div class="task-desc">SettingsView(PhotosPicker 아바타 업로드) · ProfileImageService 신규 · AppUser.profileImageUrl · ExploreGridView 랭킹 뱃지 잘림 수정 + 프로필 사진 표시</div>
+            <div class="task-title">프로필 이미지 설정 + 크리에이터 랭킹 개선 (코드 완료)</div>
+            <div class="task-desc">SettingsView PhotosPicker 아바타 업로드, ExploreGridView 크리에이터 랭킹 스트립(profileImageUrl 표시) 구현 확인.</div>
           </div>
         </div>
         <div class="task">
           <div class="task-check"></div>
           <div class="task-content">
             <div class="task-title">나의 오늘 → 코스 저장 시 썸네일 선택 + 기존 코스 썸네일 변경</div>
-            <div class="task-desc">기존엔 나의 오늘로 저장한 코스에 썸네일 설정 방법이 전혀 없어 탐색탭에 항상 기본 썸네일로 노출되던 공백 수정. ① Vlog 완성 화면(VlogPreviewView)에 "탐색탭에 보여질 썸네일 고르기" 버튼 — 코스로 저장한 경우에만 노출. ② 나의 코스 → 내 코스 탭에서 길게 눌러 "탐색탭 썸네일 변경" — 이미 저장된 코스도 언제든 변경 가능.</div>
+            <div class="task-desc">① Vlog 완성 화면(VlogPreviewView)에 "탐색탭에 보여질 썸네일 고르기" 버튼 — 구현 확인(코드 완료). ② 나의 코스 탭에서 길게 눌러 "탐색탭 썸네일 변경" — 아직 미구현(ExploreGridView·CourseThumbnailService에 길게 누르기/contextMenu 진입점 없음). ①만 완료.</div>
           </div>
         </div>
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
-            <div class="task-title">코스 대표 장소(핀 기준점) — 자동 선택 + 수동 지정</div>
-            <div class="task-desc">기존엔 항상 첫 장소에 핀이 꽂혀 지하철역·주차장 같은 경유지가 대표가 되던 문제. Course.mainPlaceOrder 추가 + 자동선택 휴리스틱(OO역·주차장·터미널 등 경유지 후순위, 명소 우선). 지도 핀·썸네일·날씨·추천 근접도 모두 대표 장소 기준으로 통일. 코스 생성 화면에서 ⭐로 수동 지정 가능(미지정 시 자동). 서버 추천도 동일 로직 적용(배포 완료). 구 코스는 마이그레이션 없이 자동선택으로 소급 적용.</div>
+            <div class="task-title">코스 대표 장소(핀 기준점) — 자동 선택 + 수동 지정 (코드 완료)</div>
+            <div class="task-desc">Course.mainPlaceOrder 필드 및 자동선택 휴리스틱 구현 확인. 지도 핀·썸네일·날씨·추천 근접도 모두 대표 장소 기준으로 통일.</div>
           </div>
         </div>
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
-            <div class="task-title">탐색 상세 화면 리치화 — 동선 지도 + 장소별 사진 카드 + TourAPI 사진</div>
-            <div class="task-desc">ExploreDetailView 코스 동선 섹션 개편: 번호 핀 + 점선 경로 미니 지도(MapKit) 추가, 텍스트 목록 → 장소별 사진 카드(사진 + 카테고리 라벨). 사진 소스는 관광공사 TourAPI(큐레이션·좌표선별) 우선 → Google Places 폴백. PlacesPhotoService가 좌표 함께 전달하도록 전체 호출부 수정.</div>
+            <div class="task-title">탐색 상세 화면 리치화 — 동선 지도 + 장소별 사진 카드 + TourAPI 사진 (코드 완료)</div>
+            <div class="task-desc">ExploreDetailView에 GoogleMapView 동선 지도 + PlacesPhotoService 장소별 사진 카드 구현 확인.</div>
           </div>
         </div>
         <div class="task">
@@ -1223,24 +1223,24 @@ pm2 save</div>
           </div>
         </div>
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
-            <div class="task-title">BGM 자동 삽입</div>
-            <div class="task-desc">여행 태그(커플/친구/가족/혼자)별 분위기 음악 자동 선택, 영상 길이에 맞게 컷</div>
+            <div class="task-title">BGM 자동 삽입 (완료 — Phase 7과 중복 항목)</div>
+            <div class="task-desc">여행 태그(커플/친구/가족/혼자)별 분위기 음악 자동 선택, 영상 길이에 맞게 컷. Phase 7에서 이미 구현·배포된 것과 동일 기능.</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">멀티 포맷 Vlog 동시 출력 (완료)</div>
+            <div class="task-desc">server.js FORMAT_SPECS에 reels(9:16)/youtube(16:9)/insta(1:1) 세 포맷 모두 구현 확인. iOS VlogGenerationView에 3개 포맷 선택 UI(formatRow) 존재. PRO 게이팅 대상(무료는 기본 포맷만, 추가 포맷은 PRO).</div>
           </div>
         </div>
         <div class="task">
           <div class="task-check"></div>
           <div class="task-content">
-            <div class="task-title">멀티 포맷 Vlog 동시 출력</div>
-            <div class="task-desc">릴스(9:16) / 유튜브(16:9) / 정사각형(1:1) 세 가지 포맷을 한 번의 업로드로 생성</div>
-          </div>
-        </div>
-        <div class="task">
-          <div class="task-check"></div>
-          <div class="task-content">
-            <div class="task-title">서버 사이드 이미지 처리</div>
-            <div class="task-desc">코스 썸네일 자동 생성, WebP 변환 및 압축, 용량 절감</div>
+            <div class="task-title">서버 사이드 이미지 처리 (부분 완료)</div>
+            <div class="task-desc">유저가 올린 코스 썸네일·프로필 아바타는 이미 sharp로 정사각 크롭+리사이즈+JPEG 압축 중(course_thumbnails, user_avatars). 이 항목이 원래 의도한 "동영상에서 썸네일 자동 추출" + WebP 변환은 미구현.</div>
           </div>
         </div>
       </div>
@@ -1347,28 +1347,86 @@ pm2 save</div>
           <div class="task-check"></div>
           <div class="task-content">
             <div class="task-title">Firestore → PostgreSQL 전체 데이터 이전</div>
-            <div class="task-desc">users, courses, rooms, feed 컬렉션을 PostgreSQL로 이전. 장기적 Firebase 비용 제거.</div>
+            <div class="task-desc">확인 결과 미착수 — server.js 전체에 users/courses/rooms/feed에 대한 PostgreSQL CREATE TABLE·INSERT/SELECT 없음. 현재 PostgreSQL은 캐시·통계·작업큐(places_cache, user_stats, vlog_jobs, room_messages 등) 용도로만 사용, 핵심 데이터는 여전히 전량 Firestore.</div>
           </div>
         </div>
         <div class="task">
           <div class="task-check"></div>
           <div class="task-content">
-            <div class="task-title">Android 앱 지원</div>
-            <div class="task-desc">공통 WAS API 서버를 그대로 활용. iOS와 동일한 기능을 Android에서도 제공.</div>
+            <div class="task-title">Android 앱 지원 (진행 중 — 생각보다 많이 진척됨)</div>
+            <div class="task-desc">~/Documents/tteona-android, Kotlin+Compose, 커밋 9개. 완료: 부트스트랩(3탭+테마), Firebase Auth+카카오 로그인, 탐색 그리드, 홈 지도(코스 핀+미니 동선맵), 코스 상세(날씨·경로·장소카드), 그룹 방(실시간 채팅+피드), 동행 세션(실시간 위치공유, Socket 기반), FCM 푸시+딥링크, 설정/내 통계 화면. 미구현: Vlog 생성(카메라·서버합성 업로드 플로우), PRO 구독/페이월, 관리자 기능. 공통 WAS API 서버 그대로 재사용 중이라 iOS와 백엔드 이원화 없음.</div>
           </div>
         </div>
         <div class="task">
           <div class="task-check"></div>
           <div class="task-content">
             <div class="task-title">웹앱 (PWA)</div>
-            <div class="task-desc">tteona.kr에서 앱 설치 없이 코스 탐색·공유 가능. 앱 설치 전환율 향상.</div>
+            <div class="task-desc">확인 결과 미착수 — tteona/web, tteona-web 어디에도 manifest.json·서비스워커 없음. tteona.kr은 현재 정적 랜딩페이지 + 코스 공유 OG 페이지(Phase 4)까지만 존재, 앱 설치 없는 탐색·공유 UX는 별도 구축 필요.</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">실시간 그룹 채팅 (완료 — Phase 9와 중복 항목)</div>
+            <div class="task-desc">Phase 9에서 이미 서버 배포 완료(단톡·푸시·답장·이모지반응). 이 항목은 별개 작업이 아니라 그 결과와 동일. iOS 반영은 App Store 업데이트 대기 중.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PRO 구독 (미문서화 완료 작업 — 이번 점검에서 추가) -->
+  <div class="phase p6">
+    <div class="phase-header">
+      <div class="phase-num" style="font-size:13px;">D</div>
+      <div class="phase-meta">
+        <h3>PRO 구독 (RevenueCat 유료화)</h3>
+        <div class="phase-tags">
+          <span class="tag hot">🔥 이 로드맵에 누락되어 있던 완료 작업</span>
+          <span class="tag server">iOS + WAS</span>
+          <span class="tag money">💰 구독 매출</span>
+        </div>
+      </div>
+    </div>
+    <div class="phase-body">
+      <div class="analogy">
+        🎟️ <strong>비유: 무료 시사회 vs VIP 시즌권</strong><br>
+        Vlog 기능을 유료화 축으로 삼아 구독 수익을 도입. 무료는 워터마크·짧은 클립·기본 포맷만, PRO는 전부 해제. 2026-07-05 세션에서 코드·서버 구현은 끝났지만 이 로드맵 어디에도 기록되어 있지 않았음.
+      </div>
+      <div class="tasks">
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">RevenueCat SDK 연동 + ProManager 상태관리 (완료)</div>
+            <div class="task-desc">purchases-ios 5.x SPM. entitlement id "pro". ProManager.shared(싱글턴)가 isPro/offerings/purchase()/restore()/vlogBudgetSeconds(무료 30초·PRO 300초)/vlogClipMaxSeconds 관리. Firebase uid와 logIn/logOut 동기화.</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">게이팅 5종 구현 (완료)</div>
+            <div class="task-desc">① 워터마크 제거 ② 멀티포맷(추가 포맷 잠금) ③ BGM 전체 트랙 ④ 영상 5분(무료 총 30초→PRO 300초) ⑤ 우선 렌더링(job priority:true → 큐 우선순위). ProPaywallView·VlogLimitPopupView UI 확인.</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">서버 반영 — watermark/priority 옵션 (완료·WAS 배포)</div>
+            <div class="task-desc">server.js composeVlog가 opts.watermark/opts.priority 처리, PostgreSQL 큐가 priority DESC 정렬. 2026-07-05 deploy-vlog-update.sh로 WAS 배포 완료.</div>
           </div>
         </div>
         <div class="task">
           <div class="task-check"></div>
           <div class="task-content">
-            <div class="task-title">실시간 그룹 채팅</div>
-            <div class="task-desc">Phase 9 WebSocket 기반 위치 공유와 동일 화면에서 텍스트 채팅 추가</div>
+            <div class="task-title">RevenueCat 콘솔 수동 작업 (미완)</div>
+            <div class="task-desc">App Store Connect 구독상품 2개(연/월) 생성 → RevenueCat 앱 등록+API키 발급 → Entitlement "pro" 생성+상품 attach → Offering "default" 구성 → ProManager.apiKey 교체. 가격안: 월 ₩4,900 / 연 ₩29,000(7일 무료체험).</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">콘솔 작업 + 심사 완료 전까지 전 기능 무료로 동작</div>
+            <div class="task-desc">apiKey 미설정 시 무료 모드 폴백 — 유저 입장에서는 워터마크만 항상 붙고 나머지는 사실상 전부 무료로 보임. 위 콘솔 작업이 끝나야 실제 과금 시작.</div>
           </div>
         </div>
       </div>

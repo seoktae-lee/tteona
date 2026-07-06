@@ -8,6 +8,33 @@ struct RootView: View {
 
     var body: some View {
         Group {
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("-previewOnboarding") {
+                OnboardingView()
+            } else if ProcessInfo.processInfo.arguments.contains("-previewNavGuide") {
+                MainTabView()
+                    .environmentObject(courseService)
+                    .environmentObject(deepLinkHandler)
+                    .environmentObject(notificationManager)
+            } else {
+                rootContent
+            }
+            #else
+            rootContent
+            #endif
+        }
+        .animation(.easeInOut(duration: 0.35), value: authService.isLoggedIn)
+        .animation(.easeInOut(duration: 0.35), value: authService.onboardingComplete)
+        .animation(.easeInOut(duration: 0.35), value: authService.isInitializing)
+        .onChange(of: authService.isLoggedIn) { _, isLoggedIn in
+            if !isLoggedIn {
+                courseService.clearUserData()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var rootContent: some View {
             if authService.isInitializing {
                 SplashView()
             } else if !authService.isLoggedIn || authService.verificationEmailSent {
@@ -20,15 +47,6 @@ struct RootView: View {
                     .environmentObject(deepLinkHandler)
                     .environmentObject(notificationManager)
             }
-        }
-        .animation(.easeInOut(duration: 0.35), value: authService.isLoggedIn)
-        .animation(.easeInOut(duration: 0.35), value: authService.onboardingComplete)
-        .animation(.easeInOut(duration: 0.35), value: authService.isInitializing)
-        .onChange(of: authService.isLoggedIn) { _, isLoggedIn in
-            if !isLoggedIn {
-                courseService.clearUserData()
-            }
-        }
     }
 }
 
