@@ -745,7 +745,8 @@ struct CoursePreviewCard: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 10) {
-                    ForEach(course.places.sorted { $0.order < $1.order }) { place in
+                    // 연속 중복 장소는 하나로 병합해 표시 (저장 데이터는 원본 유지)
+                    ForEach(course.displayPlaces) { place in
                         PlacePhotoThumbnail(place: place)
                     }
                 }
@@ -775,7 +776,7 @@ struct CoursePreviewCard: View {
                                 .font(.tte(11, .medium))
                                 .foregroundColor(.tteOrange.opacity(0.8))
                         }
-                        Text("장소 \(course.places.count)개")
+                        Text("장소 \(course.displayPlaces.count)개")
                             .font(.tte(12))
                             .foregroundColor(.tteMediumGray)
                         HStack(spacing: 3) {

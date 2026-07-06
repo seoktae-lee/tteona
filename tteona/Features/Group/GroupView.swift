@@ -5,33 +5,86 @@ struct RoomCard: View {
     let room: Room
     var hasNewFeed: Bool = false
 
+    // 방마다 고정되는 아바타 그라데이션 (roomId 해시 기반)
+    private static let avatarGradients: [[Color]] = [
+        [Color.tteOrange, Color(red: 1.0, green: 0.62, blue: 0.30)],
+        [Color(red: 0.98, green: 0.45, blue: 0.45), Color(red: 1.0, green: 0.65, blue: 0.45)],
+        [Color(red: 0.35, green: 0.65, blue: 0.95), Color(red: 0.45, green: 0.82, blue: 0.90)],
+        [Color(red: 0.55, green: 0.45, blue: 0.95), Color(red: 0.75, green: 0.55, blue: 0.98)],
+        [Color(red: 0.25, green: 0.75, blue: 0.62), Color(red: 0.50, green: 0.87, blue: 0.60)],
+        [Color(red: 0.95, green: 0.55, blue: 0.75), Color(red: 1.0, green: 0.72, blue: 0.62)],
+    ]
+
+    private var gradient: [Color] {
+        let hash = room.roomId.unicodeScalars.reduce(0) { $0 &+ Int($1.value) }
+        return Self.avatarGradients[abs(hash) % Self.avatarGradients.count]
+    }
+
+    private var initial: String {
+        String(room.name.trimmingCharacters(in: .whitespaces).prefix(1))
+    }
+
     var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(room.name)
-                    .font(.custom("GowunBatang-Regular", size: 22))
-                    .foregroundColor(.tteDarkGray)
-                HStack(spacing: 4) {
-                    Image(systemName: "person.fill")
-                        .font(.tte(11))
-                        .foregroundColor(.tteMediumGray)
-                    Text("\(room.memberIds.count)명")
-                        .font(.tte(13))
-                        .foregroundColor(.tteMediumGray)
+        HStack(spacing: 14) {
+            // 그라데이션 아바타 + 방 이름 첫 글자
+            ZStack {
+                RoundedRectangle(cornerRadius: 18)
+                    .fill(LinearGradient(colors: gradient,
+                                         startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .frame(width: 54, height: 54)
+                Text(initial)
+                    .font(.tte(22, .bold))
+                    .foregroundColor(.white)
+            }
+            .overlay(alignment: .topTrailing) {
+                if hasNewFeed {
+                    Circle()
+                        .fill(Color.red)
+                        .frame(width: 12, height: 12)
+                        .overlay(Circle().stroke(Color.tteBackground, lineWidth: 2))
+                        .offset(x: 3, y: -3)
                 }
             }
-            Spacer()
-            if hasNewFeed {
-                Circle()
-                    .fill(Color.tteOrange)
-                    .frame(width: 10, height: 10)
-            }
-            Image(systemName: "chevron.right")
-                .font(.tte(14))
+
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 6) {
+                    Text(room.name)
+                        .font(.tte(17, .semibold))
+                        .foregroundColor(.tteDarkGray)
+                        .lineLimit(1)
+                    if hasNewFeed {
+                        Text("NEW")
+                            .font(.tte(9, .heavy))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 6).padding(.vertical, 2.5)
+                            .background(Capsule().fill(Color.tteOrange))
+                    }
+                }
+                HStack(spacing: 4) {
+                    Image(systemName: "person.2.fill")
+                        .font(.tte(10))
+                    Text("멤버 \(room.memberIds.count)명")
+                        .font(.tte(12, .medium))
+                }
                 .foregroundColor(.tteMediumGray)
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.tte(13, .semibold))
+                .foregroundColor(.tteMediumGray.opacity(0.7))
         }
-        .padding(16)
-        .background(RoundedRectangle(cornerRadius: 16).fill(Color(UIColor.secondarySystemBackground)))
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color(UIColor.secondarySystemBackground))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 20)
+                .stroke(hasNewFeed ? Color.tteOrange.opacity(0.35) : Color.clear, lineWidth: 1.2)
+        )
     }
 
 }

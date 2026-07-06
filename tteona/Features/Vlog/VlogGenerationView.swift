@@ -565,24 +565,56 @@ struct VlogPreviewView: View {
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            VlogAuroraBackground()
+
             VStack(spacing: 0) {
+                // 완성 헤더 — 축하하는 나루 + 폭죽 + 문구 + 자동 저장 안내
+                VStack(spacing: 8) {
+                    Image("tteoni-jump")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(height: 96)
+                        .overlay(alignment: .topTrailing) {
+                            Text("🎉")
+                                .font(.system(size: 28))
+                                .offset(x: 12, y: -2)
+                        }
+                    Text("Vlog가 완성됐어요!")
+                        .font(.tte(23, .bold))
+                        .foregroundColor(.white)
+                    HStack(spacing: 5) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.tte(12))
+                            .foregroundColor(.green)
+                        Text(savedFormatsCount > 1
+                             ? "\(savedFormatsCount)가지 버전이 앨범에 자동 저장됐어요"
+                             : "완성된 영상은 앨범에 자동 저장됐어요")
+                            .font(.tte(13, .medium))
+                            .foregroundColor(.white.opacity(0.9))
+                    }
+                    .padding(.horizontal, 12).padding(.vertical, 7)
+                    .background(Capsule().fill(Color.white.opacity(0.12)))
+                }
+                .padding(.top, 28)
+
+                // 영상 카드 — 라운드 + 테두리 + 그림자
                 VideoPlayer(player: player)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: UIScreen.main.bounds.height * (thumbnailCourseId == nil ? 0.65 : 0.58))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.black)
+                    .clipShape(RoundedRectangle(cornerRadius: 22))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 22)
+                            .stroke(Color.white.opacity(0.18), lineWidth: 1)
+                    )
+                    .shadow(color: .black.opacity(0.45), radius: 22, y: 10)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 20)
                     .onAppear { player.play() }
 
-                VStack(spacing: 16) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
-                        Text(savedFormatsCount > 1 ? "\(savedFormatsCount)가지 버전이 앨범에 저장됨" : "앨범에 저장됨")
-                            .font(.tte(14)).foregroundColor(.white.opacity(0.8))
-                    }
-                    .padding(.top, 20)
-
+                // 액션 영역
+                VStack(spacing: 12) {
                     if let courseId = thumbnailCourseId {
                         thumbnailButton(courseId: courseId)
-                            .padding(.horizontal, 24)
                     }
 
                     Button {
@@ -592,19 +624,30 @@ struct VlogPreviewView: View {
                             Image(systemName: "square.and.arrow.up")
                             Text("공유하기")
                         }
-                        .font(.tte(16, .semibold))
+                        .font(.tte(16, .bold))
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity).frame(height: 54)
-                        .background(RoundedRectangle(cornerRadius: 14).fill(Color.tteOrange))
+                        .background(RoundedRectangle(cornerRadius: 16).fill(Color.tteOrange))
+                        .shadow(color: .tteOrange.opacity(0.4), radius: 12, y: 4)
                     }
-                    .padding(.horizontal, 24)
 
-                    Button("홈으로 돌아가기") { onDismiss() }
-                        .font(.tte(15))
-                        .foregroundColor(.white.opacity(0.7))
-                        .padding(.bottom, 40)
+                    Button {
+                        onDismiss()
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "house.fill")
+                                .font(.tte(13))
+                            Text("홈으로 돌아가기")
+                        }
+                        .font(.tte(15, .medium))
+                        .foregroundColor(.white.opacity(0.85))
+                        .frame(maxWidth: .infinity).frame(height: 48)
+                        .background(RoundedRectangle(cornerRadius: 16).fill(Color.white.opacity(0.10)))
+                    }
                 }
-                .background(Color.black)
+                .padding(.horizontal, 24)
+                .padding(.top, 22)
+                .padding(.bottom, 34)
             }
         }
         .sheet(isPresented: $showShareSheet) {

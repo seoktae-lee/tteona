@@ -304,7 +304,7 @@ struct ExploreDetailView: View {
                             .foregroundColor(.tteOrange)
                     }
                 }
-                Text("장소 \(course.places.count)곳 · ♥ \(course.likeCount)")
+                Text("장소 \(course.displayPlaces.count)곳 · ♥ \(course.likeCount)")
                     .font(.tte(13))
                     .foregroundColor(.tteMediumGray)
             }
@@ -392,7 +392,8 @@ struct ExploreDetailView: View {
 
             routeMap
 
-            ForEach(Array(course.places.enumerated()), id: \.element.id) { idx, place in
+            // 연속 중복 장소는 하나로 병합해 표시 (저장 데이터는 원본 유지)
+            ForEach(Array(course.displayPlaces.enumerated()), id: \.element.id) { idx, place in
                 PlaceCardRow(index: idx, place: place)
             }
         }
@@ -402,10 +403,10 @@ struct ExploreDetailView: View {
 
     private var routeMap: some View {
         GoogleMapView(
-            markers: course.places.enumerated().map { idx, place in
+            markers: course.displayPlaces.enumerated().map { idx, place in
                 GoogleMapMarker(id: place.id, coordinate: place.coordinate, badgeNumber: idx + 1)
             },
-            polyline: course.places.count >= 2 ? course.places.map(\.coordinate) : nil,
+            polyline: course.displayPlaces.count >= 2 ? course.displayPlaces.map(\.coordinate) : nil,
             dashedPolyline: true,
             initialCamera: GoogleMapView.fittingCamera(for: course.places.map(\.coordinate)),
             interactive: false
@@ -479,10 +480,10 @@ private struct CourseFullMapView: View {
     var body: some View {
         ZStack(alignment: .topLeading) {
             GoogleMapView(
-                markers: course.places.enumerated().map { idx, place in
+                markers: course.displayPlaces.enumerated().map { idx, place in
                     GoogleMapMarker(id: place.id, coordinate: place.coordinate, badgeNumber: idx + 1)
                 },
-                polyline: course.places.count >= 2 ? course.places.map(\.coordinate) : nil,
+                polyline: course.displayPlaces.count >= 2 ? course.displayPlaces.map(\.coordinate) : nil,
                 dashedPolyline: true,
                 showsUserLocation: true,
                 initialCamera: GoogleMapView.fittingCamera(for: course.places.map(\.coordinate)),

@@ -348,58 +348,28 @@ struct ImpromptuSessionView: View {
             .padding(.bottom, 28)
 
             VStack(spacing: 12) {
-                // Vlog 만들기 — 메인 액션
-                Button {
-                    buildCourseAndEnd(saveToFirestore: false)
-                    pendingShowVlog = true
-                    showEndAlert = false
-                } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: "film.fill")
-                            .font(.tte(16))
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Vlog 만들기")
-                                .font(.tte(16, .semibold))
-                            Text("영상을 이어 붙여 추억을 만들어요")
-                                .font(.tte(12))
-                                .opacity(0.8)
-                        }
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.tte(13, .medium))
-                            .opacity(0.7)
+                // 두 가지 마무리 방식 — 정사각형 카드 좌우 배치로 한눈에 비교
+                HStack(spacing: 12) {
+                    endChoiceCard(
+                        icon: "film.fill",
+                        title: "Vlog만 만들기",
+                        subtitle: "영상을 이어 붙여\n추억으로 남겨요",
+                        isPrimary: true
+                    ) {
+                        buildCourseAndEnd(saveToFirestore: false)
+                        pendingShowVlog = true
+                        showEndAlert = false
                     }
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 20)
-                    .frame(height: 64)
-                    .background(RoundedRectangle(cornerRadius: 16).fill(Color.tteOrange))
-                }
 
-                // 코스로 저장 후 Vlog
-                Button {
-                    pendingShowSaveCourse = true
-                    showEndAlert = false
-                } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: "mappin.and.ellipse")
-                            .font(.tte(16))
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("코스로 저장하고 Vlog 만들기")
-                                .font(.tte(16, .semibold))
-                            Text("이 경로를 나중에도 사용할 수 있어요")
-                                .font(.tte(12))
-                                .opacity(0.7)
-                        }
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.tte(13, .medium))
-                            .opacity(0.5)
+                    endChoiceCard(
+                        icon: "mappin.and.ellipse",
+                        title: "코스 저장 후\nVlog 만들기",
+                        subtitle: "경로를 나중에\n다시 쓸 수 있어요",
+                        isPrimary: false
+                    ) {
+                        pendingShowSaveCourse = true
+                        showEndAlert = false
                     }
-                    .foregroundColor(.tteDarkGray)
-                    .padding(.horizontal, 20)
-                    .frame(height: 64)
-                    .background(RoundedRectangle(cornerRadius: 16)
-                        .fill(Color(UIColor.secondarySystemBackground)))
                 }
 
                 // 구분선
@@ -430,9 +400,55 @@ struct ImpromptuSessionView: View {
 
             Spacer().frame(height: 36)
         }
-        .presentationDetents([.height(400)])
+        .presentationDetents([.height(430)])
         .presentationDragIndicator(.hidden)
         .presentationCornerRadius(28)
+    }
+
+    // MARK: - 종료 선택 카드 (좌우 정사각형 배치)
+    private func endChoiceCard(icon: String, title: String, subtitle: String,
+                               isPrimary: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 0) {
+                ZStack {
+                    Circle()
+                        .fill(isPrimary ? Color.white.opacity(0.22) : Color.tteOrange.opacity(0.12))
+                        .frame(width: 44, height: 44)
+                    Image(systemName: icon)
+                        .font(.tte(18))
+                        .foregroundColor(isPrimary ? .white : .tteOrange)
+                }
+
+                Spacer(minLength: 10)
+
+                Text(title)
+                    .font(.tte(16, .bold))
+                    .foregroundColor(isPrimary ? .white : .tteDarkGray)
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(subtitle)
+                    .font(.tte(11.5))
+                    .foregroundColor(isPrimary ? .white.opacity(0.85) : .tteMediumGray)
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 4)
+            }
+            .padding(18)
+            .frame(maxWidth: .infinity, minHeight: 168, alignment: .topLeading)
+            .background(
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(isPrimary ? Color.tteOrange : Color(UIColor.secondarySystemBackground))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 20)
+                    .stroke(isPrimary ? Color.clear : Color.tteOrange.opacity(0.15), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - 코스 저장 시트

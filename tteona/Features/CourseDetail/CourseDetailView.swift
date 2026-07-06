@@ -203,27 +203,23 @@ struct CourseDetailView: View {
 
     // MARK: - Map
     private var mapLayer: some View {
-        let sorted = course.places.sorted { $0.order < $1.order }
+        let sorted = sortedPlaces
         let selectedOrder = selectedPlaceIndex < sorted.count ? sorted[selectedPlaceIndex].order : -1
 
         return GoogleMapView(
-            markers: course.places.map { place in
+            markers: sorted.map { place in
                 GoogleMapMarker(id: place.id, coordinate: place.coordinate,
                                 badgeNumber: place.order,
                                 highlighted: place.order == selectedOrder)
             },
-            polyline: course.places.count >= 2 ? course.places.map(\.coordinate) : nil,
-            initialCamera: GoogleMapView.fittingCamera(for: course.places.map(\.coordinate))
+            polyline: sorted.count >= 2 ? sorted.map(\.coordinate) : nil,
+            initialCamera: GoogleMapView.fittingCamera(for: sorted.map(\.coordinate))
         )
     }
 
+    // 표시 전용 — 연속 중복 장소 병합본 (저장·Vlog 합성은 course.places 원본 사용)
     private var sortedPlaces: [Place] {
-        course.places.sorted { $0.order < $1.order }
-    }
-
-    private var uniqueSortedPlaces: [Place] {
-        var seen = Set<String>()
-        return sortedPlaces.filter { seen.insert($0.placeName).inserted }
+        course.displayPlaces
     }
 
     // MARK: - Content Section
@@ -316,8 +312,8 @@ struct CourseDetailView: View {
                 Divider().padding(.horizontal, 20)
 
                 VStack(spacing: 0) {
-                    ForEach(Array(uniqueSortedPlaces.enumerated()), id: \.offset) { index, place in
-                        PlaceRow(place: place, isLast: index == uniqueSortedPlaces.count - 1)
+                    ForEach(Array(sortedPlaces.enumerated()), id: \.offset) { index, place in
+                        PlaceRow(place: place, isLast: index == sortedPlaces.count - 1)
                             .contentShape(Rectangle())
                             .onTapGesture { selectedPlaceForDetail = place }
                     }
