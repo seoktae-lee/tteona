@@ -169,6 +169,11 @@ async function sendPush({ userId, title, body, data = {} }) {
 const app = express();
 const PORT = 3000;
 
+// Nginx 리버스 프록시 1홉 뒤에서 동작 — X-Forwarded-For의 실제 클라이언트 IP를
+// req.ip로 신뢰. 미설정 시 req.ip가 항상 프록시 내부 IP로 잡혀
+// IP 기반 레이트리밋(관리자 로그인 등)이 전체 사용자에게 뭉뚱그려 적용된다.
+app.set('trust proxy', 1);
+
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({ origin: ['https://tteona.kr', 'https://www.tteona.kr'] }));
 app.use(morgan('combined'));
@@ -203,6 +208,47 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
   maxAge: '30d',
   immutable: false,
 }));
+
+// ─── 인메모리 레이트리밋 팩토리 ────────────────────────────────────────────────
+// 외부 의존성 없이 IP(또는 uid) 단위 버킷으로 요청량 제한. PM2 단일 프로세스 전제.
+// 고비용 라우트(Vlog 합성·업로드·푸시·캐시쓰기)에 붙여 인증 계정 1개로 서버
+// 자원을 고갈시키는 남용을 차단한다. (trust proxy 설정으로 req.ip는 실제 클라이언트 IP)
+function rateLimit({ windowMs, max, key, message }) {
+  const hits = new Map(); // bucketKey → { count, resetAt }
+  const timer = setInterval(() => {
+    const now = Date.now();
+    for (const [k, v] of hits) if (now >= v.resetAt) hits.delete(k);
+  }, windowMs);
+  if (typeof timer.unref === 'function') timer.unref(); // 종료 시 프로세스 붙잡지 않도록
+  return (req, res, next) => {
+    const now = Date.now();
+    const bucket = (key ? key(req) : req.ip) || 'unknown';
+    let entry = hits.get(bucket);
+    if (!entry || now >= entry.resetAt) {
+      entry = { count: 0, resetAt: now + windowMs };
+      hits.set(bucket, entry);
+    }
+    entry.count++;
+    if (entry.count > max) {
+      const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
+      res.set('Retry-After', String(retryAfter));
+      return res.status(429).json({ error: message || 'too many requests', retryAfter });
+    }
+    next();
+  };
+}
+
+// 인증된 uid 우선, 없으면 IP로 버킷팅 (완화 모드/구버전 앱 대비)
+const byUidOrIp = (req) => req.uid || req.ip || 'unknown';
+
+// 라우트별 리미터 — 고비용 순으로 타이트하게
+const vlogJobLimiter  = rateLimit({ windowMs: 10 * 60 * 1000, max: 15,  key: byUidOrIp, message: 'Vlog 생성 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.' });
+const uploadLimiter   = rateLimit({ windowMs: 60 * 1000,      max: 60,  key: byUidOrIp });
+const pushLimiter     = rateLimit({ windowMs: 60 * 1000,      max: 30,  key: byUidOrIp });
+const cacheWriteLimiter = rateLimit({ windowMs: 60 * 1000,    max: 120, key: byUidOrIp });
+// 전역 안전망 — 폴링(잡 상태 조회 등)을 감안해 넉넉하게, 순수 폭주만 차단
+const globalApiLimiter = rateLimit({ windowMs: 60 * 1000, max: 600, key: byUidOrIp });
+app.use('/api/', globalApiLimiter);
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
@@ -338,7 +384,7 @@ app.get('/api/courses/:courseId/thumbnail', requireAuth, async (req, res) => {
 });
 
 // 썸네일 업로드 — multipart/form-data, 필드명 "image" (코스 작성자만 가능)
-app.post('/api/courses/:courseId/thumbnail', requireAuth, upload.single('image'), async (req, res) => {
+app.post('/api/courses/:courseId/thumbnail', requireAuth, uploadLimiter, upload.single('image'), async (req, res) => {
   const { courseId } = req.params;
   if (!req.file) return res.status(400).json({ error: 'image file required' });
 
@@ -377,7 +423,7 @@ app.post('/api/courses/:courseId/thumbnail', requireAuth, upload.single('image')
 // ─── 프로필 이미지 (WAS 로컬 저장 + PostgreSQL) ───────────────────────────────
 
 // 프로필 이미지 업로드 — multipart/form-data, 필드명 "image" (본인만 가능)
-app.post('/api/users/:uid/avatar', requireAuth, upload.single('image'), async (req, res) => {
+app.post('/api/users/:uid/avatar', requireAuth, uploadLimiter, upload.single('image'), async (req, res) => {
   const { uid } = req.params;
   if (!req.file) return res.status(400).json({ error: 'image file required' });
   if (req.uid && req.uid !== uid) return res.status(403).json({ error: 'not your account' });
@@ -648,7 +694,7 @@ app.post('/api/moderate', requireAuth, (req, res) => {
 
 // 앱이 로그인 시 device token 등록 — 본인 토큰만 등록 가능
 // iOS는 APNs 토큰(platform 생략 = 'ios'), Android는 FCM 토큰(platform = 'android')
-app.post('/api/push/register', requireAuth, async (req, res) => {
+app.post('/api/push/register', requireAuth, pushLimiter, async (req, res) => {
   const { token } = req.body;
   const platform = req.body.platform === 'android' ? 'android' : 'ios';
   const userId = req.uid || req.body.userId; // 검증된 uid 우선 — 타인 토큰 탈취 방지
@@ -679,7 +725,7 @@ async function nicknameOf(uid, fallback) {
 }
 
 // 코스 좋아요 알림 — 코스 작성자에게 발송
-app.post('/api/push/course-liked', requireAuth, async (req, res) => {
+app.post('/api/push/course-liked', requireAuth, pushLimiter, async (req, res) => {
   const { courseOwnerId, likerNickname, courseName } = req.body;
   if (!courseOwnerId || !likerNickname) return res.status(400).json({ error: 'missing fields' });
   if (req.uid === courseOwnerId) return res.json({ skipped: true, reason: 'self' });
@@ -695,7 +741,7 @@ app.post('/api/push/course-liked', requireAuth, async (req, res) => {
 });
 
 // 코스 따라가기 알림 — 코스 작성자에게 발송
-app.post('/api/push/course-followed', requireAuth, async (req, res) => {
+app.post('/api/push/course-followed', requireAuth, pushLimiter, async (req, res) => {
   const { courseOwnerId, followerNickname, courseName } = req.body;
   if (!courseOwnerId || !followerNickname) return res.status(400).json({ error: 'missing fields' });
   if (req.uid === courseOwnerId) return res.json({ skipped: true, reason: 'self' });
@@ -771,7 +817,7 @@ app.get('/api/places/cache', requireAuth, async (req, res) => {
   }
 });
 
-app.post('/api/places/cache', requireAuth, async (req, res) => {
+app.post('/api/places/cache', requireAuth, cacheWriteLimiter, async (req, res) => {
   const { cacheKey, photos, rating, reviewCount, reviews } = req.body;
   if (!cacheKey) return res.status(400).json({ error: 'cacheKey required' });
 
@@ -1023,7 +1069,7 @@ const vlogUpload = multer({
 // 잡 생성 — body: { userId, courseId?, courseName?, tag?, formats?: ['reels'|'youtube'|'insta'],
 //                   bgm?: 'auto'|'none'|'mood/파일명',
 //                   places: [{order, placeName, shotAt?}] }  (shotAt: 클립 촬영시각 표시 문자열)
-app.post('/api/vlog/jobs', requireAuth, async (req, res) => {
+app.post('/api/vlog/jobs', requireAuth, vlogJobLimiter, async (req, res) => {
   const { courseId, courseName, tag, formats, bgm, places, watermark, priority } = req.body || {};
   const userId = req.uid || req.body?.userId; // 검증된 uid 우선
   if (!userId || !Array.isArray(places) || places.length === 0) {
@@ -1065,7 +1111,7 @@ async function requireJobOwner(req, res, next) {
 }
 
 // 클립 업로드 — multipart 필드 "clip", 쿼리 ?order=N (장소 순번)
-app.post('/api/vlog/jobs/:jobId/clips', requireAuth, requireJobOwner, vlogUpload.single('clip'), (req, res) => {
+app.post('/api/vlog/jobs/:jobId/clips', requireAuth, uploadLimiter, requireJobOwner, vlogUpload.single('clip'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'clip file required' });
   res.json({ ok: true, size: req.file.size });
 });

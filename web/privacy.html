@@ -125,7 +125,7 @@
   <!-- ===== 한국어 ===== -->
   <div id="ko" class="lang-section active">
     <h1>개인정보처리방침</h1>
-    <p class="effective-date">시행일: 2026년 5월 12일 · 최종 개정일: 2026년 7월 5일</p>
+    <p class="effective-date">시행일: 2026년 5월 12일 · 최종 개정일: 2026년 7월 7일</p>
 
     <h2>1. 개요</h2>
     <p>본 개인정보처리방침은 AERON(이하 "서비스 제공자")이 운영하는 모바일 애플리케이션 "떠나"(이하 "앱")가 이용자의 개인정보를 어떻게 수집·이용·보관·파기하는지 설명합니다.</p>
@@ -178,6 +178,12 @@
       <li><strong>서버 합성</strong>: 브이로그 생성 시 영상 클립이 암호화된 통신(HTTPS)으로 서비스 제공자의 국내 서버(tteona.kr)에 업로드되어 편집·합성에 이용됩니다. 업로드된 클립과 완성본은 합성 및 전송 목적 달성 후 서버에서 주기적으로 삭제되며, 편집 이외의 목적으로 이용하거나 제3자에게 제공하지 않습니다.</li>
       <li>서버 합성이 불가능한 경우 기기 내에서만 합성되며, 이 경우 클립은 서버로 전송되지 않습니다.</li>
       <li>브이로그에 삽입되는 배경음악(BGM)은 서비스 제공자가 적법하게 확보한 음원으로, 개인정보를 포함하지 않습니다.</li>
+    </ul>
+
+    <h3>2-6. 구독·결제 정보 (tteona PRO)</h3>
+    <ul>
+      <li>유료 구독(tteona PRO)의 결제는 Apple App Store 또는 Google Play를 통해 처리되며, 서비스 제공자는 카드번호 등 결제수단 정보를 수집하지 않습니다.</li>
+      <li>구독 상태 확인·복원을 위해 익명화된 앱 사용자 식별자와 구매 영수증 정보가 RevenueCat에 전달·처리됩니다.</li>
     </ul>
 
     <h2>3. 개인정보의 이용 목적</h2>
@@ -244,6 +250,11 @@
         <td>날씨 정보 제공 (현재 위치 좌표 전달)</td>
         <td><a href="https://openweather.co.uk/privacy-policy" target="_blank">보기</a></td>
       </tr>
+      <tr>
+        <td>RevenueCat</td>
+        <td>tteona PRO 구독 상태 관리·영수증 검증 (익명 앱 사용자 식별자, 구매 영수증 전달)</td>
+        <td><a href="https://www.revenuecat.com/privacy" target="_blank">보기</a></td>
+      </tr>
     </table>
     <p>서비스 제공자는 위 경우 외에는 이용자의 동의 없이 개인정보를 제3자에게 제공하지 않습니다. 다만, 법령에 의해 요구되는 경우, 또는 이용자의 생명·재산 보호를 위해 긴급히 필요한 경우에는 예외로 합니다.</p>
 
@@ -254,7 +265,40 @@
       <li><strong>위탁 업무</strong>: 인증, 데이터 저장, 푸시 알림 처리, 소셜 로그인, 장소 검색·정보 조회, 경로 계산, 날씨 정보 조회, 브이로그 합성 서버 및 데이터베이스 호스팅</li>
       <li><strong>위탁 항목</strong>: 계정 식별자, 프로필 정보, FCM 토큰, 여행·그룹 데이터, 장소 검색 쿼리, 위치 좌표, 브이로그 영상 클립 (각 업무에 필요한 범위)</li>
     </ul>
-    <p>브이로그 합성 및 일부 서비스 데이터는 국내 클라우드 서버(디엔에이클라우드 호스팅, tteona.kr)에 저장·처리되며, 개인정보의 국외 이전은 발생하지 않습니다. 다만 Firebase 등 글로벌 서비스의 데이터는 해당 서비스의 정책에 따라 국외에서 처리될 수 있습니다.</p>
+    <p>브이로그 합성 및 일부 서비스 데이터는 국내 클라우드 서버(디엔에이클라우드 호스팅, tteona.kr)에 저장·처리됩니다.</p>
+
+    <h3>5-1. 개인정보의 국외 이전</h3>
+    <p>서비스 운영을 위해 아래와 같이 개인정보 처리 업무가 국외에서 이루어집니다. 이용자는 국외 이전을 거부할 수 있으나, 이 경우 서비스 이용이 불가능할 수 있습니다.</p>
+    <table>
+      <tr>
+        <th>이전받는 자</th>
+        <th>이전 국가</th>
+        <th>이전 항목</th>
+        <th>이전 방법·시기</th>
+        <th>이용 목적 및 보유 기간</th>
+      </tr>
+      <tr>
+        <td>Google LLC (Firebase)<br><a href="https://firebase.google.com/support/privacy" target="_blank">privacy@google.com</a></td>
+        <td>미국 등 Google 데이터센터 소재국</td>
+        <td>계정 식별자, 이메일, 닉네임, 프로필 이미지, 여행·그룹 데이터, FCM 토큰</td>
+        <td>서비스 이용 시 네트워크를 통한 상시 전송</td>
+        <td>인증·데이터 저장·푸시 알림 / 회원 탈퇴 또는 위탁 종료 시까지</td>
+      </tr>
+      <tr>
+        <td>RevenueCat, Inc.<br><a href="https://www.revenuecat.com/privacy" target="_blank">support@revenuecat.com</a></td>
+        <td>미국</td>
+        <td>익명 앱 사용자 식별자, 구매 영수증 정보</td>
+        <td>구독 구매·복원 시 네트워크를 통한 전송</td>
+        <td>구독 상태 관리·영수증 검증 / 회원 탈퇴 또는 위탁 종료 시까지</td>
+      </tr>
+      <tr>
+        <td>OpenWeather Ltd.</td>
+        <td>영국</td>
+        <td>현재 위치 좌표 (계정 정보 미포함)</td>
+        <td>날씨 조회 시 네트워크를 통한 전송</td>
+        <td>날씨 정보 제공 / 조회 처리 후 미보관</td>
+      </tr>
+    </table>
 
     <h2>6. 개인정보 보유 및 파기</h2>
     <ul>
@@ -289,18 +333,21 @@
     <h2>11. 방침 변경</h2>
     <p>본 방침은 필요에 따라 변경될 수 있으며, 중요한 변경 사항은 앱 또는 본 페이지를 통해 사전 공지합니다.</p>
 
-    <h2>12. 문의</h2>
-    <p>개인정보 관련 문의는 앱 내 설정 화면의 문의 기능을 이용해 주시기 바랍니다.</p>
+    <h2>12. 개인정보 보호책임자 및 문의</h2>
+    <p>서비스 제공자는 개인정보 처리에 관한 업무를 총괄하고 이용자의 불만 처리 및 피해 구제를 위해 아래와 같이 개인정보 보호책임자를 지정하고 있습니다. 위치정보 관리책임자는 개인정보 보호책임자가 겸임합니다.</p>
     <ul>
+      <li><strong>개인정보 보호책임자 / 위치정보 관리책임자</strong>: 이석태</li>
+      <li><strong>이메일</strong>: <a href="mailto:just.tteona@gmail.com">just.tteona@gmail.com</a></li>
       <li><strong>사업자명</strong>: AERON</li>
       <li><strong>서비스명</strong>: 떠나 (Tteona)</li>
     </ul>
+    <p>개인정보 관련 문의는 위 이메일 또는 앱 내 설정 화면의 문의 기능을 이용해 주시기 바랍니다. 기타 개인정보 침해에 대한 신고·상담은 개인정보침해신고센터(privacy.kisa.or.kr, 국번 없이 118), 개인정보분쟁조정위원회(kopico.go.kr, 1833-6972)에 문의할 수 있습니다.</p>
   </div>
 
   <!-- ===== English ===== -->
   <div id="en" class="lang-section">
     <h1>Privacy Policy</h1>
-    <p class="effective-date">Effective Date: May 12, 2026 · Last Updated: July 5, 2026</p>
+    <p class="effective-date">Effective Date: May 12, 2026 · Last Updated: July 7, 2026</p>
 
     <h2>1. Overview</h2>
     <p>This Privacy Policy explains how AERON (the "Service Provider") collects, uses, stores, and deletes personal information through the mobile application "떠나 (Tteona)" (the "App").</p>
@@ -352,6 +399,12 @@
       <li><strong>Server-side processing</strong>: When generating a vlog, your video clips are uploaded over encrypted connections (HTTPS) to the Service Provider's servers in Korea (tteona.kr) for editing and composition. Uploaded clips and rendered outputs are periodically deleted after the composition and delivery purposes are fulfilled, and are never used for any other purpose or shared with third parties.</li>
       <li>If server-side processing is unavailable, the vlog is composed entirely on-device and clips are not uploaded.</li>
       <li>Background music (BGM) inserted into vlogs comes from audio tracks lawfully licensed by the Service Provider and contains no personal information.</li>
+    </ul>
+
+    <h3>2-6. Subscription &amp; Payment Information (tteona PRO)</h3>
+    <ul>
+      <li>Payments for the paid subscription (tteona PRO) are processed by the Apple App Store or Google Play; the Service Provider does not collect payment-method details such as card numbers.</li>
+      <li>To verify and restore subscription status, an anonymized app user identifier and purchase receipt data are transmitted to and processed by RevenueCat.</li>
     </ul>
 
     <h2>3. How We Use Your Information</h2>
@@ -418,6 +471,11 @@
         <td>Weather information (current location coordinates transmitted)</td>
         <td><a href="https://openweather.co.uk/privacy-policy" target="_blank">View</a></td>
       </tr>
+      <tr>
+        <td>RevenueCat</td>
+        <td>tteona PRO subscription management &amp; receipt validation (anonymized app user identifier and purchase receipts transmitted)</td>
+        <td><a href="https://www.revenuecat.com/privacy" target="_blank">View</a></td>
+      </tr>
     </table>
     <p>The Service Provider will not share your information with any third party beyond those listed above without your consent, except as required by law or to protect the life or property of users.</p>
 
@@ -428,7 +486,40 @@
       <li><strong>Delegated tasks</strong>: Authentication, data storage, push notifications, social login, place search and details, route calculation, weather lookup, vlog composition server and database hosting</li>
       <li><strong>Data shared</strong>: Account identifiers, profile data, FCM token, trip and group data, place search queries, location coordinates, vlog video clips (limited to what each task requires)</li>
     </ul>
-    <p>Vlog composition and certain service data are stored and processed on cloud servers located in Korea (hosted by DNA Cloud, tteona.kr); no cross-border transfer occurs from these servers. Data handled by global services such as Firebase may be processed outside Korea according to their respective policies.</p>
+    <p>Vlog composition and certain service data are stored and processed on cloud servers located in Korea (hosted by DNA Cloud, tteona.kr).</p>
+
+    <h3>5-1. Cross-Border Transfer of Personal Data</h3>
+    <p>To operate the Service, certain personal data is processed outside of Korea as described below. You may refuse the cross-border transfer, but the Service may be unavailable in that case.</p>
+    <table>
+      <tr>
+        <th>Recipient</th>
+        <th>Country</th>
+        <th>Data Transferred</th>
+        <th>Method &amp; Timing</th>
+        <th>Purpose &amp; Retention</th>
+      </tr>
+      <tr>
+        <td>Google LLC (Firebase)<br><a href="https://firebase.google.com/support/privacy" target="_blank">privacy@google.com</a></td>
+        <td>United States and other Google data-center locations</td>
+        <td>Account identifiers, email, nickname, profile image, trip/group data, FCM token</td>
+        <td>Continuous network transmission during service use</td>
+        <td>Authentication, data storage, push notifications / until account deletion or end of delegation</td>
+      </tr>
+      <tr>
+        <td>RevenueCat, Inc.<br><a href="https://www.revenuecat.com/privacy" target="_blank">support@revenuecat.com</a></td>
+        <td>United States</td>
+        <td>Anonymized app user identifier, purchase receipt data</td>
+        <td>Network transmission upon subscription purchase or restore</td>
+        <td>Subscription management &amp; receipt validation / until account deletion or end of delegation</td>
+      </tr>
+      <tr>
+        <td>OpenWeather Ltd.</td>
+        <td>United Kingdom</td>
+        <td>Current location coordinates (no account information)</td>
+        <td>Network transmission upon weather lookup</td>
+        <td>Weather information / not retained after processing</td>
+      </tr>
+    </table>
 
     <h2>6. Retention &amp; Deletion</h2>
     <ul>
@@ -463,12 +554,15 @@
     <h2>11. Changes to This Policy</h2>
     <p>This Policy may be updated periodically. Material changes will be announced in advance through the App or this page.</p>
 
-    <h2>12. Contact</h2>
-    <p>For privacy-related inquiries, please use the in-app contact feature in the Settings screen.</p>
+    <h2>12. Privacy Officer &amp; Contact</h2>
+    <p>The Service Provider has designated the following privacy officer to oversee personal-data processing and handle user complaints and remedies. The location-information manager role is held by the same person.</p>
     <ul>
+      <li><strong>Privacy Officer / Location-Information Manager</strong>: Seoktae Lee</li>
+      <li><strong>Email</strong>: <a href="mailto:just.tteona@gmail.com">just.tteona@gmail.com</a></li>
       <li><strong>Business name</strong>: AERON</li>
       <li><strong>Service name</strong>: 떠나 (Tteona)</li>
     </ul>
+    <p>For privacy-related inquiries, please contact the email above or use the in-app contact feature in the Settings screen.</p>
   </div>
 
 </div>

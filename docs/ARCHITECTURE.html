@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>떠나(tteona) — 인프라 & 아키텍처 문서</title>
+<style>
+  :root {
+    --orange: #FF6B35;
+    --orange-soft: #FFF1EA;
+    --dark: #1A1A1A;
+    --gray: #666;
+    --light-gray: #f5f5f7;
+    --border: #e5e5ea;
+    --blue: #3478F6;
+    --green: #34A853;
+    --purple: #8E5AF7;
+    --yellow: #F5A623;
+    --code-bg: #f6f8fa;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Pretendard", -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+    color: var(--dark); line-height: 1.7; background: #fff;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px 120px; }
+
+  header.hero {
+    background: linear-gradient(135deg, #1a1a2e 0%, #2d1b3d 50%, #4a1e2e 100%);
+    color: #fff; padding: 72px 24px 64px; text-align: center;
+  }
+  header.hero .badge {
+    display: inline-block; background: var(--orange); color: #fff;
+    font-size: 13px; font-weight: 700; padding: 6px 14px; border-radius: 999px;
+    margin-bottom: 20px; letter-spacing: .5px;
+  }
+  header.hero h1 { font-size: 42px; font-weight: 800; letter-spacing: -1px; }
+  header.hero h1 em { color: var(--orange); font-style: normal; }
+  header.hero p { margin-top: 14px; font-size: 17px; color: rgba(255,255,255,.75); }
+  header.hero .meta { margin-top: 28px; font-size: 13px; color: rgba(255,255,255,.5); }
+
+  nav.toc {
+    background: var(--light-gray); border-radius: 16px; padding: 24px 28px;
+    margin: -36px auto 0; max-width: 900px; position: relative;
+    box-shadow: 0 8px 30px rgba(0,0,0,.08);
+  }
+  nav.toc strong { display: block; margin-bottom: 10px; font-size: 14px; color: var(--gray); }
+  nav.toc ol { columns: 2; column-gap: 40px; padding-left: 20px; font-size: 15px; }
+  nav.toc a { color: var(--dark); text-decoration: none; }
+  nav.toc a:hover { color: var(--orange); }
+
+  section { margin-top: 72px; }
+  h2 {
+    font-size: 28px; font-weight: 800; letter-spacing: -.5px;
+    padding-bottom: 12px; border-bottom: 3px solid var(--orange);
+    display: flex; align-items: center; gap: 12px;
+  }
+  h2 .num {
+    background: var(--orange); color: #fff; font-size: 16px;
+    width: 34px; height: 34px; border-radius: 10px;
+    display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  h3 { font-size: 20px; font-weight: 700; margin: 36px 0 12px; }
+  p.lead { font-size: 16px; color: #333; margin: 18px 0; }
+  p.note {
+    background: var(--orange-soft); border-left: 4px solid var(--orange);
+    padding: 14px 18px; border-radius: 0 10px 10px 0; margin: 18px 0; font-size: 15px;
+  }
+  p.why {
+    background: #EEF4FF; border-left: 4px solid var(--blue);
+    padding: 14px 18px; border-radius: 0 10px 10px 0; margin: 18px 0; font-size: 15px;
+  }
+  p.why b::before { content: "🧠 왜 이렇게 설계했나 — "; font-weight: 800; color: var(--blue); }
+
+  table { width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 14.5px; }
+  th { background: var(--light-gray); text-align: left; padding: 10px 14px; border-bottom: 2px solid var(--border); white-space: nowrap; }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  code {
+    font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 13px;
+    background: var(--code-bg); padding: 2px 6px; border-radius: 5px; color: #C7254E;
+  }
+  pre {
+    background: #1e1e2e; color: #dde1ee; padding: 20px 24px; border-radius: 14px;
+    overflow-x: auto; font-size: 13px; line-height: 1.6; margin: 18px 0;
+    font-family: "SF Mono", ui-monospace, Menlo, monospace;
+  }
+  pre .c { color: #7a7f9a; } pre .k { color: #ff9e64; } pre .s { color: #9ece6a; }
+
+  /* ── 다이어그램 공통 ── */
+  .diagram {
+    background: var(--light-gray); border-radius: 18px; padding: 32px 28px;
+    margin: 24px 0; overflow-x: auto;
+  }
+  .diagram .caption { text-align: center; font-size: 13px; color: var(--gray); margin-top: 18px; }
+  .lane { display: flex; gap: 14px; align-items: stretch; justify-content: center; flex-wrap: wrap; }
+  .col { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+  .box {
+    background: #fff; border: 2px solid var(--border); border-radius: 12px;
+    padding: 12px 18px; text-align: center; min-width: 150px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.05); font-size: 14px;
+  }
+  .box b { display: block; font-size: 15px; }
+  .box small { color: var(--gray); font-size: 12px; line-height: 1.45; display: block; margin-top: 3px; }
+  .box.orange { border-color: var(--orange); background: var(--orange-soft); }
+  .box.blue   { border-color: var(--blue);   background: #EEF4FF; }
+  .box.green  { border-color: var(--green);  background: #EDF9F0; }
+  .box.purple { border-color: var(--purple); background: #F4EEFF; }
+  .box.yellow { border-color: var(--yellow); background: #FFF8E8; }
+  .box.dark   { border-color: var(--dark); background: var(--dark); color: #fff; }
+  .box.dark small { color: rgba(255,255,255,.65); }
+  .arrow-v { text-align: center; color: var(--gray); font-size: 20px; line-height: 1.1; }
+  .arrow-v small { display: block; font-size: 11.5px; color: var(--gray); }
+  .group-frame {
+    border: 2px dashed #c9c9d2; border-radius: 16px; padding: 20px 18px 16px; position: relative; margin-top: 14px;
+  }
+  .group-frame > .tag {
+    position: absolute; top: -13px; left: 18px; background: var(--light-gray);
+    padding: 0 10px; font-size: 12.5px; font-weight: 700; color: var(--gray); letter-spacing: .3px;
+  }
+
+  /* 시퀀스(단계) 다이어그램 */
+  .seq { counter-reset: step; margin: 20px 0; }
+  .seq .step {
+    display: flex; gap: 16px; align-items: flex-start; padding: 13px 0;
+    border-bottom: 1px dashed var(--border);
+  }
+  .seq .step:last-child { border-bottom: none; }
+  .seq .step::before {
+    counter-increment: step; content: counter(step);
+    background: var(--orange); color: #fff; font-weight: 700; font-size: 13px;
+    width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+    display: inline-flex; align-items: center; justify-content: center; margin-top: 3px;
+  }
+  .seq .actor {
+    font-weight: 700; font-size: 13px; color: #fff; background: var(--dark);
+    border-radius: 6px; padding: 2px 9px; margin-right: 6px; white-space: nowrap;
+  }
+  .seq .actor.ios { background: var(--blue); }
+  .seq .actor.was { background: var(--orange); }
+  .seq .actor.web { background: var(--green); }
+  .seq .actor.db  { background: var(--purple); }
+  .seq .actor.fb  { background: var(--yellow); color: var(--dark); }
+
+  .chip { display: inline-block; background: #fff; border: 1.5px solid var(--border); border-radius: 999px; padding: 5px 14px; margin: 4px 4px 0 0; font-size: 13.5px; font-weight: 600; }
+  .chip.o { border-color: var(--orange); color: var(--orange); }
+
+  footer { margin-top: 90px; text-align: center; color: var(--gray); font-size: 13px; border-top: 1px solid var(--border); padding-top: 28px; }
+  @media (max-width: 720px) { nav.toc ol { columns: 1; } header.hero h1 { font-size: 30px; } }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="badge">KISA 2026 위치정보 클라우드 지원사업 선정</div>
+  <h1><em>떠나</em> tteona — 시스템 아키텍처 문서</h1>
+  <p>여행 코스를 따라 걸으면, 하루가 자동으로 한 편의 Vlog가 되는 위치기반 여행 기록 서비스</p>
+  <div class="meta">iOS (SwiftUI) · Android (Compose) · Node.js WAS · PostgreSQL 16 · Firebase · 작성 2026-07-07</div>
+</header>
+
+<div class="wrap">
+
+<nav class="toc">
+  <strong>목차</strong>
+  <ol>
+    <li><a href="#overview">서비스 개요 & 기술 스택</a></li>
+    <li><a href="#system">전체 시스템 구성도</a></li>
+    <li><a href="#network">KISA 3-Tier 네트워크 토폴로지</a></li>
+    <li><a href="#auth">인증 & 보안 아키텍처</a></li>
+    <li><a href="#vlog">Vlog 생성 파이프라인</a></li>
+    <li><a href="#realtime">실시간 위치 공유 & 그룹 채팅 (WebSocket)</a></li>
+    <li><a href="#push">푸시 알림 파이프라인 (APNs + FCM)</a></li>
+    <li><a href="#data">데이터 저장소 맵 — 무엇을 어디에, 왜</a></li>
+    <li><a href="#cost">외부 API 비용 방어 전략 (캐시 계층)</a></li>
+    <li><a href="#deploy">배포 & 운영</a></li>
+    <li><a href="#evolution">아키텍처 진화사 — Firebase 올인원에서 하이브리드로</a></li>
+  </ol>
+</nav>
+
+<!-- ═══════════════════ 1. 개요 ═══════════════════ -->
+<section id="overview">
+  <h2><span class="num">1</span>서비스 개요 & 기술 스택</h2>
+  <p class="lead">
+    <b>떠나</b>는 "여행을 계획하는 앱"이 아니라 <b>"여행을 기록해주는 앱"</b>이다.
+    유저가 코스를 만들거나 다른 사람의 코스를 따라 걸으면, 장소에 <b>GPS로 도착하는 순간</b> 앱이 알려주고,
+    그 자리에서 짧은 클립을 찍으면 하루가 끝날 때 <b>서버가 자동으로 BGM·타이틀·전환효과가 입혀진 Vlog</b>를 만들어준다.
+    그룹 기능으로 일행과 실시간 위치를 공유하고, 완성된 코스는 탐색 탭과 웹 링크로 다른 여행자에게 퍼진다.
+  </p>
+
+  <h3>핵심 기능 한눈에</h3>
+  <div>
+    <span class="chip o">📍 GPS 도착 감지 & 자동 촬영 유도</span>
+    <span class="chip o">🎬 서버사이드 Vlog 자동 합성 (릴스/유튜브/정방형 멀티포맷)</span>
+    <span class="chip o">🗺 코스 생성·탐색·따라가기</span>
+    <span class="chip o">👥 그룹 실시간 위치공유 + 채팅</span>
+    <span class="chip">🤖 위치·시즌 기반 코스 추천</span>
+    <span class="chip">📊 여행 통계 & 주간 리포트 푸시</span>
+    <span class="chip">👑 tteona PRO 구독 (RevenueCat)</span>
+    <span class="chip">🌐 ko / en / ja 3개 국어</span>
+  </div>
+
+  <h3>기술 스택</h3>
+  <table>
+    <tr><th>레이어</th><th>기술</th><th>선택 이유</th></tr>
+    <tr><td><b>iOS</b></td><td>SwiftUI, iOS 17+, AVFoundation, CoreLocation, ActivityKit(Live Activity), WidgetKit</td><td>1인 개발 생산성 극대화. 카메라 커스텀 녹화(AVAssetWriter)와 위치 지오펜싱이 핵심이라 네이티브 필수</td></tr>
+    <tr><td><b>Android</b></td><td>Kotlin, Jetpack Compose, FCM</td><td>iOS와 동일한 WAS API를 소비 — 서버를 KISA로 옮겨둔 덕에 포팅 비용 최소화</td></tr>
+    <tr><td><b>WAS</b></td><td>Node.js(Express), PM2, FFmpeg, node-cron, ws, sharp</td><td>영상 합성·크론·웹소켓·이미지 리사이즈를 단일 런타임에서. 8Core/16GB 자원에 최적</td></tr>
+    <tr><td><b>WEB</b></td><td>Nginx (리버스 프록시, 정적 서빙, OG 렌더링 프록시)</td><td>3-Tier 분리 — 외부 노출면 최소화, 정적 캐시</td></tr>
+    <tr><td><b>DB</b></td><td>PostgreSQL 16</td><td>캐시·통계·푸시토큰·Vlog job 등 서버 소유 데이터. Firestore 비용 방어의 핵심</td></tr>
+    <tr><td><b>BaaS</b></td><td>Firebase Auth · Firestore · Cloud Functions · FCM</td><td>인증(Apple/Google/Kakao/이메일)과 실시간 동기화가 필요한 유저 데이터</td></tr>
+    <tr><td><b>외부 API</b></td><td>Google Maps/Places, Kakao Local·Mobility, 한국관광공사 TourAPI, APNs</td><td>지도·장소검색·대중교통 경로·큐레이션 사진·푸시</td></tr>
+    <tr><td><b>수익화</b></td><td>RevenueCat (구독 entitlement: <code>pro</code>)</td><td>영수증 검증·구독 상태 관리 위임</td></tr>
+  </table>
+</section>
+
+<!-- ═══════════════════ 2. 전체 시스템 구성도 ═══════════════════ -->
+<section id="system">
+  <h2><span class="num">2</span>전체 시스템 구성도</h2>
+  <p class="lead">
+    떠나의 백엔드는 <b>"Firebase(실시간 유저 데이터)"</b>와 <b>"KISA 자체 서버(연산·캐시·유통)"</b>의
+    하이브리드 구조다. 클라이언트는 목적에 따라 두 백엔드를 나눠 호출한다.
+  </p>
+
+  <div class="diagram">
+    <div class="lane">
+      <div class="box blue"><b>📱 iOS 앱</b><small>SwiftUI · AVFoundation<br>CoreLocation · Live Activity</small></div>
+      <div class="box blue"><b>🤖 Android 앱</b><small>Jetpack Compose · FCM</small></div>
+      <div class="box green"><b>🌐 웹 브라우저</b><small>코스 공유 링크 · 약관</small></div>
+    </div>
+    <div class="arrow-v">↓ <small>HTTPS (Bearer: Firebase ID Token) · WSS</small></div>
+
+    <div class="group-frame">
+      <span class="tag">KISA 클라우드 (cloudlbs.kr) — 3-Tier</span>
+      <div class="lane">
+        <div class="col">
+          <div class="box green"><b>WEB · lbs-aeron-web</b><small>Nginx<br>tteona.kr 정적 서빙<br>/course/:id OG 렌더<br>API 리버스 프록시</small></div>
+        </div>
+        <div class="col">
+          <div class="box orange"><b>WAS · lbs-aeron-was</b><small>Express API (40+ 엔드포인트)<br>FFmpeg Vlog 합성 · sharp 썸네일<br>WebSocket(위치·채팅) · node-cron<br>APNs/FCM 발송 · PM2</small></div>
+        </div>
+        <div class="col">
+          <div class="box purple"><b>DB · lbs-aeron-db</b><small>PostgreSQL 16<br>places 캐시 · 경로 캐시<br>통계 · 푸시 토큰 · vlog_jobs<br>채팅 메시지 · 썸네일 메타</small></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow-v">↕</div>
+    <div class="lane">
+      <div class="group-frame" style="flex:1">
+        <span class="tag">Firebase (GCP)</span>
+        <div class="lane">
+          <div class="box yellow"><b>Auth</b><small>Apple·Google·Kakao·이메일</small></div>
+          <div class="box yellow"><b>Firestore</b><small>유저·코스·방·피드·리뷰</small></div>
+          <div class="box yellow"><b>Functions</b><small>카카오 커스텀토큰<br>계정삭제·미인증 정리</small></div>
+          <div class="box yellow"><b>FCM</b><small>Android 푸시</small></div>
+        </div>
+      </div>
+      <div class="group-frame" style="flex:1">
+        <span class="tag">외부 API</span>
+        <div class="lane">
+          <div class="box"><b>Google</b><small>Maps SDK · Places</small></div>
+          <div class="box"><b>Kakao</b><small>Local 검색 · Mobility 경로</small></div>
+          <div class="box"><b>TourAPI</b><small>관광공사 장소사진</small></div>
+          <div class="box"><b>APNs</b><small>iOS 푸시</small></div>
+          <div class="box"><b>RevenueCat</b><small>PRO 구독</small></div>
+        </div>
+      </div>
+    </div>
+    <div class="caption">그림 1. 떠나 전체 시스템 구성 — 하이브리드 백엔드 (KISA 3-Tier + Firebase + 외부 API)</div>
+  </div>
+
+  <p class="why"><b></b>처음엔 Firebase 올인원이었다. 그러나 ① Vlog 합성이 폰 CPU를 점유해 발열·배터리 문제를 만들고, ② Google Places 호출이 건당 과금이라 유저 증가 = 비용 폭증 구조였으며, ③ Firestore 리스너 기반 위치 공유는 3~5초 지연이 있었다. KISA 지원사업 선정으로 자체 서버를 확보하면서 <b>"연산은 WAS로, 반복 조회는 PG 캐시로, 실시간은 WebSocket으로"</b> 오프로딩하고, Firebase는 잘하는 것(인증·실시간 동기화)만 남기는 구조로 재편했다.</p>
+
+  <h3>책임 분리 원칙</h3>
+  <table>
+    <tr><th>백엔드</th><th>담당</th><th>이유</th></tr>
+    <tr><td>Firebase</td><td>인증, 유저/코스/방 문서, 피드·댓글 실시간 동기화</td><td>소셜 로그인 4종과 오프라인 동기화를 직접 구현하는 것은 1인 개발 범위 초과. 검증된 인프라에 위임</td></tr>
+    <tr><td>KISA WAS</td><td>CPU 연산(FFmpeg·sharp), 외부 API 프록시+캐시, 크론, WebSocket, 푸시 발송, 관리자</td><td>고정비 0원의 전용 서버 — 종량제 클라우드에서 가장 비싼 유형의 워크로드를 전부 흡수</td></tr>
+    <tr><td>KISA DB</td><td>서버가 소유한 데이터(캐시·통계·잡큐·토큰)</td><td>읽기 빈도가 높고 실시간 동기화가 불필요한 데이터는 PG가 더 싸고 빠름</td></tr>
+  </table>
+</section>
+
+<!-- ═══════════════════ 3. 네트워크 토폴로지 ═══════════════════ -->
+<section id="network">
+  <h2><span class="num">3</span>KISA 3-Tier 네트워크 토폴로지</h2>
+  <p class="lead">
+    KISA 위치정보 클라우드 지원사업으로 제공받은 3대의 인스턴스를 전형적인
+    <b>WEB–WAS–DB 3계층</b>으로 구성했다. 각 계층은 별도 내부 서브넷(10.10 / 10.20 / 10.30)에 배치된다.
+  </p>
+
+  <div class="diagram">
+    <div class="lane">
+      <div class="box dark"><b>인터넷</b><small>tteona.kr (DNS) · 앱 트래픽</small></div>
+    </div>
+    <div class="arrow-v">↓ <small>:443 (TLS) · :30022 (SSH, 키 인증만)</small></div>
+    <div class="lane">
+      <div class="box green"><b>WEB — lbs-aeron-web</b><small>2Core / 4GB / 30GB<br>외부 114.110.182.45 · 내부 10.10.10.170<br>Nginx: 정적 + 프록시</small></div>
+    </div>
+    <div class="arrow-v">↓ <small>내부망 프록시 → WAS :3000 (API) · /ws/location (WS 업그레이드)</small></div>
+    <div class="lane">
+      <div class="box orange"><b>WAS — lbs-aeron-was</b><small>8Core / 16GB / 50GB<br>외부 114.110.181.49 · 내부 10.20.10.170<br>Node.js + PM2 + FFmpeg</small></div>
+    </div>
+    <div class="arrow-v">↓ <small>내부망 → PG :5432 (외부 차단)</small></div>
+    <div class="lane">
+      <div class="box purple"><b>DB — lbs-aeron-db</b><small>2Core / 4GB / 70GB<br>외부 114.110.183.183 · 내부 10.30.10.170<br>PostgreSQL 16 (host: 10.30.10.170로만 접속)</small></div>
+    </div>
+    <div class="caption">그림 2. 3-Tier 토폴로지 — 트래픽은 WEB에서만 진입, DB는 내부망 전용</div>
+  </div>
+
+  <h3>Nginx 라우팅 규칙 (tteona.nginx.conf)</h3>
+  <table>
+    <tr><th>location</th><th>대상</th><th>비고</th></tr>
+    <tr><td><code>/course</code>, <code>/course/:id</code></td><td>WAS 프록시</td><td>코스 공유용 OG 메타 서버렌더 — 카톡/인스타 미리보기</td></tr>
+    <tr><td><code>/api/vlog/</code></td><td>WAS 프록시</td><td>업로드 바디 크기 상향, 타임아웃 연장 (대용량 클립)</td></tr>
+    <tr><td><code>/api/</code></td><td>WAS 프록시</td><td>일반 REST API</td></tr>
+    <tr><td><code>/</code></td><td>정적 (web/)</td><td>랜딩·privacy·terms·child-safety</td></tr>
+    <tr><td>정적 자원 (png·css·js…)</td><td>캐시 헤더 부여</td><td>브라우저 캐싱</td></tr>
+  </table>
+
+  <p class="note">💡 <b>보안 포인트</b> — DB의 외부 IP가 존재하지만 PostgreSQL은 내부 IP(10.30.10.170)로만 바인딩·접속하고, SSH는 전 서버 30022 포트 + PEM 키 인증만 허용한다. 앱→서버 API는 전 구간 Firebase ID Token 검증(4장)을 거친다.</p>
+</section>
+
+<!-- ═══════════════════ 4. 인증 & 보안 ═══════════════════ -->
+<section id="auth">
+  <h2><span class="num">4</span>인증 & 보안 아키텍처</h2>
+  <p class="lead">
+    핵심 설계: <b>"인증은 Firebase가 발급하고, 검증은 모든 곳에서 한다."</b>
+    자체 서버(WAS)도 세션·JWT를 직접 발급하지 않고 Firebase ID Token을 Admin SDK로 검증한다.
+    덕분에 iOS·Android·WAS·WebSocket이 <b>단일한 신원 체계</b>를 공유한다.
+  </p>
+
+  <h3>4-1. 소셜 로그인 4종 통합 (카카오 커스텀 토큰 흐름)</h3>
+  <div class="seq">
+    <div class="step"><div><span class="actor ios">iOS</span> 카카오 SDK로 로그인 → 카카오 액세스 토큰 획득</div></div>
+    <div class="step"><div><span class="actor fb">Cloud Functions</span> <code>createKakaoCustomToken</code> 호출 — 카카오 토큰을 카카오 서버에 검증 후 해당 유저의 <b>Firebase 커스텀 토큰</b> 발급</div></div>
+    <div class="step"><div><span class="actor ios">iOS</span> 커스텀 토큰으로 Firebase Auth 로그인 → 이후 Apple/Google/이메일 유저와 완전히 동일하게 취급</div></div>
+    <div class="step"><div><span class="actor ios">iOS</span> 모든 WAS API 호출 시 <code>Authorization: Bearer &lt;Firebase ID Token&gt;</code> 첨부</div></div>
+    <div class="step"><div><span class="actor was">WAS</span> <code>requireAuth</code> 미들웨어 — Admin SDK <code>verifyIdToken()</code>으로 검증, <b>클라이언트가 보낸 userId는 신뢰하지 않고 검증된 <code>req.uid</code>만 사용</b></div></div>
+  </div>
+
+  <p class="why"><b></b>Firebase가 공식 지원하지 않는 카카오 로그인을 커스텀 토큰으로 통합했다. 이 선택 덕분에 "카카오 유저용 별도 인증 체계"라는 이중 관리가 사라졌고, WAS는 로그인 제공자를 전혀 신경 쓰지 않는다.</p>
+
+  <h3>4-2. 심층 방어 (Defense in Depth)</h3>
+  <table>
+    <tr><th>계층</th><th>장치</th><th>설명</th></tr>
+    <tr><td>전송</td><td>TLS + Helmet</td><td>전 구간 HTTPS, 보안 헤더 자동 부여</td></tr>
+    <tr><td>API 인증</td><td><code>requireAuth</code></td><td>무효 토큰 즉시 401. <code>AUTH_ENFORCE</code> 플래그로 구버전 앱 전환기 완화 운영 지원 — <b>무중단 인증 도입 전략</b></td></tr>
+    <tr><td>리소스 소유권</td><td><code>requireJobOwner</code></td><td>Vlog job은 생성자 uid와 요청자 uid가 일치해야만 접근</td></tr>
+    <tr><td>WebSocket</td><td>join 시 토큰 검증 + 방 멤버십 확인</td><td>위치가 흐르는 채널이므로 <b>도청·사칭 차단</b>. 비멤버는 4003으로 즉시 종료</td></tr>
+    <tr><td>DB 규칙</td><td>Firestore Security Rules</td><td>rooms/members 컬렉션 접근을 멤버로 제한 (2026-05-16 강화)</td></tr>
+    <tr><td>콘텐츠</td><td>금칙어 필터 + 신고/차단 + 관리자 대시보드</td><td>채팅·댓글·코스명 공통 기준. 앱스토어 UGC 정책 대응</td></tr>
+    <tr><td>시크릿</td><td>환경변수 강제 (<code>requiredEnv</code>)</td><td>PG 비밀번호·관리자 토큰이 없으면 서버가 기동 자체를 거부. 과거 소스에 박혀 있던 값은 git 이력 노출을 전제로 전량 로테이션</td></tr>
+    <tr><td>개인정보</td><td>계정 삭제 파이프라인</td><td>Apple 자격증명 revoke + 카카오 unlink + Firestore 데이터 + PG 데이터(<code>/api/users/me/purge</code>) 연쇄 삭제</td></tr>
+  </table>
+</section>
+
+<!-- ═══════════════════ 5. Vlog 파이프라인 ═══════════════════ -->
+<section id="vlog">
+  <h2><span class="num">5</span>Vlog 생성 파이프라인 — 이 앱의 심장</h2>
+  <p class="lead">
+    유저가 하루 동안 장소마다 찍은 클립들이 서버에서 한 편의 Vlog로 합성된다.
+    v1은 iOS AVFoundation 온디바이스 합성이었고, v2(2026-07)에서 <b>서버사이드 FFmpeg 파이프라인</b>으로 이전했다.
+  </p>
+
+  <div class="seq">
+    <div class="step"><div><span class="actor ios">iOS</span> 세션 중 장소 도착 → 지오펜스 감지 → 카메라(AVAssetWriter 커스텀 녹화) → 클립을 <code>Documents/Tteona/Sessions/{sessionId}/</code>에 저장. 동일 장소명 중복 대비 <code>clipFileName</code>으로 파일 고유성 보장</div></div>
+    <div class="step"><div><span class="actor ios">iOS</span> 클립들의 회전 메타데이터(<code>preferredTransform</code>)를 읽어 <b>세로/가로 다수결 판정</b> → 기본 포맷 결정 (세로=릴스 9:16 / 가로=유튜브 16:9)</div></div>
+    <div class="step"><div><span class="actor was">WAS</span> <code>POST /api/vlog/jobs</code> — job 생성 (PG <code>vlog_jobs</code>에 소유자·포맷·BGM 기록)</div></div>
+    <div class="step"><div><span class="actor ios">iOS</span> <code>POST /jobs/:id/clips</code> — 클립 순차 업로드 (Nginx가 vlog 경로만 바디 제한 상향)</div></div>
+    <div class="step"><div><span class="actor was">WAS</span> <code>POST /jobs/:id/start</code> → FFmpeg 합성 시작: 클립 정규화(회전 보정) → 포맷별 <b>독립 합성</b>(릴스/유튜브/1:1 — 블러 패딩 변환) → 타이틀 카드 → 페이드 전환 → 무드별 BGM 믹싱 → 워터마크(무료 유저)</div></div>
+    <div class="step"><div><span class="actor ios">iOS</span> <code>GET /jobs/:id</code> 폴링 — 단계별 진행률 표시 → 완료 시 다운로드 → 사진앱 저장 + 인스타 공유 유도</div></div>
+  </div>
+
+  <p class="why"><b></b>온디바이스 합성은 iPhone 12 기준 3분짜리 Vlog에 수 분의 발열 구간을 만들었고, 합성 중 앱 이탈 시 실패했다. 서버 이전으로 ① 폰 배터리/발열 해소 ② 멀티포맷 동시 생성 가능(PRO 기능화) ③ 합성 로직 업데이트를 앱 심사 없이 배포. FFmpeg 프로세스는 타임아웃 시 SIGKILL로 강제 회수해 <b>고아 프로세스가 8코어를 잠식하는 것을 방지</b>한다. 이 파이프라인이 유료화(PRO)의 기술적 근거다 — 워터마크 제거·멀티포맷·BGM 선택·장편·우선 처리 모두 서버 파라미터 하나로 게이팅된다.</p>
+</section>
+
+<!-- ═══════════════════ 6. 실시간 ═══════════════════ -->
+<section id="realtime">
+  <h2><span class="num">6</span>실시간 위치 공유 & 그룹 채팅 (WebSocket)</h2>
+  <p class="lead">
+    같은 방(그룹) 멤버끼리 세션 중 실시간 위치를 지도에서 보고, 같은 채널로 채팅한다.
+    v1은 Firestore 문서 갱신+리스너(3~5초 지연, 쓰기 과금)였고, v2에서 자체 WebSocket으로 이전했다.
+  </p>
+
+  <div class="diagram">
+    <div class="lane">
+      <div class="box blue"><b>멤버 A (iOS)</b><small>세션 중 · 위치 스로틀링 송신</small></div>
+      <div class="box blue"><b>멤버 B (iOS)</b><small>지도에 A 마커 실시간 갱신</small></div>
+      <div class="box blue"><b>멤버 C (Android)</b><small>동일 프로토콜</small></div>
+    </div>
+    <div class="arrow-v">↕ <small>wss://…/ws/location — join(토큰+방 멤버십 검증) → location / chat 브로드캐스트</small></div>
+    <div class="lane">
+      <div class="box orange"><b>WAS WebSocket 서버</b><small>roomId → Set&lt;socket&gt; 라우팅<br>ping/pong 생존 확인 · 금칙어 필터<br>chat은 PG 저장 후 브로드캐스트 (영속+실시간)</small></div>
+    </div>
+    <div class="lane" style="margin-top:10px">
+      <div class="box purple"><b>PostgreSQL</b><small>chat 메시지 영속화 → 재입장 시 <code>GET /api/rooms/:id/messages</code>로 히스토리 복원</small></div>
+    </div>
+    <div class="caption">그림 3. 방 단위 pub/sub — 인증된 멤버만 조인, 채팅은 저장 후 전파</div>
+  </div>
+
+  <p class="why"><b></b>위치는 휘발성(브로드캐스트만, 저장 안 함), 채팅은 영속성(PG 저장 후 전파)으로 성격을 분리했다. 위치를 저장하지 않는 것은 성능 문제이기 전에 <b>개인정보 최소수집 원칙</b> — 위치정보법상 이동경로 저장은 민감도가 급격히 올라간다. 클라이언트 중복 수신은 <code>clientMsgId</code>로 제거하고, 백그라운드 전환 시(scenePhase) 송신을 멈춰 배터리를 지킨다.</p>
+</section>
+
+<!-- ═══════════════════ 7. 푸시 ═══════════════════ -->
+<section id="push">
+  <h2><span class="num">7</span>푸시 알림 파이프라인 (APNs 직접 + FCM)</h2>
+  <div class="seq">
+    <div class="step"><div><span class="actor ios">앱</span> 기동 시 <code>POST /api/push/register</code> — 디바이스 토큰을 PG <code>device_tokens</code>에 (user_id, platform) 유니크로 upsert</div></div>
+    <div class="step"><div><span class="actor was">WAS</span> 발송 시점에 유저의 전 플랫폼 토큰 조회 → iOS는 <b>APNs 직접</b>(@parse/node-apn, p8 토큰 인증), Android는 <b>FCM</b>으로 분기</div></div>
+    <div class="step"><div><span class="actor was">WAS</span> 트리거: ① 코스 좋아요 ② 내 코스 따라가기 시작 ③ 매주 월 09:00 KST 주간 여행 리포트(node-cron, 지난 7일 활동 유저만) ④ 그룹 알림(Cloud Functions — Firestore 문서 생성 트리거)</div></div>
+    <div class="step"><div><span class="actor ios">iOS</span> 수신 → 딥링크 라우팅 (채팅방 열기 / 세션 열기 / 촬영 유도). 활성 채팅 화면에서는 해당 방 알림 억제</div></div>
+  </div>
+  <p class="why"><b></b>iOS 푸시를 FCM 경유가 아닌 APNs 직접 연동으로 전환한 것은 ① 전달 지연 한 홉 제거 ② FCM 콘솔 의존 제거 ③ Live Activity 업데이트 등 APNs 고유 기능의 길을 열기 위함이다. device_tokens를 "유저당 1행"에서 "(유저, 플랫폼)당 1행"으로 <b>무중단 스키마 마이그레이션</b>(기동 시 idempotent ALTER)한 것이 Android 동시 지원의 핵심이었다.</p>
+</section>
+
+<!-- ═══════════════════ 8. 데이터 맵 ═══════════════════ -->
+<section id="data">
+  <h2><span class="num">8</span>데이터 저장소 맵 — 무엇을 어디에, 왜</h2>
+  <table>
+    <tr><th>데이터</th><th>저장소</th><th>왜 여기에</th></tr>
+    <tr><td>계정·프로필·차단 목록</td><td>Firebase Auth + Firestore <code>users</code></td><td>인증 연동, 실시간 반영(차단 즉시 피드 필터)</td></tr>
+    <tr><td>코스(장소·순서·태그·좋아요)</td><td>Firestore <code>courses</code></td><td>모바일 실시간 동기화 + 오프라인 캐시</td></tr>
+    <tr><td>방·멤버·피드·댓글·리뷰</td><td>Firestore</td><td>리스너 기반 실시간 UI</td></tr>
+    <tr><td>그룹 채팅 메시지</td><td><b>PostgreSQL</b></td><td>WS 경유 대량 쓰기 — Firestore 쓰기 과금 회피, 히스토리는 REST 복원</td></tr>
+    <tr><td>Google Places 결과·대중교통 경로</td><td><b>PostgreSQL (캐시)</b></td><td>건당 과금 API의 반복 호출 차단 (9장)</td></tr>
+    <tr><td>통계 이벤트·크리에이터 랭킹</td><td><b>PostgreSQL</b></td><td>집계 쿼리는 SQL이 압도적으로 유리</td></tr>
+    <tr><td>푸시 토큰 · vlog_jobs</td><td><b>PostgreSQL</b></td><td>서버 소유 운영 데이터</td></tr>
+    <tr><td>코스·프로필 이미지</td><td>WAS 파일시스템 + sharp 리사이즈 (URL을 PG에)</td><td>스토리지 과금 0원, Nginx 정적 캐시</td></tr>
+    <tr><td>세션 클립(영상)</td><td>iOS 로컬 → 합성 시에만 서버 업로드 → 완성본 다운로드 후 서버 삭제</td><td>원본 영상을 서버에 남기지 않음 — 저장비용·개인정보 리스크 동시 차단</td></tr>
+    <tr><td>진행 중 세션 상태</td><td>iOS UserDefaults/파일 (ActiveSessionStore)</td><td>이어하기 — 복원 시 클립 파일 존재 무결성 검증</td></tr>
+  </table>
+</section>
+
+<!-- ═══════════════════ 9. 비용 방어 ═══════════════════ -->
+<section id="cost">
+  <h2><span class="num">9</span>외부 API 비용 방어 전략 (캐시 계층)</h2>
+  <p class="lead">1인 운영 서비스의 생존 조건은 "유저가 늘어도 원가가 안 늘어나는 구조". 떠나는 과금성 외부 API 앞에 전부 캐시를 세웠다.</p>
+  <div class="seq">
+    <div class="step"><div><span class="actor ios">iOS</span> 장소 사진/상세 필요 → 먼저 <code>GET /api/places/cache?key=…</code></div></div>
+    <div class="step"><div><span class="actor db">PG</span> 캐시 히트 → 즉시 반환 (Google 과금 0원). 같은 인기 장소는 전국 유저가 캐시를 공유</div></div>
+    <div class="step"><div><span class="actor ios">iOS</span> 미스 시에만 Google Places 호출 → 결과를 <code>POST /api/places/cache</code>로 적재 — 이후 전 유저 히트</div></div>
+    <div class="step"><div><span class="actor was">WAS</span> 대중교통 경로도 동일 — Kakao Mobility 결과를 좌표쌍 키로 PG 캐시. TourAPI(무료·공공)를 사진 1순위 소스로, Google을 폴백으로 강등</div></div>
+  </div>
+  <p class="note">📉 효과 — 장소 사진·상세 조회의 대부분이 캐시로 흡수되어 Google Places 비용을 사실상 상수로 고정. "유료 API 앞에는 반드시 우리 캐시" + "무료 공공데이터를 1순위 소스로" 두 원칙의 조합.</p>
+</section>
+
+<!-- ═══════════════════ 10. 배포/운영 ═══════════════════ -->
+<section id="deploy">
+  <h2><span class="num">10</span>배포 & 운영</h2>
+  <table>
+    <tr><th>항목</th><th>현재</th></tr>
+    <tr><td>프로세스 관리</td><td>PM2 — 크래시 자동 재기동, 로그 관리</td></tr>
+    <tr><td>배포</td><td><code>deploy-*.sh</code> — scp + pm2 reload (단계별 배포 스크립트)</td></tr>
+    <tr><td>설정</td><td>.env 주입, 필수값 누락 시 기동 거부(fail-fast)</td></tr>
+    <tr><td>크론</td><td>node-cron(주간 리포트) + Cloud Functions 스케줄(미인증 계정 정리)</td></tr>
+    <tr><td>모니터링</td><td><code>/health</code> 엔드포인트 + 관리자 대시보드(신고 처리·유저 관리·통계)</td></tr>
+    <tr><td>다음 단계</td><td>GitHub Actions CI/CD · pg_dump 야간 크로스 백업 · Grafana/Uptime 모니터링 (로드맵)</td></tr>
+  </table>
+</section>
+
+<!-- ═══════════════════ 11. 진화사 ═══════════════════ -->
+<section id="evolution">
+  <h2><span class="num">11</span>아키텍처 진화사 — 자소서·발표용 서사</h2>
+  <p class="lead">두 달(2026-05-05 ~ 07-07), 112 커밋. 아키텍처는 세 번 진화했다.</p>
+
+  <div class="diagram">
+    <div class="lane">
+      <div class="col">
+        <div class="box"><b>v1 — Firebase 올인원</b><small>2026-05 초<br>Firestore+Auth+Functions<br>Vlog는 폰에서 합성<br>"일단 출시 가능한 최소 구조"</small></div>
+      </div>
+      <div class="arrow-v" style="align-self:center">→<small>비용·발열·<br>지연 한계</small></div>
+      <div class="col">
+        <div class="box"><b>v2 — 기능 완성</b><small>2026-05~06<br>세션 이어하기 · 리뷰 · 인증뱃지<br>신고/차단 · 프라이버시 매니페스트<br>"스토어 심사를 통과하는 제품"</small></div>
+      </div>
+      <div class="arrow-v" style="align-self:center">→<small>KISA 선정<br>(07-01)</small></div>
+      <div class="col">
+        <div class="box orange"><b>v3 — 하이브리드</b><small>2026-07~<br>WAS로 연산 오프로딩<br>PG 캐시 · WS 실시간 · APNs 직접<br>PRO 구독 · Android 동시 지원<br>"유저가 늘어도 견디는 구조"</small></div>
+      </div>
+    </div>
+    <div class="caption">그림 4. 세 번의 아키텍처 전환 — 각 전환은 "문제가 실제로 아팠을 때" 단행</div>
+  </div>
+
+  <p class="why"><b></b>처음부터 완벽한 아키텍처를 그리지 않았다. v1의 한계(비용·발열·지연)를 <b>측정하고 몸으로 확인한 뒤</b> 서버를 도입했고, 그 시점이 마침 KISA 인프라 확보와 맞았다. "필요해진 순간에, 근거를 갖고, 무중단으로 이전한다"(AUTH_ENFORCE 전환 모드, idempotent 스키마 마이그레이션)가 이 프로젝트의 일관된 원칙이다.</p>
+
+  <h3>숫자로 보는 떠나</h3>
+  <div>
+    <span class="chip">Swift 78파일 / 16,000+ 라인</span>
+    <span class="chip">WAS server.js 2,500+ 라인 · REST 40+ 엔드포인트</span>
+    <span class="chip">커밋 112개 (2개월)</span>
+    <span class="chip">지원 언어 3종 (ko·en·ja)</span>
+    <span class="chip">로그인 수단 4종</span>
+    <span class="chip">서버 3대 (KISA 3-Tier)</span>
+    <span class="chip">Vlog 출력 포맷 3종</span>
+    <span class="chip">iOS + Android + Web</span>
+  </div>
+</section>
+
+<footer>
+  떠나(tteona) 아키텍처 문서 · 2026-07-07 · 작성 기준: iOS main 브랜치 / server.js / CLOUD_INFRA.md<br>
+  문의 just.tteona@gmail.com
+</footer>
+
+</div>
+</body>
+</html>

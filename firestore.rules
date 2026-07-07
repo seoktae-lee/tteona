@@ -35,10 +35,22 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
       // 작성자: 모든 필드 수정 가능
-      // 다른 유저: likeCount 필드만 수정 가능 (좋아요)
+      // 다른 유저: likeCount 필드만, 정확히 ±1 범위에서만 수정 가능 (좋아요/취소)
+      //   → 임의 값(예: 9999999) 주입 차단. increment(±1)의 결과값이
+      //     request.resource.data.likeCount에 반영되므로 규칙에서 검증 가능.
+      //   ※ 동일 유저의 반복 증가(중복 좋아요)까지 완전 차단하려면 좋아요를
+      //     서버 API/likes 서브컬렉션으로 이전해야 함(별도 과제).
       allow update: if isSignedIn() && (
         resource.data.authorId == request.auth.uid ||
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount'])
+        (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount']) &&
+          request.resource.data.likeCount is int &&
+          request.resource.data.likeCount >= 0 &&
+          (
+            request.resource.data.likeCount == resource.data.likeCount + 1 ||
+            request.resource.data.likeCount == resource.data.likeCount - 1
+          )
+        )
       );
       allow delete: if isSignedIn() && resource.data.authorId == request.auth.uid;
     }
@@ -102,9 +114,13 @@ service cloud.firestore {
       allow read, update, delete: if false;
     }
 
-    // placeCache 컬렉션 (Google Places API 데이터 캐시)
+    // placeCache 컬렉션 (Google Places API 데이터 캐시 — PostgreSQL로 이전됨)
+    //   쓰기를 잠가 캐시 오염(임의 유저가 조작된 사진·리뷰를 전체 유저에게 서빙) 차단.
+    //   앱의 saveToFirestore는 try? 라 실패해도 무해하며, 신규 캐시는 PG(WAS)로만 적재된다.
+    //   기존 레거시 데이터 서빙을 위해 읽기는 유지(PG 미스 시 폴백).
     match /placeCache/{key} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn();
+      allow write: if false;
     }
 
     // placeReviews 컬렉션 (방문 장소 리뷰 및 평점)
