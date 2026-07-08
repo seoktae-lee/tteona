@@ -114,15 +114,11 @@ struct FeedTabView: View {
     private var emptyState: some View {
         VStack(spacing: 20) {
             Spacer()
-            Image(systemName: "person.3.fill")
-                .font(.tte(52))
-                .foregroundColor(.tteOrange.opacity(0.4))
-            Text(L("group.empty.title"))
-                .font(.tte(17, .semibold))
-                .foregroundColor(.tteDarkGray)
-            Text(L("group.empty.subtitle"))
-                .font(.tte(14))
-                .foregroundColor(.tteMediumGray)
+            TteEmptyState(
+                image: "tteoni-travel",
+                title: L("group.empty.title"),
+                subtitle: L("group.empty.subtitle")
+            )
             HStack(spacing: 12) {
                 Button { showCreateRoom = true } label: {
                     HStack(spacing: 6) {

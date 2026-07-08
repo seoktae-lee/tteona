@@ -15,6 +15,7 @@ struct SettingsView: View {
     @State private var isUploadingAvatar = false
     @ObservedObject private var pro = ProManager.shared
     @State private var showPaywall = false
+    @State private var showNicknameEdit = false
 
     var body: some View {
         NavigationStack {
@@ -60,6 +61,11 @@ struct SettingsView: View {
             await checkNotificationStatus()
         }
         .sheet(isPresented: $showPaywall) { ProPaywallView() }
+        .sheet(isPresented: $showNicknameEdit) {
+            NicknameEditSheet()
+                .environmentObject(authService)
+                .environmentObject(userService)
+        }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             Task { await checkNotificationStatus() }
         }
@@ -122,15 +128,27 @@ struct SettingsView: View {
                 .onChange(of: avatarPickerItem) { _, newItem in
                     Task { await uploadAvatar(from: newItem) }
                 }
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(userService.currentUser?.nickname.isEmpty == false
-                         ? userService.currentUser!.nickname : L("settings.noNickname"))
-                        .font(.tte(17, .semibold))
-                        .foregroundColor(.tteDarkGray)
-                    Text(authService.currentUser?.email ?? "")
-                        .font(.tte(13))
-                        .foregroundColor(.tteMediumGray)
+                // 닉네임 영역 탭 → 변경 시트 (updateNickname 서비스는 있었지만 진입점이 없던 문제 해결)
+                Button {
+                    showNicknameEdit = true
+                } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 6) {
+                            Text(userService.currentUser?.nickname.isEmpty == false
+                                 ? userService.currentUser!.nickname : L("settings.noNickname"))
+                                .font(.tte(17, .semibold))
+                                .foregroundColor(.tteDarkGray)
+                            Image(systemName: "pencil")
+                                .font(.tte(12, .semibold))
+                                .foregroundColor(.tteMediumGray)
+                        }
+                        Text(authService.currentUser?.email ?? "")
+                            .font(.tte(13))
+                            .foregroundColor(.tteMediumGray)
+                    }
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel(L("settings.editNickname"))
             }
             .padding(.vertical, 6)
 
@@ -140,6 +158,57 @@ struct SettingsView: View {
             } label: {
                 Label(L("settings.travelStats"), systemImage: "chart.bar.fill")
             }
+
+            travelStyleRow
+        }
+    }
+
+    // 여행 취향 — 온보딩에서 건너뛴 유저·기존 유저도 여기서 설정, 탐색 추천에 즉시 반영
+    private var travelStyleRow: some View {
+        Menu {
+            ForEach(CourseTag.allCases, id: \.self) { tag in
+                Button {
+                    updatePreferredTag(tag)
+                } label: {
+                    if userService.currentUser?.preferredTag == tag.rawValue {
+                        Label("\(tag.emoji) \(tag.displayName)", systemImage: "checkmark")
+                    } else {
+                        Text("\(tag.emoji) \(tag.displayName)")
+                    }
+                }
+            }
+            Divider()
+            Button {
+                updatePreferredTag(nil)
+            } label: {
+                Text(L("settings.travelStyle.none"))
+            }
+        } label: {
+            HStack {
+                Label(L("settings.travelStyle"), systemImage: "heart.text.square")
+                    .foregroundColor(.tteDarkGray)
+                Spacer()
+                Text(currentStyleLabel)
+                    .font(.tte(14))
+                    .foregroundColor(.tteMediumGray)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.tte(11))
+                    .foregroundColor(Color(UIColor.tertiaryLabel))
+            }
+        }
+    }
+
+    private var currentStyleLabel: String {
+        guard let raw = userService.currentUser?.preferredTag,
+              let tag = CourseTag(rawValue: raw) else { return L("settings.travelStyle.none") }
+        return "\(tag.emoji) \(tag.displayName)"
+    }
+
+    private func updatePreferredTag(_ tag: CourseTag?) {
+        guard let uid = authService.currentUser?.uid else { return }
+        Task {
+            try? await userService.updatePreferredTag(uid: uid, tag: tag?.rawValue)
+            Haptics.light()
         }
     }
 

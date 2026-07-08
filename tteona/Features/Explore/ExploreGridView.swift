@@ -37,6 +37,11 @@ struct ExploreGridView: View {
         GridItem(.flexible(), spacing: 8),
     ]
 
+    /// 유저 선호 태그 (온보딩/설정에서 선택) — 추천 API와 로컬 폴백 정렬에 반영
+    private var preferredCourseTag: CourseTag? {
+        userService.currentUser?.preferredTag.flatMap(CourseTag.init(rawValue:))
+    }
+
     private var sortedCourses: [Course] {
         let base = courseService.courses
         switch sortMode {
@@ -45,7 +50,14 @@ struct ExploreGridView: View {
         case .popular:
             return base.sorted { $0.likeCount > $1.likeCount }
         case .recommended:
-            guard !recommendedIds.isEmpty else { return base.sorted { $0.likeCount > $1.likeCount } }
+            guard !recommendedIds.isEmpty else {
+                // 서버 추천 도착 전 폴백: 선호 태그 코스 우선 → 인기순
+                let pref = preferredCourseTag
+                return base.sorted {
+                    if let pref, ($0.tag == pref) != ($1.tag == pref) { return $0.tag == pref }
+                    return $0.likeCount > $1.likeCount
+                }
+            }
             let map = Dictionary(uniqueKeysWithValues: base.map { ($0.courseId, $0) })
             let ranked = recommendedIds.compactMap { map[$0] }
             let rest = base.filter { c in !recommendedIds.contains(c.courseId) }
@@ -58,9 +70,7 @@ struct ExploreGridView: View {
             VStack(spacing: 0) {
                 sortChips
                 if isLoading && courseService.courses.isEmpty {
-                    Spacer()
-                    ProgressView().tint(.tteOrange)
-                    Spacer()
+                    skeletonGrid
                 } else if sortedCourses.isEmpty {
                     emptyState
                 } else {
@@ -108,6 +118,10 @@ struct ExploreGridView: View {
             // 위치를 처음 확보하면 위치 기반으로 추천 1회 재조회
             guard !didRefetchWithLocation, loc != nil else { return }
             didRefetchWithLocation = true
+            Task { await refetchRecommendations() }
+        }
+        .onChange(of: userService.currentUser?.preferredTag) { _, _ in
+            // 설정에서 여행 취향 변경 시 추천 즉시 갱신
             Task { await refetchRecommendations() }
         }
         .fullScreenCover(item: $courseSessionInfo) { info in
@@ -219,16 +233,26 @@ struct ExploreGridView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 12) {
+        VStack {
             Spacer()
-            Image(systemName: "square.grid.2x2")
-                .font(.tte(44))
-                .foregroundColor(.tteOrange.opacity(0.4))
-            Text(L("explore.empty"))
-                .font(.tte(15, .semibold))
-                .foregroundColor(.tteDarkGray)
+            TteEmptyState(image: "tteoni-guide", title: L("explore.empty"))
             Spacer()
         }
+    }
+
+    // MARK: - 스켈레톤 로딩 (spinner 대신 카드 자리 표시 → 체감 로딩 개선)
+
+    private var skeletonGrid: some View {
+        ScrollView {
+            LazyVGrid(columns: columns, spacing: 8) {
+                ForEach(0..<6, id: \.self) { _ in
+                    SkeletonGridCell()
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 4)
+        }
+        .disabled(true)
     }
 
     // MARK: - Load
@@ -241,7 +265,8 @@ struct ExploreGridView: View {
         async let thumbsTask = CourseThumbnailService.shared.fetchAllThumbnails()
         async let recTask = RecommendationService.shared.fetchRecommended(
             userId: authService.currentUser?.uid,
-            lat: coord?.latitude, lng: coord?.longitude
+            lat: coord?.latitude, lng: coord?.longitude,
+            tag: preferredCourseTag
         )
         async let rankTask = StatsService.shared.fetchCreatorRanking()
         _ = await coursesTask
@@ -251,14 +276,41 @@ struct ExploreGridView: View {
         isLoading = false
     }
 
-    // 위치 확보 후 추천만 재조회 (전체 리로드 없이)
+    // 위치 확보·취향 변경 후 추천만 재조회 (전체 리로드 없이)
     private func refetchRecommendations() async {
-        guard let coord = locationService.currentLocation?.coordinate else { return }
+        let coord = locationService.currentLocation?.coordinate
         let ids = await RecommendationService.shared.fetchRecommended(
             userId: authService.currentUser?.uid,
-            lat: coord.latitude, lng: coord.longitude
+            lat: coord?.latitude, lng: coord?.longitude,
+            tag: preferredCourseTag
         )
         await MainActor.run { recommendedIds = ids }
+    }
+}
+
+// MARK: - Skeleton Cell
+
+private struct SkeletonGridCell: View {
+    @State private var pulse = false
+
+    var body: some View {
+        Color(UIColor.secondarySystemBackground)
+            .aspectRatio(3.0 / 4.0, contentMode: .fit)
+            .overlay(alignment: .bottomLeading) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Capsule()
+                        .fill(Color(UIColor.tertiarySystemFill))
+                        .frame(width: 110, height: 12)
+                    Capsule()
+                        .fill(Color(UIColor.tertiarySystemFill))
+                        .frame(width: 70, height: 9)
+                }
+                .padding(10)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .opacity(pulse ? 0.45 : 1)
+            .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: pulse)
+            .onAppear { pulse = true }
     }
 }
 

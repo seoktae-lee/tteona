@@ -27,7 +27,7 @@ struct MainView: View {
     @State private var showRegionSearch = false
     @State private var courseFilter: CourseFilter = .all
     @State private var searchText = ""
-    @State private var isSearchActive = false
+    @FocusState private var searchFocused: Bool
     @State private var isLoadingCourses = false
     @State private var previewCourse: Course?
 
@@ -280,7 +280,9 @@ struct MainView: View {
                             .font(.tte(14))
                             .foregroundColor(.tteDarkGray)
                             .autocorrectionDisabled()
+                            .focused($searchFocused)
                             .onSubmit {
+                                searchFocused = false
                                 Task { await performMapSearch() }
                             }
                         
@@ -337,10 +339,85 @@ struct MainView: View {
                 .padding(.horizontal, 16)
             }
             .frame(height: 40)
-            .padding(.top, 56)
+            .padding(.top, topSafeInset + 8)
+
+            // 검색 제안 카드 — "타이핑=코스 필터 / 지도 이동=명시적 선택"으로 이중 역할 분리
+            if searchFocused && !searchText.isEmpty {
+                searchSuggestionCard
+                    .padding(.horizontal, 16)
+                    .padding(.top, 10)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
 
             Spacer()
         }
+        .animation(.easeInOut(duration: 0.2), value: searchFocused && !searchText.isEmpty)
+    }
+
+    /// 기기별 상단 세이프에어리어 — 컨테이너가 ignoresSafeArea 상태라 윈도우에서 직접 조회
+    /// (기존 고정 56pt는 노치/다이나믹아일랜드/SE에서 어긋남)
+    private var topSafeInset: CGFloat {
+        let inset = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }
+            .first { $0.isKeyWindow }?
+            .safeAreaInsets.top ?? 0
+        return max(inset, 20)
+    }
+
+    // MARK: - 검색 제안 카드
+    private var searchSuggestionCard: some View {
+        VStack(spacing: 0) {
+            // 현재 입력으로 필터된 코스 수 — 탭하면 키보드를 내리고 지도에서 확인
+            Button {
+                searchFocused = false
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "square.grid.2x2")
+                        .font(.tte(14))
+                        .foregroundColor(.tteOrange)
+                        .frame(width: 22)
+                    Text(L("main.courseResults", filteredCourses.count))
+                        .font(.tte(14, .medium))
+                        .foregroundColor(.tteDarkGray)
+                    Spacer()
+                }
+                .padding(.horizontal, 14)
+                .frame(height: 44)
+                .contentShape(Rectangle())
+            }
+
+            Divider().padding(.leading, 46)
+
+            // 지역/장소로 지도 이동 — 기존 onSubmit의 숨은 동작을 눈에 보이는 선택지로
+            Button {
+                searchFocused = false
+                Task { await performMapSearch() }
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "location.magnifyingglass")
+                        .font(.tte(14))
+                        .foregroundColor(.tteOrange)
+                        .frame(width: 22)
+                    Text(L("main.goToRegion", searchText.trimmingCharacters(in: .whitespaces)))
+                        .font(.tte(14, .medium))
+                        .foregroundColor(.tteDarkGray)
+                        .lineLimit(1)
+                    Spacer()
+                    Image(systemName: "arrow.up.left")
+                        .font(.tte(12))
+                        .foregroundColor(.tteMediumGray)
+                }
+                .padding(.horizontal, 14)
+                .frame(height: 44)
+                .contentShape(Rectangle())
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.tteBackground)
+                .shadow(color: .black.opacity(0.12), radius: 10, y: 3)
+        )
     }
 
     // MARK: - 나라 크기에 맞는 줌 레벨로 이동
@@ -463,9 +540,43 @@ struct MainView: View {
     private var createCourseButton: some View {
         VStack {
             Spacer()
-            ZStack {
-                // 나의 오늘 — 정중앙 고정
+            ZStack(alignment: .bottom) {
+                // 보조 버튼 — 좌: 이어하기 도크(세로 스택 → 중앙 CTA와 겹침 방지), 우: 현재 위치
+                HStack(alignment: .bottom) {
+                    VStack(spacing: 10) {
+                        // 나의 오늘 이어하기
+                        if impromptuSessionStore.hasTodaySession,
+                           let saved = ImpromptuSessionStore.shared.loadTodaySession() {
+                            miniDockButton(icon: "figure.walk", label: L("main.resume")) {
+                                courseSessionInfo = nil
+                                impromptuRoomIds = Set(saved.roomIds)
+                            }
+                        }
+
+                        // 코스 이어하기
+                        if activeSessionStore.hasTodaySession {
+                            miniDockButton(icon: "map.fill", label: L("main.course")) {
+                                pendingNewCourse = nil
+                                showCourseResumeSheet = true
+                            }
+                        }
+                    }
+                    .padding(.leading, 24)
+
+                    Spacer()
+
+                    // 현재 위치
+                    miniDockButton(icon: "location.fill", label: nil) {
+                        guard let coord = locationService.currentLocation?.coordinate else { return }
+                        cameraCommand = gmsCamera(center: coord, latDelta: 0.05)
+                    }
+                    .accessibilityLabel(L("main.moveToCurrentLocation"))
+                    .padding(.trailing, 24)
+                }
+
+                // 나의 오늘 — 정중앙 고정 CTA
                 Button {
+                    Haptics.light()
                     handleImpromptuTap()
                 } label: {
                     HStack(spacing: 8) {
@@ -483,69 +594,28 @@ struct MainView: View {
                             .shadow(color: .tteOrange.opacity(0.45), radius: 12, y: 4)
                     )
                 }
-
-                // 좌측 — 이어하기 버튼들
-                HStack {
-                    HStack(spacing: 10) {
-                        // 나의 오늘 이어하기
-                        if impromptuSessionStore.hasTodaySession,
-                           let saved = ImpromptuSessionStore.shared.loadTodaySession() {
-                            Button {
-                                courseSessionInfo = nil
-                                impromptuRoomIds = Set(saved.roomIds)
-                            } label: {
-                                VStack(spacing: 3) {
-                                    Image(systemName: "figure.walk")
-                                        .font(.tte(16, .semibold))
-                                    Text(L("main.resume"))
-                                        .font(.tte(9, .medium))
-                                }
-                                .foregroundColor(.tteOrange)
-                                .frame(width: 48, height: 48)
-                                .background(Circle().fill(Color.tteBackground).shadow(color: .black.opacity(0.15), radius: 8, y: 2))
-                            }
-                        }
-
-                        // 코스 이어하기
-                        if activeSessionStore.hasTodaySession {
-                            Button {
-                                pendingNewCourse = nil
-                                showCourseResumeSheet = true
-                            } label: {
-                                VStack(spacing: 3) {
-                                    Image(systemName: "map.fill")
-                                        .font(.tte(16, .semibold))
-                                    Text(L("main.course"))
-                                        .font(.tte(9, .medium))
-                                }
-                                .foregroundColor(.tteOrange)
-                                .frame(width: 48, height: 48)
-                                .background(Circle().fill(Color.tteBackground).shadow(color: .black.opacity(0.15), radius: 8, y: 2))
-                            }
-                        }
-                    }
-                    .padding(.leading, 24)
-                    Spacer()
-                }
-
-                // 현재 위치 — 나의 오늘 우측에 독립 배치
-                HStack {
-                    Spacer()
-                    Button {
-                        guard let coord = locationService.currentLocation?.coordinate else { return }
-                        cameraCommand = gmsCamera(center: coord, latDelta: 0.05)
-                    } label: {
-                        Image(systemName: "location.fill")
-                            .font(.tte(18, .medium))
-                            .foregroundColor(.tteOrange)
-                            .frame(width: 48, height: 48)
-                            .background(Circle().fill(Color.tteBackground).shadow(color: .black.opacity(0.15), radius: 8, y: 2))
-                    }
-                    .accessibilityLabel(L("main.moveToCurrentLocation"))
-                    .padding(.trailing, 24)
-                }
             }
             .padding(.bottom, 104)
+        }
+    }
+
+    /// 지도 위 48pt 원형 보조 버튼 — 이어하기·현재위치 공용 (스타일 일원화)
+    private func miniDockButton(icon: String, label: String?, action: @escaping () -> Void) -> some View {
+        Button {
+            Haptics.light()
+            action()
+        } label: {
+            VStack(spacing: 3) {
+                Image(systemName: icon)
+                    .font(.tte(label == nil ? 18 : 16, .semibold))
+                if let label {
+                    Text(label)
+                        .font(.tte(9, .medium))
+                }
+            }
+            .foregroundColor(.tteOrange)
+            .frame(width: 48, height: 48)
+            .background(Circle().fill(Color.tteBackground).shadow(color: .black.opacity(0.15), radius: 8, y: 2))
         }
     }
 
@@ -661,21 +731,14 @@ struct CourseCardView: View {
 extension MainView {
     // MARK: - Empty Search Result
     private var emptySearchResultOverlay: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "magnifyingglass")
-                .font(.tte(40))
-                .foregroundColor(.tteOrange.opacity(0.6))
-            
-            Text(L("main.noSearchResults"))
-                .font(.tte(17, .bold))
-                .foregroundColor(.tteDarkGray)
-
-            Text(L("main.tryOtherKeyword"))
-                .font(.tte(14))
-                .foregroundColor(.tteMediumGray)
-        }
-        .padding(.horizontal, 32)
-        .padding(.vertical, 40)
+        TteEmptyState(
+            image: "tteoni-wink",
+            title: L("main.noSearchResults"),
+            subtitle: L("main.tryOtherKeyword"),
+            imageSize: 100
+        )
+        .padding(.vertical, 36)
+        .padding(.horizontal, 12)
         .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 24))
         .shadow(color: .black.opacity(0.1), radius: 20)

@@ -37,6 +37,14 @@ class UserService: ObservableObject {
         currentUser?.nickname = nickname
     }
 
+    /// 선호 여행 태그 저장 (nil이면 해제) — 탐색 탭 추천 개인화에 사용
+    func updatePreferredTag(uid: String, tag: String?) async throws {
+        try await db.collection("users").document(uid).updateData([
+            "preferredTag": tag ?? FieldValue.delete()
+        ])
+        currentUser?.preferredTag = tag
+    }
+
     // WAS 업로드 라우트가 Firestore profileImageUrl 필드도 함께 저장하므로,
     // 여기서는 원격 쓰기 없이 로컬 상태만 갱신한다.
     func setProfileImageUrl(_ url: String) {

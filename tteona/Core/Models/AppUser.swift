@@ -10,17 +10,21 @@ struct AppUser: Codable, Equatable {
     var creatorLabel: String?
     var blockedUserIds: [String]?
     var profileImageUrl: String?
+    /// 선호 여행 태그 (CourseTag.rawValue) — 온보딩/설정에서 선택, 코스 추천 개인화에 사용
+    var preferredTag: String?
 
-    init(uid: String, email: String, nickname: String = "", createdAt: Date = Date(), blockedUserIds: [String]? = nil) {
+    init(uid: String, email: String, nickname: String = "", createdAt: Date = Date(),
+         blockedUserIds: [String]? = nil, preferredTag: String? = nil) {
         self.uid = uid
         self.email = email
         self.nickname = nickname
         self.createdAt = createdAt
         self.blockedUserIds = blockedUserIds
+        self.preferredTag = preferredTag
     }
 
     enum CodingKeys: String, CodingKey {
-        case uid, email, nickname, createdAt, isVerified, creatorLabel, blockedUserIds, profileImageUrl
+        case uid, email, nickname, createdAt, isVerified, creatorLabel, blockedUserIds, profileImageUrl, preferredTag
     }
 
     // 누락 필드(예: 오래된 계정의 isVerified)가 있어도 디코딩이 실패하지 않도록 관대하게 처리.
@@ -35,5 +39,6 @@ struct AppUser: Codable, Equatable {
         creatorLabel   = try? c.decode(String.self, forKey: .creatorLabel)
         blockedUserIds = try? c.decode([String].self, forKey: .blockedUserIds)
         profileImageUrl = try? c.decode(String.self, forKey: .profileImageUrl)
+        preferredTag   = try? c.decode(String.self, forKey: .preferredTag)
     }
 }

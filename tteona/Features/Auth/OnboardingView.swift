@@ -21,8 +21,9 @@ struct OnboardingView: View {
     @State private var notificationGranted = false
     @State private var cameraGranted = false
     @State private var photoLibraryGranted = false
+    @State private var selectedStyle: CourseTag? = nil
 
-    private let totalSteps = 5
+    private let totalSteps = 6
 
     init() {
         #if DEBUG
@@ -49,8 +50,9 @@ struct OnboardingView: View {
                     case 0: splashStep
                     case 1: featureIntroStep
                     case 2: nicknameStep
-                    case 3: permissionStep
-                    case 4: termsStep
+                    case 3: styleStep
+                    case 4: permissionStep
+                    case 5: termsStep
                     default: EmptyView()
                     }
                 }
@@ -187,7 +189,84 @@ struct OnboardingView: View {
         }
     }
 
-    // MARK: - Step 3: 권한
+    // MARK: - Step 3: 여행 취향 (건너뛰기 가능 — 추천 개인화 시드)
+    private var styleStep: some View {
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text(L("onboarding.style.title"))
+                    .font(.tte(30, .bold))
+                    .foregroundColor(.tteDarkGray)
+                    .padding(.top, 24)
+
+                Text(L("onboarding.style.subtitle"))
+                    .font(.tte(15))
+                    .foregroundColor(.tteMediumGray)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 24)
+
+            Spacer()
+
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)],
+                      spacing: 12) {
+                ForEach(CourseTag.allCases, id: \.self) { tag in
+                    styleCard(tag)
+                }
+            }
+            .padding(.horizontal, 24)
+
+            Spacer()
+
+            VStack(spacing: 12) {
+                nextButton(title: L("common.next")) {
+                    Haptics.light()
+                    withAnimation { step = 4 }
+                }
+                .disabled(selectedStyle == nil)
+                .opacity(selectedStyle == nil ? 0.4 : 1)
+
+                Button(L("onboarding.style.skip")) {
+                    selectedStyle = nil
+                    withAnimation { step = 4 }
+                }
+                .font(.tte(14))
+                .foregroundColor(.tteMediumGray)
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 40)
+        }
+    }
+
+    private func styleCard(_ tag: CourseTag) -> some View {
+        let isOn = selectedStyle == tag
+        return Button {
+            Haptics.light()
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                selectedStyle = isOn ? nil : tag
+            }
+        } label: {
+            VStack(spacing: 10) {
+                Text(tag.emoji)
+                    .font(.system(size: 40))
+                Text(tag.displayName)
+                    .font(.tte(15, .semibold))
+                    .foregroundColor(isOn ? .tteOrange : .tteDarkGray)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 110)
+            .background(
+                RoundedRectangle(cornerRadius: 18)
+                    .fill(isOn ? Color.tteOrange.opacity(0.1) : Color(UIColor.secondarySystemBackground))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18)
+                            .stroke(isOn ? Color.tteOrange : Color.clear, lineWidth: 1.5)
+                    )
+            )
+            .scaleEffect(isOn ? 1.03 : 1)
+        }
+    }
+
+    // MARK: - Step 4: 권한
     private var permissionStep: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 12) {
@@ -254,7 +333,7 @@ struct OnboardingView: View {
         }
     }
 
-    // MARK: - Step 4: 약관
+    // MARK: - Step 5: 약관
     private var termsStep: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 12) {
@@ -365,7 +444,8 @@ struct OnboardingView: View {
         let user = AppUser(
             uid: uid,
             email: authService.currentUser?.email ?? "",
-            nickname: nickname.trimmingCharacters(in: .whitespaces)
+            nickname: nickname.trimmingCharacters(in: .whitespaces),
+            preferredTag: selectedStyle?.rawValue
         )
         try? await userService.saveUser(user)
         // Firestore users 문서가 있으면 기존 유저로 간주되어 RootView가 메인으로 전환
@@ -427,7 +507,7 @@ struct OnboardingView: View {
         await requestCamera()
         await requestPhotoLibrary()
         await MainActor.run {
-            withAnimation { step = 4 }
+            withAnimation { step = 5 }
         }
     }
 }
