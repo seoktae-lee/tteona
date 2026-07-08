@@ -1,11 +1,16 @@
 import AVFoundation
+import CoreImage
 import Foundation
+import Metal
 import UIKit
 
 class CameraService: NSObject {
     let captureSession = AVCaptureSession()
     private var videoDevice: AVCaptureDevice?
     private(set) var currentCameraPosition: AVCaptureDevice.Position = .back
+    // 가상 멀티렌즈 기기 사용 시, UI '1x'에 해당하는 실제 videoZoomFactor (초광각 포함 기기는 보통 2.0)
+    private var zoomBaseFor1x: CGFloat = 1.0
+    private var hasUltraWide = false
     // 중력 센서 기반 물리 방향 추적 — 화면 세로 잠금 상태에서도 가로 촬영을 정확히 감지
     private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
     private var videoDataOutput = AVCaptureVideoDataOutput()
@@ -14,7 +19,21 @@ class CameraService: NSObject {
     private var assetWriter: AVAssetWriter?
     private var videoWriterInput: AVAssetWriterInput?
     private var audioWriterInput: AVAssetWriterInput?
+    private var pixelBufferAdaptor: AVAssetWriterInputPixelBufferAdaptor?
     private var outputURL: URL?
+
+    // MARK: 나루 무드 필터
+    /// 현재 필터 — 프리뷰 콜백과 기록 픽셀버퍼 양쪽에 동일 체인 적용
+    var activeFilter: NaruFilter = .none
+    /// 필터 활성 시 매 비디오 프레임의 필터 적용 CIImage (writingQueue에서 호출됨)
+    var onPreviewImage: ((CIImage) -> Void)?
+    private lazy var filterContext: CIContext = {
+        if let dev = MTLCreateSystemDefaultDevice() {
+            return CIContext(mtlDevice: dev, options: [.cacheIntermediates: false])
+        }
+        return CIContext()
+    }()
+    private let filterColorSpace = CGColorSpaceCreateDeviceRGB()
 
     private let writingQueue = DispatchQueue(label: "camera.writing")
     private var isWritingSessionStarted = false
@@ -37,8 +56,10 @@ class CameraService: NSObject {
         captureSession.beginConfiguration()
         captureSession.sessionPreset = .hd1920x1080
 
-        // 비디오
-        guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
+        // 비디오 — 가상 멀티렌즈 기기(트리플/듀얼와이드)를 단일 입력으로 사용한다.
+        // 0.5x/1x/3x·핀치 줌을 전부 videoZoomFactor로 처리해 렌즈 전환 시 세션 재구성을 없앤다
+        // (기존엔 0.5x↔1x가 입력 교체 → 메인 스레드 재구성으로 버벅였음).
+        guard let device = bestVideoDevice(position: .back),
               let videoInput = try? AVCaptureDeviceInput(device: device),
               captureSession.canAddInput(videoInput) else {
             captureSession.commitConfiguration()
@@ -46,7 +67,14 @@ class CameraService: NSObject {
         }
         captureSession.addInput(videoInput)
         videoDevice = device
+        currentCameraPosition = .back
         rotationCoordinator = AVCaptureDevice.RotationCoordinator(device: device, previewLayer: nil)
+        updateZoomBase(for: device)
+        // 기본은 1x(광각). 가상 기기 기본값은 초광각(0.5x)이라 명시적으로 맞춘다.
+        if (try? device.lockForConfiguration()) != nil {
+            device.videoZoomFactor = zoomBaseFor1x
+            device.unlockForConfiguration()
+        }
 
         // 오디오
         if let audioDevice = AVCaptureDevice.default(for: .audio),
@@ -61,6 +89,7 @@ class CameraService: NSObject {
         if captureSession.canAddOutput(videoDataOutput) {
             captureSession.addOutput(videoDataOutput)
         }
+        applyStabilization()
 
         // 오디오 데이터 출력
         audioDataOutput.setSampleBufferDelegate(self, queue: writingQueue)
@@ -80,7 +109,8 @@ class CameraService: NSObject {
     func flipCamera() {
         guard !isRecording else { return }
         let newPosition: AVCaptureDevice.Position = currentCameraPosition == .back ? .front : .back
-        guard let newDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: newPosition),
+        // 후면은 가상 멀티렌즈, 전면은 광각. (전/후면 전환은 사용자의 명시적 동작이라 재구성이 불가피)
+        guard let newDevice = bestVideoDevice(position: newPosition),
               let newInput = try? AVCaptureDeviceInput(device: newDevice) else { return }
 
         captureSession.beginConfiguration()
@@ -92,54 +122,99 @@ class CameraService: NSObject {
             videoDevice = newDevice
             currentCameraPosition = newPosition
             rotationCoordinator = AVCaptureDevice.RotationCoordinator(device: newDevice, previewLayer: nil)
+            updateZoomBase(for: newDevice)
+            if (try? newDevice.lockForConfiguration()) != nil {
+                newDevice.videoZoomFactor = zoomBaseFor1x
+                newDevice.unlockForConfiguration()
+            }
         }
         captureSession.commitConfiguration()
+        applyStabilization()
     }
 
-    // MARK: - Zoom
+    // MARK: - 카메라 기기 선택
+    /// 후면: 초광각·광각·망원을 아우르는 가상 기기 우선(트리플→듀얼와이드→듀얼→광각). 전면: 광각.
+    private func bestVideoDevice(position: AVCaptureDevice.Position) -> AVCaptureDevice? {
+        guard position == .back else {
+            return AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: position)
+        }
+        return AVCaptureDevice.default(.builtInTripleCamera, for: .video, position: .back)
+            ?? AVCaptureDevice.default(.builtInDualWideCamera, for: .video, position: .back)
+            ?? AVCaptureDevice.default(.builtInDualCamera, for: .video, position: .back)
+            ?? AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
+    }
+
+    /// UI '1x'에 해당하는 videoZoomFactor를 계산한다. 초광각을 포함한 가상 기기는
+    /// 초광각→광각 스위치오버 지점이 곧 1x(보통 2.0), 그 외엔 1.0.
+    private func updateZoomBase(for device: AVCaptureDevice) {
+        let hasUW = device.deviceType == .builtInUltraWideCamera
+            || device.constituentDevices.contains { $0.deviceType == .builtInUltraWideCamera }
+        hasUltraWide = hasUW
+        if hasUW, let first = device.virtualDeviceSwitchOverVideoZoomFactors.first {
+            zoomBaseFor1x = CGFloat(truncating: first)
+        } else {
+            zoomBaseFor1x = 1.0
+        }
+    }
+
+    // MARK: - 손떨림 방지
+    /// 비디오 데이터 출력 커넥션에 자동 손떨림 보정을 적용한다.
+    /// 기기 전환(전/후면·줌 렌즈 교체) 후에도 커넥션이 새로 생기므로 다시 호출한다.
+    private func applyStabilization() {
+        guard let connection = videoDataOutput.connection(with: .video),
+              connection.isVideoStabilizationSupported else { return }
+        connection.preferredVideoStabilizationMode = .auto
+    }
+
+    // MARK: - 핀치 줌 / 탭 초점
+    /// 현재 활성 비디오 기기의 줌 배율(광각 렌즈 기준 1.0~)
+    var currentZoomFactor: Double { Double(videoDevice?.videoZoomFactor ?? 1) }
+
+    /// 핀치 등으로 연속 줌을 조정한다(단위: 실제 videoZoomFactor). 가상 기기에서는
+    /// 하한(초광각)까지 내려가 0.5x도 연속으로 도달하며, 렌즈 전환은 시스템이 광학으로 처리한다.
+    func setContinuousZoom(_ factor: Double) {
+        guard let d = videoDevice else { return }
+        let minF = d.minAvailableVideoZoomFactor
+        let maxF = min(d.maxAvailableVideoZoomFactor, zoomBaseFor1x * 10) // 과도한 디지털 줌 방지
+        let clamped = CGFloat(max(Double(minF), min(factor, Double(maxF))))
+        guard (try? d.lockForConfiguration()) != nil else { return }
+        d.videoZoomFactor = clamped
+        d.unlockForConfiguration()
+    }
+
+    /// 프리뷰에서 탭한 지점(0~1로 정규화된 기기 좌표)에 초점·노출을 맞춘다.
+    func focus(at devicePoint: CGPoint) {
+        guard let d = videoDevice else { return }
+        guard (try? d.lockForConfiguration()) != nil else { return }
+        if d.isFocusPointOfInterestSupported, d.isFocusModeSupported(.continuousAutoFocus) {
+            d.focusPointOfInterest = devicePoint
+            d.focusMode = .continuousAutoFocus
+        }
+        if d.isExposurePointOfInterestSupported, d.isExposureModeSupported(.continuousAutoExposure) {
+            d.exposurePointOfInterest = devicePoint
+            d.exposureMode = .continuousAutoExposure
+        }
+        d.unlockForConfiguration()
+    }
+
+    // MARK: - Zoom (프리셋 0.5/1/3x)
     var availableZoomFactors: [Double] {
         var factors: [Double] = []
-        if AVCaptureDevice.default(.builtInUltraWideCamera, for: .video, position: .back) != nil {
-            factors.append(0.5)
-        }
+        if hasUltraWide { factors.append(0.5) }
         factors.append(1.0)
-        if let d = videoDevice, min(d.activeFormat.videoMaxZoomFactor, 15) >= 3 {
-            factors.append(3.0)
-        }
+        if let d = videoDevice, d.maxAvailableVideoZoomFactor >= zoomBaseFor1x * 3 { factors.append(3.0) }
         return factors
     }
 
-    func setZoom(_ factor: Double) {
-        if factor == 0.5 {
-            switchCamera(to: .builtInUltraWideCamera, zoom: 1.0)
-        } else {
-            if let input = captureSession.inputs.compactMap({ $0 as? AVCaptureDeviceInput }).first(where: { $0.device.hasMediaType(.video) }),
-               input.device.deviceType == .builtInUltraWideCamera {
-                switchCamera(to: .builtInWideAngleCamera, zoom: factor)
-            } else if let d = videoDevice {
-                try? d.lockForConfiguration()
-                d.videoZoomFactor = CGFloat(max(1, min(factor, d.activeFormat.videoMaxZoomFactor)))
-                d.unlockForConfiguration()
-            }
-        }
-    }
-
-    private func switchCamera(to type: AVCaptureDevice.DeviceType, zoom: Double) {
-        guard let newDevice = AVCaptureDevice.default(type, for: .video, position: .back),
-              let newInput = try? AVCaptureDeviceInput(device: newDevice) else { return }
-        captureSession.beginConfiguration()
-        captureSession.inputs.compactMap { $0 as? AVCaptureDeviceInput }
-            .filter { $0.device.hasMediaType(.video) }
-            .forEach { captureSession.removeInput($0) }
-        if captureSession.canAddInput(newInput) {
-            captureSession.addInput(newInput)
-            videoDevice = newDevice
-            rotationCoordinator = AVCaptureDevice.RotationCoordinator(device: newDevice, previewLayer: nil)
-            try? newDevice.lockForConfiguration()
-            newDevice.videoZoomFactor = CGFloat(zoom)
-            newDevice.unlockForConfiguration()
-        }
-        captureSession.commitConfiguration()
+    /// UI 배율(0.5/1/3x)로 부드럽게 줌한다. 렌즈 전환은 videoZoomFactor 변경만으로 시스템이
+    /// 광학 처리하므로 세션 재구성이 없다. ramp로 애니메이션(기본 카메라와 유사한 느낌).
+    func setZoom(_ uiFactor: Double) {
+        guard let d = videoDevice else { return }
+        let target = min(max(zoomBaseFor1x * CGFloat(uiFactor), d.minAvailableVideoZoomFactor),
+                         d.maxAvailableVideoZoomFactor)
+        guard (try? d.lockForConfiguration()) != nil else { return }
+        d.ramp(toVideoZoomFactor: target, withRate: 14)
+        d.unlockForConfiguration()
     }
 
     // MARK: - Recording
@@ -175,11 +250,22 @@ class CameraService: NSObject {
         writer.add(videoInput)
         writer.add(audioInput)
 
+        // 필터 기록용 어댑터 — 필터가 켜져 있으면 원본 대신 필터 적용 픽셀버퍼를 쓴다
+        let adaptor = AVAssetWriterInputPixelBufferAdaptor(
+            assetWriterInput: videoInput,
+            sourcePixelBufferAttributes: [
+                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+                kCVPixelBufferWidthKey as String: 1920,
+                kCVPixelBufferHeightKey as String: 1080,
+            ]
+        )
+
         writingQueue.async { [weak self] in
             guard let self else { return }
             self.assetWriter = writer
             self.videoWriterInput = videoInput
             self.audioWriterInput = audioInput
+            self.pixelBufferAdaptor = adaptor
             self.outputURL = url
             self.isWritingSessionStarted = false
             self.isRecording = true
@@ -203,6 +289,7 @@ class CameraService: NSObject {
                     self.assetWriter = nil
                     self.videoWriterInput = nil
                     self.audioWriterInput = nil
+                    self.pixelBufferAdaptor = nil
                     self.outputURL = nil
                     self.isWritingSessionStarted = false
                     self.onRecordingFinished?(url)
@@ -219,11 +306,12 @@ class CameraService: NSObject {
             self.videoWriterInput?.markAsFinished()
             self.audioWriterInput?.markAsFinished()
             writer.cancelWriting()
-            
+
             let url = self.outputURL
             self.assetWriter = nil
             self.videoWriterInput = nil
             self.audioWriterInput = nil
+            self.pixelBufferAdaptor = nil
             self.outputURL = nil
             self.isWritingSessionStarted = false
             
@@ -271,13 +359,32 @@ class CameraService: NSObject {
 // MARK: - Sample Buffer Delegate
 extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureAudioDataOutputSampleBufferDelegate {
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        let isVideo = output is AVCaptureVideoDataOutput
+
+        // 필터 프리뷰 — 녹화 여부와 무관하게 필터가 켜져 있으면 매 프레임 방출.
+        // 센서 버퍼는 landscape이므로 물리 방향 각도로 회전해 세로에서도 바로 서게 한다.
+        if isVideo, activeFilter != .none, let cb = onPreviewImage,
+           let pb = CMSampleBufferGetImageBuffer(sampleBuffer) {
+            var img = activeFilter.apply(to: CIImage(cvPixelBuffer: pb))
+            // 회전 보정: 녹화 메타(videoInput.transform)는 비디오 좌표계(y-down, 시계+)로 해석되지만
+            // CIImage는 y-up(반시계+)이라, 같은 변환을 그대로 쓰면 방향이 정확히 180° 뒤집힌다.
+            // 그래서 프리뷰에는 캡처 변환의 '역'을 적용해 CIImage 좌표계에 맞춘다. (녹화 경로는 그대로)
+            img = img.transformed(by: currentVideoTransform().inverted())
+            if currentCameraPosition == .front {
+                // 전면 미러링 (하드웨어 프리뷰와 동일한 좌우 반전)
+                img = img.transformed(by: CGAffineTransform(scaleX: -1, y: 1))
+            }
+            // 회전/반전으로 음수가 된 원점을 0으로 정규화
+            img = img.transformed(by: CGAffineTransform(translationX: -img.extent.minX, y: -img.extent.minY))
+            cb(img)
+        }
+
         guard isRecording,
               let writer = assetWriter,
               let videoInput = videoWriterInput,
               let audioInput = audioWriterInput else { return }
 
         let timestamp = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-        let isVideo = output is AVCaptureVideoDataOutput
 
         // 세션 시작
         if !isWritingSessionStarted {
@@ -295,11 +402,38 @@ extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapture
             return
         }
 
-        // 버퍼 쓰기
+        // 버퍼 쓰기 — 필터가 켜져 있으면 필터 적용 픽셀버퍼로 대체 (WYSIWYG)
         if isVideo, videoInput.isReadyForMoreMediaData {
-            videoInput.append(sampleBuffer)
+            if activeFilter == .none {
+                videoInput.append(sampleBuffer)
+            } else {
+                appendFiltered(sampleBuffer: sampleBuffer, at: timestamp)
+            }
         } else if !isVideo, audioInput.isReadyForMoreMediaData {
             audioInput.append(sampleBuffer)
         }
+    }
+
+    /// 필터 체인을 적용한 프레임을 픽셀버퍼로 렌더해 어댑터로 기록한다
+    private func appendFiltered(sampleBuffer: CMSampleBuffer, at timestamp: CMTime) {
+        guard let adaptor = pixelBufferAdaptor,
+              let src = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        let filtered = activeFilter.apply(to: CIImage(cvPixelBuffer: src))
+
+        var out: CVPixelBuffer?
+        if let pool = adaptor.pixelBufferPool {
+            CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &out)
+        }
+        if out == nil {
+            // 풀 준비 전 첫 프레임 폴백
+            CVPixelBufferCreate(
+                kCFAllocatorDefault,
+                CVPixelBufferGetWidth(src), CVPixelBufferGetHeight(src),
+                kCVPixelFormatType_32BGRA, nil, &out
+            )
+        }
+        guard let out else { return }
+        filterContext.render(filtered, to: out, bounds: filtered.extent, colorSpace: filterColorSpace)
+        adaptor.append(out, withPresentationTime: timestamp)
     }
 }

@@ -23,6 +23,13 @@ final class ProManager: ObservableObject {
     /// 한 장소(클립)당 최대 촬영 길이 (초) — 무료 5초, PRO는 제한 없음(총 예산 내)
     var vlogClipMaxSeconds: Double? { isPro ? nil : 5 }
 
+    /// 세션 예산을 클립 단위로 나눈 칸 수 — 무료는 6칸(30÷5) 분절 링,
+    /// PRO는 클립 제한이 없어 분절이 의미 없으므로 nil(연속 링)을 반환한다.
+    var vlogSegmentCount: Int? {
+        guard let clip = vlogClipMaxSeconds, clip > 0 else { return nil }
+        return Int((vlogBudgetSeconds / clip).rounded())
+    }
+
     private var isConfigured: Bool { Purchases.isConfigured }
 
     private init() {}

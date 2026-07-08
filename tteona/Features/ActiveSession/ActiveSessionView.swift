@@ -1,6 +1,7 @@
 import SwiftUI
 import MapKit
 import GoogleMaps
+import AVFoundation
 
 struct ActiveSessionView: View {
     let course: Course
@@ -34,6 +35,7 @@ struct ActiveSessionView: View {
     @State private var farCaptureDistance: Double?
     @State private var vlogCompleted = false
     @State private var showExitNotice = false
+    @State private var recordedSeconds: Double = 0   // 세션 누적 촬영 길이(초) — 진행률 바용
     @AppStorage("didShowSessionExitNotice") private var didShowExitNotice = false
 
     private let sessionStore = ActiveSessionStore.shared
@@ -63,6 +65,7 @@ struct ActiveSessionView: View {
         .task {
             guard !didStartSession else { return }
             didStartSession = true
+            recomputeRecordedSeconds()
             locationService.requestPermission()
             locationService.startTracking(places: course.places)
             if let saved = sessionStore.loadTodaySession(),
@@ -381,6 +384,8 @@ struct ActiveSessionView: View {
                     }
                 }
 
+                if !visitedList.isEmpty { budgetBar }
+
                 if let place = currentPlace, !allVisited {
                     // 거리 표시
                     if let distance = locationService.distance(to: place) {
@@ -460,10 +465,69 @@ struct ActiveSessionView: View {
         dismiss()
     }
 
+    // MARK: - 촬영 예산 진행률 바
+    private var budgetSeconds: Double { ProManager.shared.vlogBudgetSeconds }
+
+    private var budgetBar: some View {
+        let full = recordedSeconds >= budgetSeconds
+        let frac = min(1, max(0, recordedSeconds / budgetSeconds))
+        return VStack(spacing: 6) {
+            HStack {
+                Text(L("impromptu.videoBudget"))
+                    .font(.tte(12, .semibold))
+                    .foregroundColor(.tteMediumGray)
+                Spacer()
+                Text(budgetValueText)
+                    .font(.tte(12, .bold))
+                    .foregroundColor(full ? .red : .tteOrange)
+            }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.tteMediumGray.opacity(0.2))
+                    Capsule()
+                        .fill(full ? Color.red : Color.tteOrange)
+                        .frame(width: max(0, geo.size.width * frac))
+                }
+            }
+            .frame(height: 6)
+        }
+        .padding(.horizontal, 4)
+    }
+
+    private var budgetValueText: String {
+        if ProManager.shared.isPro {
+            return "\(Self.mmss(recordedSeconds)) / \(Self.mmss(budgetSeconds))"
+        }
+        return L("impromptu.videoBudgetValue",
+                 Int(recordedSeconds.rounded()), Int(budgetSeconds.rounded()))
+    }
+
+    private static func mmss(_ s: Double) -> String {
+        let v = max(0, Int(s.rounded()))
+        return String(format: "%d:%02d", v / 60, v % 60)
+    }
+
+    /// 세션 폴더의 클립 길이를 합산해 진행률 바를 갱신한다.
+    private func recomputeRecordedSeconds() {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let dir = docs.appendingPathComponent("Tteona/Sessions/\(course.courseId)")
+        Task {
+            var total: Double = 0
+            let files = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
+            for f in files where f.pathExtension.lowercased() == "mp4" {
+                if let d = try? await AVURLAsset(url: f).load(.duration) {
+                    total += CMTimeGetSeconds(d)
+                }
+            }
+            await MainActor.run { self.recordedSeconds = total }
+        }
+    }
+
     private func handleCameraDismiss() {
         guard let place = currentPlace else { return }
         Haptics.success()
         visitedPlaces.insert(place.order)
+        recomputeRecordedSeconds()
         if !roomIds.isEmpty, let uid = authService.currentUser?.uid {
             let nickname = userService.currentUser?.nickname ?? L("session.member")
             let lat = locationService.currentLocation?.coordinate.latitude ?? place.latitude

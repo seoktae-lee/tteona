@@ -422,6 +422,52 @@
         }
       }
     },
+    "auth.error.googleFailedAndroid" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google Sign-In failed. (%@)\nPlease try again later."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Googleログインに失敗しました。（%@）\nしばらくしてからもう一度お試しください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google 로그인에 실패했습니다. (%@)\n잠시 후 다시 시도해주세요."
+          }
+        }
+      }
+    },
+    "auth.error.googleNoAccount" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No Google account is signed in on this device.\nAdd a Google account in Settings > Accounts and try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この端末にログイン済みのGoogleアカウントがありません。\n設定 > アカウントでGoogleアカウントを追加してから再度お試しください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 기기에 로그인된 Google 계정이 없어요.\n설정 > 계정에서 Google 계정을 추가한 뒤 다시 시도해주세요."
+          }
+        }
+      }
+    },
     "auth.error.googleToken" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -441,6 +487,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Google 인증 토큰을 가져올 수 없습니다."
+          }
+        }
+      }
+    },
+    "auth.error.initFailed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App initialization failed. Check your network and restart the app."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリの初期化に失敗しました。ネットワークを確認して再起動してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "앱 초기화에 실패했어요. 네트워크 확인 후 다시 실행해주세요."
           }
         }
       }
@@ -533,6 +602,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "카카오 로그인에 실패했습니다.\n%@"
+          }
+        }
+      }
+    },
+    "auth.error.kakaoFailedSimple" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kakao Sign-In failed. Please try again later."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カカオログインに失敗しました。しばらくしてからもう一度お試しください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "카카오 로그인에 실패했어요. 잠시 후 다시 시도해주세요."
           }
         }
       }
@@ -648,6 +740,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "네트워크 오류가 발생했습니다."
+          }
+        }
+      }
+    },
+    "auth.error.profileSaveFailed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Failed to save your profile. Please try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プロフィールの保存に失敗しました。もう一度お試しください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로필 저장에 실패했어요. 다시 시도해주세요."
           }
         }
       }
@@ -786,6 +901,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "비밀번호를 잊으셨나요?"
+          }
+        }
+      }
+    },
+    "auth.kakaoLogin" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kakao login"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カカオログイン"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "카카오 로그인"
           }
         }
       }
@@ -1411,6 +1549,29 @@
         }
       }
     },
+    "block.doneShort" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The author has been blocked."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "作成者をブロックしました。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "작성자가 차단되었습니다."
+          }
+        }
+      }
+    },
     "blocked.empty" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1480,6 +1641,229 @@
         }
       }
     },
+    "camera.budgetCaptionFree" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$ds per spot · %2$ds total today"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1か所%1$d秒・本日合計%2$d秒"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "장소당 %1$d초 · 오늘 총 %2$d초"
+          }
+        }
+      }
+    },
+    "camera.budgetCaptionPro" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unlimited · %@ total today"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無制限・本日合計%@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "무제한 · 오늘 총 %@"
+          }
+        }
+      }
+    },
+    "camera.clipElapsed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ / %2$ds"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ / %2$d秒"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ / %2$d초"
+          }
+        }
+      }
+    },
+    "camera.clipHintFree" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This spot · up to 5s"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この場所・最大5秒"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이번 장소 · 최대 5초"
+          }
+        }
+      }
+    },
+    "camera.clipHintPro" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This spot · film freely"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この場所・自由に撮影"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이번 장소 · 자유롭게 담기"
+          }
+        }
+      }
+    },
+    "camera.filter.cozy" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cozy"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ぽかぽか"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "포근"
+          }
+        }
+      }
+    },
+    "camera.filter.film" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Film"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "フィルム"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "필름"
+          }
+        }
+      }
+    },
+    "camera.filter.fresh" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fresh"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "さわやか"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "청량"
+          }
+        }
+      }
+    },
+    "camera.budgetToastFree" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%1$ds per spot · up to %2$ds per vlog" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "1か所%1$d秒・Vlogあたり最大%2$d秒" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "장소당 %1$d초 · 브이로그당 최대 %2$d초" } }
+      }
+    },
+    "camera.budgetToastPro" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Up to %1$d min per vlog" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "Vlogあたり最大%1$d分まで撮影可能" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "브이로그당 최대 %1$d분 촬영 가능" } }
+      }
+    },
+    "camera.filter.none" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Original"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "標準"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "기본"
+          }
+        }
+      }
+    },
     "camera.hint" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1499,6 +1883,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "버튼을 눌러 촬영 시작 · 다시 누르면 종료"
+          }
+        }
+      }
+    },
+    "camera.hintAuto" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tap to auto-record 5s"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ボタンで5秒自動撮影"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "버튼을 누르면 5초 자동 촬영"
           }
         }
       }
@@ -1595,6 +2002,29 @@
         }
       }
     },
+    "camera.recordingHintAuto" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auto-recording · saves when done"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自動撮影中・完了後に自動保存"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "자동 촬영 중 · 끝나면 자동 저장"
+          }
+        }
+      }
+    },
     "camera.saveSuccess" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1664,6 +2094,29 @@
         }
       }
     },
+    "camera.switchCamera" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Switch camera"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カメラ切り替え"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "카메라 전환"
+          }
+        }
+      }
+    },
     "camera.tip" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1683,6 +2136,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "💡 버튼으로 촬영 시작·종료, 가로·세로 자유롭게"
+          }
+        }
+      }
+    },
+    "camera.tipAuto" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "💡 One tap = 5s auto clip · portrait or landscape"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "💡 1タップで5秒自動撮影・縦横自由に"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "💡 한 번 누르면 5초 자동 촬영 · 가로·세로 자유롭게"
           }
         }
       }
@@ -2147,6 +2623,52 @@
         }
       }
     },
+    "common.add" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "追加"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "추가"
+          }
+        }
+      }
+    },
+    "common.back" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Back"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "戻る"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "뒤로"
+          }
+        }
+      }
+    },
     "common.cancel" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2193,6 +2715,29 @@
         }
       }
     },
+    "common.delete" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "削除"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "삭제"
+          }
+        }
+      }
+    },
     "common.done" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2235,6 +2780,75 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "편집"
+          }
+        }
+      }
+    },
+    "common.error" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Error"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "エラー"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "오류"
+          }
+        }
+      }
+    },
+    "common.group" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Group"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "グループ"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "그룹"
+          }
+        }
+      }
+    },
+    "common.menu" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Menu"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メニュー"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "메뉴"
           }
         }
       }
@@ -2400,6 +3014,29 @@
         }
       }
     },
+    "common.share" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Share"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共有"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "공유"
+          }
+        }
+      }
+    },
     "common.skip" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2442,6 +3079,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "잠시 후 다시 시도해주세요."
+          }
+        }
+      }
+    },
+    "common.verified" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verified"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "認証済み"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "인증됨"
           }
         }
       }
@@ -2722,6 +3382,52 @@
         }
       }
     },
+    "detail.deleteFailed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Failed to delete the course. Please try again later."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "コースの削除に失敗しました。しばらくしてからもう一度お試しください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "코스 삭제에 실패했어요. 잠시 후 다시 시도해주세요."
+          }
+        }
+      }
+    },
+    "detail.deleteMessage" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete this course? This can't be undone."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このコースを削除しますか？元に戻せません。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 코스를 삭제할까요? 되돌릴 수 없어요."
+          }
+        }
+      }
+    },
     "detail.followCourse" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2741,6 +3447,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "이 코스 따라가기"
+          }
+        }
+      }
+    },
+    "detail.groupTripComingSoon" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Group trips are coming soon."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "グループ旅行は準備中です。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "그룹 여행 시작 기능은 준비 중이에요."
           }
         }
       }
@@ -3853,6 +4582,29 @@
       "comment" : "A letter \"G\" used as a placeholder for a Google logo.",
       "isCommentAutoGenerated" : true
     },
+    "group.cancelReply" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel reply"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "返信をキャンセル"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "답장 취소"
+          }
+        }
+      }
+    },
     "group.codeCooldown" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3941,6 +4693,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "방 만들기"
+          }
+        }
+      }
+    },
+    "group.createRoomFailed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Failed to create the room. Please try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ルームの作成に失敗しました。もう一度お試しください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "방 생성에 실패했어요. 다시 시도해주세요."
           }
         }
       }
@@ -4175,6 +4950,29 @@
         }
       }
     },
+    "group.send" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Send"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "送信"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "전송"
+          }
+        }
+      }
+    },
     "impromptu.archiving" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4194,6 +4992,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "영상 보관 중..."
+          }
+        }
+      }
+    },
+    "impromptu.budgetFull" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Today's video is full"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本日の動画がいっぱいです"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "오늘 영상이 가득 찼어요"
           }
         }
       }
@@ -4263,6 +5084,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "이번 여행의 이름을 지어주세요"
+          }
+        }
+      }
+    },
+    "impromptu.dateFormat" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MMM d"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "M月d日"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "M월 d일"
           }
         }
       }
@@ -4474,6 +5318,29 @@
         }
       }
     },
+    "impromptu.recordProgress" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$d places · Last: %2$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$dヶ所記録 · 最後: %2$@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$d곳 기록 · 마지막: %2$@"
+          }
+        }
+      }
+    },
     "impromptu.saveAndVlog" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4612,6 +5479,29 @@
         }
       }
     },
+    "impromptu.startAtFirst" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start filming at your first place"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最初の場所で撮影を始めましょう"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "첫 장소에서 촬영을 시작해보세요"
+          }
+        }
+      }
+    },
     "impromptu.startRecord" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4654,6 +5544,52 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "태그"
+          }
+        }
+      }
+    },
+    "impromptu.videoBudget" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Today's video"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本日の動画"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "오늘의 영상"
+          }
+        }
+      }
+    },
+    "impromptu.videoBudgetValue" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$d / %2$ds"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$d / %2$d秒"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$d / %2$d초"
           }
         }
       }
@@ -5490,6 +6426,52 @@
         }
       }
     },
+    "notif.channelDesc" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Group activity, comments, and course alerts"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "グループ活動・コメント・コースのお知らせ"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "그룹 활동·댓글·코스 알림"
+          }
+        }
+      }
+    },
+    "notif.channelName" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "tteona Notifications"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "tteonaのお知らせ"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "떠나 알림"
+          }
+        }
+      }
+    },
     "onboarding.letsGo" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5509,6 +6491,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "떠나기 시작"
+          }
+        }
+      }
+    },
+    "onboarding.logoDesc" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "tteona"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "tteona"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "떠나"
           }
         }
       }
@@ -6268,6 +7273,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "서비스 이용을\n동의해주세요"
+          }
+        }
+      }
+    },
+    "onboarding.viewTerms" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "View terms"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "規約を見る"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "약관 보기"
           }
         }
       }
@@ -8001,6 +9029,29 @@
         }
       }
     },
+    "rating.stars" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%d stars"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%d点"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%d점"
+          }
+        }
+      }
+    },
     "rating.submit" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8599,6 +9650,29 @@
         }
       }
     },
+    "room.shareInvite" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Share invite link"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "招待リンクを共有"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "초대 링크 공유"
+          }
+        }
+      }
+    },
     "roomselect.members" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8714,6 +9788,29 @@
         }
       }
     },
+    "session.allVisited" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All places visited! 🎉"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "すべての場所を訪問完了！🎉"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모든 장소 방문 완료! 🎉"
+          }
+        }
+      }
+    },
     "session.arrivedAt" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8779,6 +9876,52 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "그래도 촬영하기"
+          }
+        }
+      }
+    },
+    "session.channelDesc" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ongoing trip session status"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "進行中の旅セッションの状態"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "진행 중인 여행 세션 상태"
+          }
+        }
+      }
+    },
+    "session.channelName" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trip Progress"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "旅の進行"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "여행 진행"
           }
         }
       }
@@ -8967,6 +10110,29 @@
         }
       }
     },
+    "session.exit" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exit"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "退出"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "나가기"
+          }
+        }
+      }
+    },
     "session.exitNotice.message" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -9055,6 +10221,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "현재 위치를 확인할 수 없어요. 지금 촬영해도 괜찮아요."
+          }
+        }
+      }
+    },
+    "session.foregroundTitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trip in progress"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "旅の進行中"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "여행 진행 중"
           }
         }
       }
@@ -9174,6 +10363,29 @@
         }
       }
     },
+    "session.nextPlaceSuffix" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : " · Next: %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : " · 次: %@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : " · 다음: %@"
+          }
+        }
+      }
+    },
     "session.notArrivedYet" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -9289,6 +10501,29 @@
         }
       }
     },
+    "session.visitProgress" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Visited %1$d/%2$d"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "訪問 %1$d/%2$d"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "방문 %1$d/%2$d"
+          }
+        }
+      }
+    },
     "settings.account" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -9354,6 +10589,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "차단된 사용자 관리"
+          }
+        }
+      }
+    },
+    "settings.changePhoto" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Change photo"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "写真を変更"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "사진 변경"
           }
         }
       }
@@ -9699,6 +10957,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "워터마크 제거 · 멀티포맷 · 5분 영상 · 우선 렌더링"
+          }
+        }
+      }
+    },
+    "settings.profilePhoto" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Profile photo"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プロフィール写真"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "프로필 사진"
           }
         }
       }
@@ -10696,6 +11977,29 @@
         }
       }
     },
+    "vlog.done.saveFailed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save to album · You can save via Share"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アルバム保存に失敗しました · 共有で保存できます"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "앨범 저장에 실패했어요 · 공유로 저장할 수 있어요"
+          }
+        }
+      }
+    },
     "vlog.done.title" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -11087,6 +12391,29 @@
         }
       }
     },
+    "vlog.loginRequired" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign-in required."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ログインが必要です。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "로그인이 필요해요."
+          }
+        }
+      }
+    },
     "vlog.makeVersions" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -11133,6 +12460,29 @@
         }
       }
     },
+    "vlog.preview" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preview"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "試聴"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "미리듣기"
+          }
+        }
+      }
+    },
     "vlog.share" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -11152,6 +12502,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "공유하기"
+          }
+        }
+      }
+    },
+    "vlog.shareChooser" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Share Vlog"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vlogを共有"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vlog 공유"
           }
         }
       }
@@ -11432,6 +12805,121 @@
         }
       }
     },
+    "vlogserver.error.clipUploadFailed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Failed to upload clip %1$d: %2$@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "クリップ%1$dのアップロードに失敗: %2$@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "클립 %1$d 업로드 실패: %2$@"
+          }
+        }
+      }
+    },
+    "vlogserver.error.compositeStartFailed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Failed to start compositing"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "合成開始に失敗しました"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "합성 시작 실패"
+          }
+        }
+      }
+    },
+    "vlogserver.error.downloadFailed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Failed to download the result"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完成版のダウンロードに失敗しました"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "완성본 다운로드 실패"
+          }
+        }
+      }
+    },
+    "vlogserver.error.jobCreateFailed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Failed to create job: %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ジョブ作成に失敗: %@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "잡 생성 실패: %@"
+          }
+        }
+      }
+    },
+    "vlogserver.error.jobCreateResponse" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Invalid job creation response"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ジョブ作成応答エラー"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "잡 생성 응답 오류"
+          }
+        }
+      }
+    },
     "vlogserver.error.noClips" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -11474,6 +12962,52 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "서버 편집 실패: %@"
+          }
+        }
+      }
+    },
+    "vlogserver.error.statusFailed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Failed to fetch status"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "状態取得に失敗しました"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "상태 조회 실패"
+          }
+        }
+      }
+    },
+    "vlogserver.error.timeout" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Server editing timed out"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "サーバー編集がタイムアウトしました"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "서버 편집 시간 초과"
           }
         }
       }

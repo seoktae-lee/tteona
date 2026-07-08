@@ -1,6 +1,7 @@
 import SwiftUI
 import GoogleMaps
 import CoreLocation
+import AVFoundation
 
 struct ImpromptuSessionView: View {
     var selectedRoomIds: Set<String> = []
@@ -15,6 +16,7 @@ struct ImpromptuSessionView: View {
     private let activityManager = TodaySessionActivityManager.shared
 
     @State private var capturedPlaces: [Place] = []
+    @State private var recordedSeconds: Double = 0   // 세션 누적 촬영 길이(초) — 진행률 바용
     @State private var cameraCommand: GMSCameraPosition?
     @State private var didCenterOnUser = false
     @State private var isResolvingLocation = false
@@ -288,6 +290,7 @@ struct ImpromptuSessionView: View {
                         .padding(.horizontal, 4)
                     }
                 }
+                budgetBar
                 HStack(spacing: 12) {
                     Button { startCapture() } label: {
                         HStack(spacing: 8) {
@@ -296,14 +299,15 @@ struct ImpromptuSessionView: View {
                             } else {
                                 Image(systemName: "camera.fill").font(.tte(16))
                             }
-                            Text(L("impromptu.captureHere"))
+                            Text(budgetFull ? L("impromptu.budgetFull") : L("impromptu.captureHere"))
                                 .font(.tte(16, .semibold))
                         }
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity).frame(height: 54)
-                        .background(RoundedRectangle(cornerRadius: 14).fill(Color.tteOrange))
+                        .background(RoundedRectangle(cornerRadius: 14)
+                            .fill(budgetFull ? Color.tteMediumGray : Color.tteOrange))
                     }
-                    .disabled(isResolvingLocation)
+                    .disabled(isResolvingLocation || budgetFull)
 
                     if !capturedPlaces.isEmpty {
                         Button { showEndAlert = true } label: {
@@ -323,6 +327,64 @@ struct ImpromptuSessionView: View {
                     .fill(Color.tteBackground)
                     .shadow(color: .black.opacity(0.1), radius: 16, y: -4)
             )
+        }
+    }
+
+    // MARK: - 촬영 예산 진행률 바
+    private var budgetSeconds: Double { ProManager.shared.vlogBudgetSeconds }
+    private var budgetFull: Bool { recordedSeconds >= budgetSeconds }
+
+    private var budgetBar: some View {
+        let frac = min(1, max(0, recordedSeconds / budgetSeconds))
+        return VStack(spacing: 6) {
+            HStack {
+                Text(L("impromptu.videoBudget"))
+                    .font(.tte(12, .semibold))
+                    .foregroundColor(.tteMediumGray)
+                Spacer()
+                Text(budgetValueText)
+                    .font(.tte(12, .bold))
+                    .foregroundColor(budgetFull ? .red : .tteOrange)
+            }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.tteMediumGray.opacity(0.2))
+                    Capsule()
+                        .fill(budgetFull ? Color.red : Color.tteOrange)
+                        .frame(width: max(0, geo.size.width * frac))
+                }
+            }
+            .frame(height: 6)
+        }
+        .padding(.horizontal, 4)
+    }
+
+    private var budgetValueText: String {
+        if ProManager.shared.isPro {
+            return "\(Self.mmss(recordedSeconds)) / \(Self.mmss(budgetSeconds))"
+        }
+        return L("impromptu.videoBudgetValue",
+                 Int(recordedSeconds.rounded()), Int(budgetSeconds.rounded()))
+    }
+
+    private static func mmss(_ s: Double) -> String {
+        let v = max(0, Int(s.rounded()))
+        return String(format: "%d:%02d", v / 60, v % 60)
+    }
+
+    /// 세션 폴더의 클립 길이를 합산해 진행률 바를 갱신한다.
+    private func recomputeRecordedSeconds() {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let dir = docs.appendingPathComponent("Tteona/Sessions/\(sessionId)")
+        Task {
+            var total: Double = 0
+            let files = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
+            for f in files where f.pathExtension.lowercased() == "mp4" {
+                if let d = try? await AVURLAsset(url: f).load(.duration) {
+                    total += CMTimeGetSeconds(d)
+                }
+            }
+            await MainActor.run { self.recordedSeconds = total }
         }
     }
 
@@ -529,6 +591,7 @@ struct ImpromptuSessionView: View {
         Haptics.success()
         capturedPlaces.append(place)
         reorderPlaces()
+        recomputeRecordedSeconds()
         sessionStore.save(places: capturedPlaces, roomIds: Array(activeRoomIds))
         activityManager.update(placesCount: capturedPlaces.count, lastPlaceName: place.placeName)
         for rid in activeRoomIds {
@@ -561,6 +624,7 @@ struct ImpromptuSessionView: View {
         deleteClip(for: place)
         capturedPlaces.removeAll { $0.order == place.order }
         reorderPlaces()
+        recomputeRecordedSeconds()
         if capturedPlaces.isEmpty {
             sessionStore.clear()
         } else {
@@ -638,6 +702,7 @@ struct ImpromptuSessionView: View {
         // 촬영 예산(무료 30초)을 그대로 소진시킨다 — 새 세션은 깨끗한 폴더로 시작
         deleteAllClips()
         capturedPlaces = []
+        recordedSeconds = 0
         activeRoomIds = selectedRoomIds
         let roomIds = Array(activeRoomIds)
         print("[Feed] startNewSession uid=\(uid) nickname=\(nickname) roomIds=\(roomIds)")
@@ -670,6 +735,7 @@ struct ImpromptuSessionView: View {
 
         capturedPlaces = validatedPlaces
         reorderPlaces()
+        recomputeRecordedSeconds()
 
         if !session.roomIds.isEmpty {
             activeRoomIds = Set(session.roomIds)

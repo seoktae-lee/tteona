@@ -1,5 +1,6 @@
 import SwiftUI
 import AVFoundation
+import MetalKit
 import UIKit
 
 struct CameraView: View {
@@ -48,12 +49,16 @@ final class CameraViewController: UIViewController {
     private let recordBtn = UIButton(type: .custom)
     private let outerRing = CAShapeLayer()
     private let innerDot = CAShapeLayer()
-    private let progressRing = CAShapeLayer()
-    private let countLabel = UILabel()
+    private let clipProgress = CAShapeLayer()   // 녹화 버튼 링 = 이번 클립(장소당) 진행
+    private let clipHint = UILabel()        // 버튼 아래: "이번 장소 · 최대 5초"
     private let hintLabel = UILabel()
     private let zoomBar = UIStackView()
+    private let filterBar = UIStackView()               // 나루 무드 필터 칩
+    private var filteredPreview: FilteredPreviewMTKView? // 필터 선택 시에만 표시되는 Metal 프리뷰
     private var progressTimer: Timer?
     private var recordStart: Date?
+    private var currentClipLimit: Double = 5   // 이번 클립 상한(초) — 버튼 링 진행률 계산용
+    private var zoomBaseFactor: Double = 1      // 핀치 시작 시점의 줌 배율
     // 세션 총 촬영 예산 — 무료 30초(장소당 5초) / PRO 5분(장소당 제한 없음). 기존 클립 합계 + 현재 클립으로 계산
     private var usedSeconds: Double = 0
     // 이 장소에 이미 저장된 클립 길이 — 재촬영 시 덮어써지므로 예산에서 돌려받는다
@@ -62,6 +67,11 @@ final class CameraViewController: UIViewController {
     private var tipChip: UIView?
     private var savingOverlay: UIView?
     private var permissionOverlay: UIView?
+
+    // 무료(5초 고정 자동 촬영)와 PRO(탭으로 종료)는 안내 문구가 다르다
+    private var isAutoClip: Bool { ProManager.shared.vlogClipMaxSeconds != nil }
+    private var idleHint: String { isAutoClip ? L("camera.hintAuto") : L("camera.hint") }
+    private var recordingHint: String { isAutoClip ? L("camera.recordingHintAuto") : L("camera.recordingHint") }
 
     init(place: Place, sessionId: String) {
         self.place = place
@@ -91,6 +101,11 @@ final class CameraViewController: UIViewController {
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         previewLayer.frame = view.bounds
+        if let mv = filteredPreview {
+            mv.frame = view.bounds
+            let s = UIScreen.main.scale
+            mv.drawableSize = CGSize(width: view.bounds.width * s, height: view.bounds.height * s)
+        }
         layoutBottomUI()
         layoutTipChip()
         // 전환 버튼 위치 갱신
@@ -117,6 +132,12 @@ final class CameraViewController: UIViewController {
         previewLayer.videoGravity = .resizeAspectFill
         view.layer.addSublayer(previewLayer)
 
+        // 필터 프리뷰 — 기본(필터 없음)일 땐 숨겨져 기존 previewLayer가 그대로 보인다
+        let metalView = FilteredPreviewMTKView(frame: view.bounds)
+        metalView.isHidden = true
+        view.addSubview(metalView)
+        filteredPreview = metalView
+
         // 닫기 버튼
         let closeBtn = UIButton(type: .system)
         closeBtn.setImage(UIImage(systemName: "xmark"), for: .normal)
@@ -142,7 +163,7 @@ final class CameraViewController: UIViewController {
         view.addSubview(placeL)
 
         // 힌트
-        hintLabel.text = L("camera.hint")
+        hintLabel.text = idleHint
         hintLabel.textColor = UIColor.white.withAlphaComponent(0.8)
         hintLabel.font = .systemFont(ofSize: 13)
         hintLabel.textAlignment = .center
@@ -181,11 +202,83 @@ final class CameraViewController: UIViewController {
             zoomBar.addArrangedSubview(b)
         }
         setZoomSelected(1.0)
-        buildProgressRing()
+
+        // 나루 무드 필터 바
+        filterBar.axis = .horizontal
+        filterBar.spacing = 8
+        view.addSubview(filterBar)
+        for filter in NaruFilter.allCases {
+            let b = UIButton(type: .system)
+            b.setTitle(L(filter.titleKey), for: .normal)
+            b.titleLabel?.font = .systemFont(ofSize: 13, weight: .medium)
+            b.tintColor = .white
+            b.backgroundColor = UIColor.black.withAlphaComponent(0.45)
+            b.layer.cornerRadius = 16
+            b.contentEdgeInsets = UIEdgeInsets(top: 0, left: 14, bottom: 0, right: 14)
+            b.translatesAutoresizingMaskIntoConstraints = false
+            b.heightAnchor.constraint(equalToConstant: 32).isActive = true
+            b.tag = 950 + filter.rawValue
+            b.addTarget(self, action: #selector(filterTapped(_:)), for: .touchUpInside)
+            filterBar.addArrangedSubview(b)
+        }
+
         buildRecordButton()
         buildTipChip()
         buildSavingOverlay()
         buildPermissionOverlay()
+        setupGestures()
+    }
+
+    // MARK: - 핀치 줌 / 탭 초점 제스처
+    private func setupGestures() {
+        let pinch = UIPinchGestureRecognizer(target: self, action: #selector(handlePinch(_:)))
+        pinch.delegate = self
+        view.addGestureRecognizer(pinch)
+
+        let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
+        tap.delegate = self
+        view.addGestureRecognizer(tap)
+    }
+
+    @objc private func handlePinch(_ g: UIPinchGestureRecognizer) {
+        // 초광각(0.5x)은 렌즈 전환이라 zoomBar 버튼으로 처리하고, 핀치는 1x 이상 연속 줌만 담당
+        if service.currentCameraPosition == .front { return }
+        switch g.state {
+        case .began:
+            zoomBaseFactor = max(1, service.currentZoomFactor)
+        case .changed, .ended:
+            service.setContinuousZoom(zoomBaseFactor * Double(g.scale))
+            setZoomSelected(-1)   // 커스텀 줌 중에는 프리셋 강조 해제
+        default:
+            break
+        }
+    }
+
+    @objc private func handleTap(_ g: UITapGestureRecognizer) {
+        let p = g.location(in: view)
+        let devicePoint = previewLayer.captureDevicePointConverted(fromLayerPoint: p)
+        service.focus(at: devicePoint)
+        showFocusIndicator(at: p)
+    }
+
+    private func showFocusIndicator(at point: CGPoint) {
+        let box = UIView(frame: CGRect(x: 0, y: 0, width: 72, height: 72))
+        box.center = point
+        box.layer.borderColor = UIColor(red: 1, green: 0.42, blue: 0.21, alpha: 1).cgColor
+        box.layer.borderWidth = 1.5
+        box.layer.cornerRadius = 6
+        box.isUserInteractionEnabled = false
+        box.transform = CGAffineTransform(scaleX: 1.25, y: 1.25)
+        view.addSubview(box)
+        UIView.animate(withDuration: 0.25, animations: {
+            box.transform = .identity
+        }) { _ in
+            UIView.animate(withDuration: 0.35, delay: 0.6, options: []) {
+                box.alpha = 0
+            } completion: { _ in
+                box.removeFromSuperview()
+            }
+        }
     }
 
     private func buildPermissionOverlay() {
@@ -252,6 +345,12 @@ final class CameraViewController: UIViewController {
             service.onRecordingFinished = { [weak self] url in
                 DispatchQueue.main.async { self?.recordingDone(url: url) }
             }
+            // 필터 적용 프레임을 Metal 프리뷰로 전달 (필터 활성 시에만 방출됨)
+            service.onPreviewImage = { [weak self] image in
+                DispatchQueue.main.async { self?.filteredPreview?.display(image: image) }
+            }
+            // 저장된 마지막 필터 복원
+            self.applyFilter(NaruFilter.saved)
         }
 
         switch videoStatus {
@@ -343,41 +442,10 @@ final class CameraViewController: UIViewController {
         ])
     }
 
-    private func buildProgressRing() {
-        let size: CGFloat = 60
-        let c = CGPoint(x: size / 2, y: size / 2)
-        let bg = CAShapeLayer()
-        bg.path = UIBezierPath(arcCenter: c, radius: 26, startAngle: -.pi/2, endAngle: .pi*1.5, clockwise: true).cgPath
-        bg.strokeColor = UIColor.white.withAlphaComponent(0.2).cgColor
-        bg.fillColor = UIColor.clear.cgColor
-        bg.lineWidth = 4
-
-        progressRing.path = bg.path
-        progressRing.strokeColor = UIColor(red: 1, green: 0.42, blue: 0.21, alpha: 1).cgColor
-        progressRing.fillColor = UIColor.clear.cgColor
-        progressRing.lineWidth = 4
-        progressRing.lineCap = .round
-        progressRing.strokeEnd = 0
-
-        let container = UIView(frame: CGRect(x: 0, y: 0, width: size, height: size))
-        container.layer.addSublayer(bg)
-        container.layer.addSublayer(progressRing)
-        container.alpha = 0.85
-        container.tag = 901
-        view.addSubview(container)
-
-        // 남은 촬영 예산(초) 표시 — 링은 사용량 비율
-        countLabel.text = "--"
-        countLabel.textColor = .white
-        countLabel.font = .systemFont(ofSize: 13, weight: .semibold)
-        countLabel.textAlignment = .center
-        countLabel.frame = CGRect(x: 0, y: 0, width: size, height: size)
-        container.addSubview(countLabel)
-    }
-
     // MARK: - 촬영 예산 (무료 30초·장소당 5초 / PRO 5분)
 
-    /// 세션 폴더의 기존 클립 길이를 합산해 남은 예산 표시를 갱신
+    /// 세션 폴더의 기존 클립 길이를 합산해 남은 예산(사용량)을 갱신 — 예산 소진 판정용.
+    /// 총량 UI는 카메라에서 제거(지도 장소칩에 있음)했으므로 화면 갱신은 하지 않는다.
     private func refreshUsedSeconds() {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let dir = docs.appendingPathComponent("Tteona/Sessions/\(sessionId)")
@@ -396,22 +464,14 @@ final class CameraViewController: UIViewController {
             }
             self.usedSeconds = total
             self.currentPlaceClipSeconds = currentClip
-            self.updateBudgetUI(extraElapsed: 0)
         }
     }
 
-    private func updateBudgetUI(extraElapsed: Double) {
-        let used = min(usedSeconds + extraElapsed, budgetSeconds)
-        let fraction = used / budgetSeconds
-        progressRing.strokeEnd = CGFloat(fraction)
-        progressRing.strokeColor = (fraction > 0.9 ? UIColor.systemRed
-                                                   : UIColor(red: 1, green: 0.42, blue: 0.21, alpha: 1)).cgColor
-        countLabel.text = Self.fmtBudget(budgetSeconds - used)
-    }
-
-    private static func fmtBudget(_ seconds: Double) -> String {
-        let v = max(0, Int(seconds.rounded(.down)))
-        return v >= 60 ? String(format: "%d:%02d", v / 60, v % 60) : L("camera.seconds", v)
+    /// 녹화 버튼 링 = 이번 클립 진행률 (녹화 중에만 채워짐)
+    private func updateClipGauge() {
+        guard let start = recordStart else { return }
+        let clipFrac = min(1, max(0, Date().timeIntervalSince(start) / max(currentClipLimit, 0.1)))
+        clipProgress.strokeEnd = CGFloat(clipFrac)
     }
 
     private func showBudgetAlert() {
@@ -443,15 +503,32 @@ final class CameraViewController: UIViewController {
         let c = CGPoint(x: 40, y: 40)
         outerRing.path = UIBezierPath(arcCenter: c, radius: 38, startAngle: 0,
                                       endAngle: .pi*2, clockwise: true).cgPath
-        outerRing.strokeColor = UIColor.white.cgColor
+        outerRing.strokeColor = UIColor.white.withAlphaComponent(0.35).cgColor
         outerRing.fillColor = UIColor.clear.cgColor
         outerRing.lineWidth = 4
         recordBtn.layer.addSublayer(outerRing)
+
+        // 이번 클립 진행 링 — 12시부터 시계방향으로 채워지며 상한(5초)에 닿으면 꽉 참
+        clipProgress.path = UIBezierPath(arcCenter: c, radius: 38, startAngle: -.pi/2,
+                                         endAngle: .pi*1.5, clockwise: true).cgPath
+        clipProgress.strokeColor = UIColor.white.cgColor
+        clipProgress.fillColor = UIColor.clear.cgColor
+        clipProgress.lineWidth = 4
+        clipProgress.lineCap = .round
+        clipProgress.strokeEnd = 0
+        recordBtn.layer.addSublayer(clipProgress)
 
         innerDot.path = UIBezierPath(arcCenter: c, radius: 30, startAngle: 0,
                                      endAngle: .pi*2, clockwise: true).cgPath
         innerDot.fillColor = UIColor.red.cgColor
         recordBtn.layer.addSublayer(innerDot)
+
+        // 버튼 아래 힌트 — 이번 장소의 클립 상한
+        clipHint.text = ProManager.shared.isPro ? L("camera.clipHintPro") : L("camera.clipHintFree")
+        clipHint.textColor = UIColor.white.withAlphaComponent(0.9)
+        clipHint.font = .systemFont(ofSize: 12, weight: .semibold)
+        clipHint.textAlignment = .center
+        view.addSubview(clipHint)
     }
 
     // MARK: - 촬영 팁 칩
@@ -463,8 +540,12 @@ final class CameraViewController: UIViewController {
         view.addSubview(chip)
         tipChip = chip
 
+        // 촬영 예산 안내 — 3초 뒤 사라지는 토스트 (총량 UI는 상시 표시하지 않는다)
         let label = UILabel()
-        label.text = L("camera.tip")
+        label.text = isAutoClip
+            ? L("camera.budgetToastFree", Int((ProManager.shared.vlogClipMaxSeconds ?? 5).rounded()),
+                                          Int(ProManager.shared.vlogBudgetSeconds.rounded()))
+            : L("camera.budgetToastPro", Int((ProManager.shared.vlogBudgetSeconds / 60).rounded()))
         label.font = .systemFont(ofSize: 13, weight: .medium)
         label.textColor = .white
         label.textAlignment = .center
@@ -502,10 +583,20 @@ final class CameraViewController: UIViewController {
             y: hintLabel.frame.minY - 44 - 12,
             width: zoomW, height: 44
         )
-        recordBtn.center = CGPoint(x: w / 2, y: zoomBar.frame.minY - 40 - 20)
-        if let container = view.viewWithTag(901) {
-            container.center = CGPoint(x: w / 2, y: recordBtn.frame.minY - 30 - 16)
-        }
+        // 버튼 바로 아래 클립 힌트
+        clipHint.sizeToFit()
+        clipHint.frame.origin = CGPoint(
+            x: (w - clipHint.frame.width) / 2,
+            y: zoomBar.frame.minY - clipHint.frame.height - 12
+        )
+        recordBtn.center = CGPoint(x: w / 2, y: clipHint.frame.minY - 12 - 40)
+        // 필터 바 — 녹화 버튼 위에 가로 중앙 정렬
+        let fSize = filterBar.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
+        filterBar.frame = CGRect(
+            x: (w - fSize.width) / 2,
+            y: recordBtn.frame.minY - fSize.height - 16,
+            width: fSize.width, height: fSize.height
+        )
     }
 
     // MARK: - Actions
@@ -526,6 +617,9 @@ final class CameraViewController: UIViewController {
 
     @objc private func recordTapped() {
         if service.isRecording {
+            // 무료 유저는 5초 고정 촬영 — 중간 종료 불가 ("한 번 탭 = 한 칸(5초)" 멘탈모델).
+            // 실수한 컷은 같은 장소에서 재촬영하면 예산을 돌려받으므로 부담 없다.
+            guard ProManager.shared.vlogClipMaxSeconds == nil else { return }
             stopRecordingUI()
             return
         }
@@ -533,7 +627,6 @@ final class CameraViewController: UIViewController {
         if currentPlaceClipSeconds > 0 {
             usedSeconds = max(0, usedSeconds - currentPlaceClipSeconds)
             currentPlaceClipSeconds = 0
-            updateBudgetUI(extraElapsed: 0)
         }
         let remaining = budgetSeconds - usedSeconds
         guard remaining >= 1 else {
@@ -548,15 +641,20 @@ final class CameraViewController: UIViewController {
             clipLimit = remaining
         }
         service.maxDuration = clipLimit
+        currentClipLimit = clipLimit
+        clipProgress.strokeEnd = 0
         service.startRecording(place: place, sessionId: sessionId)
         setInnerDot(recording: true)
-        hintLabel.text = L("camera.recordingHint")
-        view.viewWithTag(901)?.alpha = 1
+        hintLabel.text = recordingHint
         recordStart = Date()
         progressTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
             guard let self, let s = self.recordStart else { return }
             let elapsed = Date().timeIntervalSince(s)
-            self.updateBudgetUI(extraElapsed: elapsed)
+            self.updateClipGauge()
+            // 녹화 중 버튼 아래 힌트를 이번 클립 경과/상한으로 갱신 (예: "2.3 / 5초")
+            self.clipHint.text = L("camera.clipElapsed",
+                                   String(format: "%.1f", min(elapsed, clipLimit)),
+                                   Int(clipLimit.rounded()))
             // 클립 한도 도달 — CameraService도 maxDuration에서 자동 종료된다
             if elapsed >= clipLimit {
                 self.stopRecordingUI()
@@ -572,6 +670,24 @@ final class CameraViewController: UIViewController {
         service.stopRecording()
     }
 
+    @objc private func filterTapped(_ sender: UIButton) {
+        guard let filter = NaruFilter(rawValue: sender.tag - 950) else { return }
+        applyFilter(filter)
+        NaruFilter.saved = filter
+    }
+
+    private func applyFilter(_ filter: NaruFilter) {
+        service.activeFilter = filter
+        // 필터가 켜지면 Metal 프리뷰를 표시하고, 꺼지면 기존 하드웨어 프리뷰로 복귀
+        filteredPreview?.isHidden = (filter == .none)
+        for v in filterBar.arrangedSubviews {
+            guard let b = v as? UIButton else { continue }
+            let selected = (b.tag - 950) == filter.rawValue
+            b.backgroundColor = selected ? .white : UIColor.black.withAlphaComponent(0.45)
+            b.tintColor = selected ? .black : .white
+        }
+    }
+
     @objc private func zoomTapped(_ sender: UIButton) {
         let f = Double(sender.tag) / 10.0
         service.setZoom(f)
@@ -583,8 +699,9 @@ final class CameraViewController: UIViewController {
         progressTimer = nil
         recordStart = nil
         refreshUsedSeconds()   // 파일 기준으로 재계산 (재촬영 덮어쓰기 반영)
-        view.viewWithTag(901)?.alpha = 0.85
-        hintLabel.text = L("camera.hint")
+        clipProgress.strokeEnd = 0
+        clipHint.text = ProManager.shared.isPro ? L("camera.clipHintPro") : L("camera.clipHintFree")
+        hintLabel.text = idleHint
         setInnerDot(recording: false)
         
         if url != nil {
@@ -626,5 +743,14 @@ final class CameraViewController: UIViewController {
             b.backgroundColor = selected ? .white : UIColor.black.withAlphaComponent(0.45)
             b.tintColor = selected ? .black : .white
         }
+    }
+}
+
+// MARK: - 제스처 델리게이트
+extension CameraViewController: UIGestureRecognizerDelegate {
+    // 닫기·전환·줌·녹화 버튼 위의 탭은 초점/줌 제스처가 가로채지 않게 한다
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                           shouldReceive touch: UITouch) -> Bool {
+        return !(touch.view is UIControl)
     }
 }
