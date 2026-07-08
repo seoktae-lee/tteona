@@ -2048,6 +2048,14 @@
         }
       }
     },
+    "camera.applyingFilter" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Applying filter..." } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "フィルター適用中..." } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "필터 적용 중..." } }
+      }
+    },
     "camera.saving" : {
       "extractionState" : "manual",
       "localizations" : {

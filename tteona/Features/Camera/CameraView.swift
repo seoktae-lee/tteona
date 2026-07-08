@@ -1,6 +1,5 @@
 import SwiftUI
 import AVFoundation
-import MetalKit
 import UIKit
 
 struct CameraView: View {
@@ -53,8 +52,6 @@ final class CameraViewController: UIViewController {
     private let clipHint = UILabel()        // 버튼 아래: "이번 장소 · 최대 5초"
     private let hintLabel = UILabel()
     private let zoomBar = UIStackView()
-    private let filterBar = UIStackView()               // 나루 무드 필터 칩
-    private var filteredPreview: FilteredPreviewMTKView? // 필터 선택 시에만 표시되는 Metal 프리뷰
     private var progressTimer: Timer?
     private var recordStart: Date?
     private var currentClipLimit: Double = 5   // 이번 클립 상한(초) — 버튼 링 진행률 계산용
@@ -101,11 +98,6 @@ final class CameraViewController: UIViewController {
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         previewLayer.frame = view.bounds
-        if let mv = filteredPreview {
-            mv.frame = view.bounds
-            let s = UIScreen.main.scale
-            mv.drawableSize = CGSize(width: view.bounds.width * s, height: view.bounds.height * s)
-        }
         layoutBottomUI()
         layoutTipChip()
         // 전환 버튼 위치 갱신
@@ -131,12 +123,6 @@ final class CameraViewController: UIViewController {
         previewLayer.session = service.captureSession
         previewLayer.videoGravity = .resizeAspectFill
         view.layer.addSublayer(previewLayer)
-
-        // 필터 프리뷰 — 기본(필터 없음)일 땐 숨겨져 기존 previewLayer가 그대로 보인다
-        let metalView = FilteredPreviewMTKView(frame: view.bounds)
-        metalView.isHidden = true
-        view.addSubview(metalView)
-        filteredPreview = metalView
 
         // 닫기 버튼
         let closeBtn = UIButton(type: .system)
@@ -202,25 +188,6 @@ final class CameraViewController: UIViewController {
             zoomBar.addArrangedSubview(b)
         }
         setZoomSelected(1.0)
-
-        // 나루 무드 필터 바
-        filterBar.axis = .horizontal
-        filterBar.spacing = 8
-        view.addSubview(filterBar)
-        for filter in NaruFilter.allCases {
-            let b = UIButton(type: .system)
-            b.setTitle(L(filter.titleKey), for: .normal)
-            b.titleLabel?.font = .systemFont(ofSize: 13, weight: .medium)
-            b.tintColor = .white
-            b.backgroundColor = UIColor.black.withAlphaComponent(0.45)
-            b.layer.cornerRadius = 16
-            b.contentEdgeInsets = UIEdgeInsets(top: 0, left: 14, bottom: 0, right: 14)
-            b.translatesAutoresizingMaskIntoConstraints = false
-            b.heightAnchor.constraint(equalToConstant: 32).isActive = true
-            b.tag = 950 + filter.rawValue
-            b.addTarget(self, action: #selector(filterTapped(_:)), for: .touchUpInside)
-            filterBar.addArrangedSubview(b)
-        }
 
         buildRecordButton()
         buildTipChip()
@@ -345,12 +312,15 @@ final class CameraViewController: UIViewController {
             service.onRecordingFinished = { [weak self] url in
                 DispatchQueue.main.async { self?.recordingDone(url: url) }
             }
-            // 필터 적용 프레임을 Metal 프리뷰로 전달 (필터 활성 시에만 방출됨)
-            service.onPreviewImage = { [weak self] image in
-                DispatchQueue.main.async { self?.filteredPreview?.display(image: image) }
+            // 실제 첫 프레임이 도착하면 클립 타이머 기준시각을 그때로 맞춘다 (첫 촬영 짧게 잘림 방지)
+            service.onRecordingStarted = { [weak self] in
+                guard let self, self.recordStart == nil, self.service.isRecording else { return }
+                self.recordStart = Date()
+                // 링을 첫 프레임 시점부터 상한(currentClipLimit)까지 선형으로 채운다.
+                // 녹화 종료도 같은 첫 프레임 기준 sample-time으로 상한에 도달하므로
+                // 링은 항상 한 바퀴를 꽉 채운 뒤 종료된다.
+                self.startClipRingAnimation(duration: self.currentClipLimit)
             }
-            // 저장된 마지막 필터 복원
-            self.applyFilter(NaruFilter.saved)
         }
 
         switch videoStatus {
@@ -467,11 +437,29 @@ final class CameraViewController: UIViewController {
         }
     }
 
-    /// 녹화 버튼 링 = 이번 클립 진행률 (녹화 중에만 채워짐)
-    private func updateClipGauge() {
-        guard let start = recordStart else { return }
-        let clipFrac = min(1, max(0, Date().timeIntervalSince(start) / max(currentClipLimit, 0.1)))
-        clipProgress.strokeEnd = CGFloat(clipFrac)
+    /// 녹화 버튼 링 = 이번 클립 진행률. 첫 프레임 시점에 0→1 선형 애니메이션을 걸어
+    /// 상한 시간에 정확히 한 바퀴가 차도록 한다. (타이머 갱신 방식은 벽시계 지연·암묵
+    /// 애니메이션 랙으로 링이 중간에 멈춘 것처럼 보이는 문제가 있어 이 방식으로 대체.)
+    private func startClipRingAnimation(duration: Double) {
+        clipProgress.removeAnimation(forKey: "clipFill")
+        let anim = CABasicAnimation(keyPath: "strokeEnd")
+        anim.fromValue = 0
+        anim.toValue = 1
+        anim.duration = max(duration, 0.1)
+        anim.timingFunction = CAMediaTimingFunction(name: .linear)
+        anim.fillMode = .forwards
+        anim.isRemovedOnCompletion = false
+        clipProgress.strokeEnd = 1   // 모델값은 꽉 찬 상태로 고정, 표시는 애니메이션이 담당
+        clipProgress.add(anim, forKey: "clipFill")
+    }
+
+    /// 링을 즉시 비우고 진행 애니메이션을 제거한다 (녹화 시작 전/종료 후 초기화용).
+    private func resetClipRing() {
+        clipProgress.removeAnimation(forKey: "clipFill")
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        clipProgress.strokeEnd = 0
+        CATransaction.commit()
     }
 
     private func showBudgetAlert() {
@@ -590,13 +578,6 @@ final class CameraViewController: UIViewController {
             y: zoomBar.frame.minY - clipHint.frame.height - 12
         )
         recordBtn.center = CGPoint(x: w / 2, y: clipHint.frame.minY - 12 - 40)
-        // 필터 바 — 녹화 버튼 위에 가로 중앙 정렬
-        let fSize = filterBar.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
-        filterBar.frame = CGRect(
-            x: (w - fSize.width) / 2,
-            y: recordBtn.frame.minY - fSize.height - 16,
-            width: fSize.width, height: fSize.height
-        )
     }
 
     // MARK: - Actions
@@ -642,21 +623,25 @@ final class CameraViewController: UIViewController {
         }
         service.maxDuration = clipLimit
         currentClipLimit = clipLimit
-        clipProgress.strokeEnd = 0
+        resetClipRing()
+        // recordStart는 '실제 첫 프레임' 콜백(onRecordingStarted)에서 설정된다 —
+        // 링 채우기 애니메이션도 그 콜백에서 시작해 첫 프레임 시점에 정확히 맞춘다.
+        // 카메라 워밍업 지연 동안 벽시계가 앞서 달려 첫 촬영이 짧게 잘리는 문제 방지.
+        recordStart = nil
         service.startRecording(place: place, sessionId: sessionId)
         setInnerDot(recording: true)
         hintLabel.text = recordingHint
-        recordStart = Date()
         progressTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
             guard let self, let s = self.recordStart else { return }
             let elapsed = Date().timeIntervalSince(s)
-            self.updateClipGauge()
-            // 녹화 중 버튼 아래 힌트를 이번 클립 경과/상한으로 갱신 (예: "2.3 / 5초")
+            // 링 채우기는 startClipRingAnimation의 CABasicAnimation이 담당한다.
+            // 여기서는 버튼 아래 힌트 텍스트만 경과/상한으로 갱신 (예: "2.3 / 5초")
             self.clipHint.text = L("camera.clipElapsed",
                                    String(format: "%.1f", min(elapsed, clipLimit)),
                                    Int(clipLimit.rounded()))
-            // 클립 한도 도달 — CameraService도 maxDuration에서 자동 종료된다
-            if elapsed >= clipLimit {
+            // 안전장치: 실제 종료는 CameraService가 sample-time maxDuration에서 담당한다.
+            // 벽시계가 크게 초과할 때만 백업으로 종료(첫 프레임 지연을 고려해 여유 +1.5s).
+            if elapsed >= clipLimit + 1.5 {
                 self.stopRecordingUI()
             }
         }
@@ -670,24 +655,6 @@ final class CameraViewController: UIViewController {
         service.stopRecording()
     }
 
-    @objc private func filterTapped(_ sender: UIButton) {
-        guard let filter = NaruFilter(rawValue: sender.tag - 950) else { return }
-        applyFilter(filter)
-        NaruFilter.saved = filter
-    }
-
-    private func applyFilter(_ filter: NaruFilter) {
-        service.activeFilter = filter
-        // 필터가 켜지면 Metal 프리뷰를 표시하고, 꺼지면 기존 하드웨어 프리뷰로 복귀
-        filteredPreview?.isHidden = (filter == .none)
-        for v in filterBar.arrangedSubviews {
-            guard let b = v as? UIButton else { continue }
-            let selected = (b.tag - 950) == filter.rawValue
-            b.backgroundColor = selected ? .white : UIColor.black.withAlphaComponent(0.45)
-            b.tintColor = selected ? .black : .white
-        }
-    }
-
     @objc private func zoomTapped(_ sender: UIButton) {
         let f = Double(sender.tag) / 10.0
         service.setZoom(f)
@@ -699,28 +666,30 @@ final class CameraViewController: UIViewController {
         progressTimer = nil
         recordStart = nil
         refreshUsedSeconds()   // 파일 기준으로 재계산 (재촬영 덮어쓰기 반영)
-        clipProgress.strokeEnd = 0
+        resetClipRing()
         clipHint.text = ProManager.shared.isPro ? L("camera.clipHintPro") : L("camera.clipHintFree")
         hintLabel.text = idleHint
         setInnerDot(recording: false)
         
         if url != nil {
-            // 저장 성공 UI 업데이트
-            savingOverlay?.viewWithTag(701)?.isHidden = true // indicator
-            savingOverlay?.viewWithTag(702)?.isHidden = false // checkMark
-            if let label = savingOverlay?.viewWithTag(703) as? UILabel {
-                label.text = L("camera.saveSuccess")
-            }
-            
-            // 1.2초 대기 후 자동 닫기
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
-                self?.onSaved?()
-                self?.dismiss(animated: true)
-            }
+            showSaveSuccessAndClose()
         } else {
             // 취소되거나 오류 시 오버레이 숨기기
             savingOverlay?.isHidden = true
             view.isUserInteractionEnabled = true
+        }
+    }
+
+    private func showSaveSuccessAndClose() {
+        savingOverlay?.viewWithTag(701)?.isHidden = true  // indicator
+        savingOverlay?.viewWithTag(702)?.isHidden = false // checkMark
+        if let label = savingOverlay?.viewWithTag(703) as? UILabel {
+            label.text = L("camera.saveSuccess")
+        }
+        // 1.2초 대기 후 자동 닫기
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+            self?.onSaved?()
+            self?.dismiss(animated: true)
         }
     }
 

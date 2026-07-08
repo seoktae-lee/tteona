@@ -1379,11 +1379,15 @@ async function composeVlog(job) {
     if (bgm) {
       const total = (await probeVideo(rawFile)).duration;
       const fadeStart = Math.max(0, total - 1.5).toFixed(2);
+      // 원음(apad)을 영상 전체 길이로 패딩해 amix=first의 기준 길이를 영상 길이로 고정한다.
+      // 그렇지 않으면 클립 오디오가 영상보다 조금 짧을 때(흔함) amix가 먼저 끝나
+      // 영상 끝부분에 BGM이 빠지는 문제가 간헐적으로 발생한다.
       await runFF([
         '-i', rawFile, '-stream_loop', '-1', '-i', bgm,
         '-filter_complex',
-        `[1:a]volume=0.30[bg];[0:a][bg]amix=inputs=2:duration=first:dropout_transition=3:normalize=0[mx];[mx]afade=t=out:st=${fadeStart}:d=1.5[a]`,
+        `[0:a]apad=whole_dur=${total.toFixed(3)}[va];[1:a]volume=0.30[bg];[va][bg]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[mx];[mx]afade=t=out:st=${fadeStart}:d=1.5[a]`,
         '-map', '0:v', '-map', '[a]',
+        '-t', total.toFixed(3),
         '-c:v', 'copy', '-c:a', 'aac', '-ar', '44100', '-ac', '2',
         '-movflags', '+faststart', outFile,
       ]);

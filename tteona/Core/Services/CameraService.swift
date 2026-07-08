@@ -1,7 +1,5 @@
 import AVFoundation
-import CoreImage
 import Foundation
-import Metal
 import UIKit
 
 class CameraService: NSObject {
@@ -19,21 +17,11 @@ class CameraService: NSObject {
     private var assetWriter: AVAssetWriter?
     private var videoWriterInput: AVAssetWriterInput?
     private var audioWriterInput: AVAssetWriterInput?
-    private var pixelBufferAdaptor: AVAssetWriterInputPixelBufferAdaptor?
     private var outputURL: URL?
 
-    // MARK: 나루 무드 필터
-    /// 현재 필터 — 프리뷰 콜백과 기록 픽셀버퍼 양쪽에 동일 체인 적용
-    var activeFilter: NaruFilter = .none
-    /// 필터 활성 시 매 비디오 프레임의 필터 적용 CIImage (writingQueue에서 호출됨)
-    var onPreviewImage: ((CIImage) -> Void)?
-    private lazy var filterContext: CIContext = {
-        if let dev = MTLCreateSystemDefaultDevice() {
-            return CIContext(mtlDevice: dev, options: [.cacheIntermediates: false])
-        }
-        return CIContext()
-    }()
-    private let filterColorSpace = CGColorSpaceCreateDeviceRGB()
+    /// 실제 첫 비디오 프레임이 기록되기 시작한 순간 콜백 — 카메라 워밍업 지연을 감안해
+    /// 클립 타이머를 '첫 프레임' 기준으로 맞춰 첫 촬영이 짧게 잘리는 문제를 막는다.
+    var onRecordingStarted: (() -> Void)?
 
     private let writingQueue = DispatchQueue(label: "camera.writing")
     private var isWritingSessionStarted = false
@@ -250,22 +238,11 @@ class CameraService: NSObject {
         writer.add(videoInput)
         writer.add(audioInput)
 
-        // 필터 기록용 어댑터 — 필터가 켜져 있으면 원본 대신 필터 적용 픽셀버퍼를 쓴다
-        let adaptor = AVAssetWriterInputPixelBufferAdaptor(
-            assetWriterInput: videoInput,
-            sourcePixelBufferAttributes: [
-                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
-                kCVPixelBufferWidthKey as String: 1920,
-                kCVPixelBufferHeightKey as String: 1080,
-            ]
-        )
-
         writingQueue.async { [weak self] in
             guard let self else { return }
             self.assetWriter = writer
             self.videoWriterInput = videoInput
             self.audioWriterInput = audioInput
-            self.pixelBufferAdaptor = adaptor
             self.outputURL = url
             self.isWritingSessionStarted = false
             self.isRecording = true
@@ -289,7 +266,6 @@ class CameraService: NSObject {
                     self.assetWriter = nil
                     self.videoWriterInput = nil
                     self.audioWriterInput = nil
-                    self.pixelBufferAdaptor = nil
                     self.outputURL = nil
                     self.isWritingSessionStarted = false
                     self.onRecordingFinished?(url)
@@ -311,7 +287,6 @@ class CameraService: NSObject {
             self.assetWriter = nil
             self.videoWriterInput = nil
             self.audioWriterInput = nil
-            self.pixelBufferAdaptor = nil
             self.outputURL = nil
             self.isWritingSessionStarted = false
             
@@ -359,81 +334,37 @@ class CameraService: NSObject {
 // MARK: - Sample Buffer Delegate
 extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureAudioDataOutputSampleBufferDelegate {
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        let isVideo = output is AVCaptureVideoDataOutput
-
-        // 필터 프리뷰 — 녹화 여부와 무관하게 필터가 켜져 있으면 매 프레임 방출.
-        // 센서 버퍼는 landscape이므로 물리 방향 각도로 회전해 세로에서도 바로 서게 한다.
-        if isVideo, activeFilter != .none, let cb = onPreviewImage,
-           let pb = CMSampleBufferGetImageBuffer(sampleBuffer) {
-            var img = activeFilter.apply(to: CIImage(cvPixelBuffer: pb))
-            // 회전 보정: 녹화 메타(videoInput.transform)는 비디오 좌표계(y-down, 시계+)로 해석되지만
-            // CIImage는 y-up(반시계+)이라, 같은 변환을 그대로 쓰면 방향이 정확히 180° 뒤집힌다.
-            // 그래서 프리뷰에는 캡처 변환의 '역'을 적용해 CIImage 좌표계에 맞춘다. (녹화 경로는 그대로)
-            img = img.transformed(by: currentVideoTransform().inverted())
-            if currentCameraPosition == .front {
-                // 전면 미러링 (하드웨어 프리뷰와 동일한 좌우 반전)
-                img = img.transformed(by: CGAffineTransform(scaleX: -1, y: 1))
-            }
-            // 회전/반전으로 음수가 된 원점을 0으로 정규화
-            img = img.transformed(by: CGAffineTransform(translationX: -img.extent.minX, y: -img.extent.minY))
-            cb(img)
-        }
-
         guard isRecording,
               let writer = assetWriter,
               let videoInput = videoWriterInput,
               let audioInput = audioWriterInput else { return }
 
         let timestamp = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+        let isVideo = output is AVCaptureVideoDataOutput
 
-        // 세션 시작
+        // 세션 시작 — 실제 첫 비디오 프레임이 도착한 순간. 카메라 워밍업 지연을 감안해
+        // 이 시점을 UI 타이머의 기준으로 삼아 첫 촬영이 짧게 잘리지 않게 한다.
         if !isWritingSessionStarted {
             guard isVideo else { return }
             writer.startWriting()
             writer.startSession(atSourceTime: timestamp)
             isWritingSessionStarted = true
             recordingStartTime = timestamp
+            DispatchQueue.main.async { [weak self] in self?.onRecordingStarted?() }
         }
 
-        // 최대 시간 체크
+        // 최대 시간 체크 (첫 프레임 기준 sample time)
         let elapsed = CMTimeGetSeconds(CMTimeSubtract(timestamp, recordingStartTime))
         if elapsed >= maxDuration {
             if isRecording { finishRecording() }
             return
         }
 
-        // 버퍼 쓰기 — 필터가 켜져 있으면 필터 적용 픽셀버퍼로 대체 (WYSIWYG)
+        // 버퍼 쓰기
         if isVideo, videoInput.isReadyForMoreMediaData {
-            if activeFilter == .none {
-                videoInput.append(sampleBuffer)
-            } else {
-                appendFiltered(sampleBuffer: sampleBuffer, at: timestamp)
-            }
+            videoInput.append(sampleBuffer)
         } else if !isVideo, audioInput.isReadyForMoreMediaData {
             audioInput.append(sampleBuffer)
         }
-    }
-
-    /// 필터 체인을 적용한 프레임을 픽셀버퍼로 렌더해 어댑터로 기록한다
-    private func appendFiltered(sampleBuffer: CMSampleBuffer, at timestamp: CMTime) {
-        guard let adaptor = pixelBufferAdaptor,
-              let src = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
-        let filtered = activeFilter.apply(to: CIImage(cvPixelBuffer: src))
-
-        var out: CVPixelBuffer?
-        if let pool = adaptor.pixelBufferPool {
-            CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &out)
-        }
-        if out == nil {
-            // 풀 준비 전 첫 프레임 폴백
-            CVPixelBufferCreate(
-                kCFAllocatorDefault,
-                CVPixelBufferGetWidth(src), CVPixelBufferGetHeight(src),
-                kCVPixelFormatType_32BGRA, nil, &out
-            )
-        }
-        guard let out else { return }
-        filterContext.render(filtered, to: out, bounds: filtered.extent, colorSpace: filterColorSpace)
-        adaptor.append(out, withPresentationTime: timestamp)
     }
 }
