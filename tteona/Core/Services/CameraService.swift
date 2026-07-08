@@ -151,7 +151,9 @@ class CameraService: NSObject {
     private func applyStabilization() {
         guard let connection = videoDataOutput.connection(with: .video),
               connection.isVideoStabilizationSupported else { return }
-        connection.preferredVideoStabilizationMode = .auto
+        // .auto는 기기에 따라 시네마틱 계열(프레임 전달 지연 1초+)을 선택해
+        // 클립 시작 구간 무음·링 타이머 어긋남을 키운다 → 지연이 거의 없는 .standard 고정
+        connection.preferredVideoStabilizationMode = .standard
     }
 
     // MARK: - 핀치 줌 / 탭 초점
@@ -353,17 +355,20 @@ extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapture
             DispatchQueue.main.async { [weak self] in self?.onRecordingStarted?() }
         }
 
-        // 최대 시간 체크 (첫 프레임 기준 sample time)
+        // 최대 시간 체크 — 반드시 '비디오 프레임' PTS로만 판정한다.
+        // 손떨림 보정 파이프라인이 비디오를 지연 전달(PTS는 실제 촬영 시각)하는 동안
+        // 오디오는 거의 실시간으로 도착해 오디오 PTS가 항상 비디오보다 앞서 달린다.
+        // 오디오로 판정하면 (상한 − 파이프라인 지연)초 만에 조기 종료돼
+        // 링 UI가 끝까지 차지 않고 비디오 트랙도 상한보다 짧게 잘린다.
         let elapsed = CMTimeGetSeconds(CMTimeSubtract(timestamp, recordingStartTime))
-        if elapsed >= maxDuration {
-            if isRecording { finishRecording() }
-            return
-        }
-
-        // 버퍼 쓰기
-        if isVideo, videoInput.isReadyForMoreMediaData {
-            videoInput.append(sampleBuffer)
-        } else if !isVideo, audioInput.isReadyForMoreMediaData {
+        if isVideo {
+            if elapsed >= maxDuration {
+                if isRecording { finishRecording() }
+                return
+            }
+            if videoInput.isReadyForMoreMediaData { videoInput.append(sampleBuffer) }
+        } else if elapsed < maxDuration, audioInput.isReadyForMoreMediaData {
+            // 오디오는 비디오와 같은 상한 구간까지만 기록해 두 트랙 길이를 맞춘다
             audioInput.append(sampleBuffer)
         }
     }

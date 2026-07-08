@@ -568,17 +568,12 @@ struct VlogPreviewView: View {
             VlogAuroraBackground()
 
             VStack(spacing: 0) {
-                // 완성 헤더 — 축하하는 나루 + 폭죽 + 문구 + 자동 저장 안내
+                // 완성 헤더 — 축하하는 나루 + 문구 + 자동 저장 안내
                 VStack(spacing: 8) {
                     Image("tteoni-jump")
                         .resizable()
                         .scaledToFit()
                         .frame(height: 96)
-                        .overlay(alignment: .topTrailing) {
-                            Text("🎉")
-                                .font(.system(size: 28))
-                                .offset(x: 12, y: -2)
-                        }
                     Text(L("vlog.done.title"))
                         .font(.tte(23, .bold))
                         .foregroundColor(.white)
