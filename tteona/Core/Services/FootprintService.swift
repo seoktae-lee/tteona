@@ -14,6 +14,8 @@ final class FootprintService: ObservableObject {
     @Published var mySummary = FootprintSummary()
     /// 마지막으로 새로 칠해진 지역 코드 — 프로필 탭 진입 시 하이라이트 연출용
     @Published var lastNewCodes: Set<String> = []
+    /// 그중 대표(최다 체류) 신규 지역 코드 — 카메라가 여기로 날아간다
+    @Published var lastPrimaryNewCode: String? = nil
 
     private let db = Firestore.firestore()
 
@@ -28,19 +30,29 @@ final class FootprintService: ObservableObject {
             return places.map { ($0, FootprintAtlas.shared.resolve(lat: $0.latitude, lng: $0.longitude)) }
         }.value
 
-        var sigCodes: [String] = []
-        var countryCodes: [String] = []
-        var regionNames: [String] = []
+        // 장소(=촬영 클립) 하나하나를 지역으로 집계 — "가장 많이 머문 지역"이 대표가 되도록.
+        // 첫 장소가 아니라 체류 빈도가 기준이므로, 잠깐 스친 환승지가 대표로 뽑히지 않는다.
+        var sigCount: [String: Int] = [:]
+        var sigName: [String: String] = [:]
+        var countryCount: [String: Int] = [:]
+        var countryName: [String: String] = [:]
         for (_, region) in resolved {
-            if let sig = region.sig, !sigCodes.contains(sig.code) {
-                sigCodes.append(sig.code)
-                regionNames.append(sig.name)
+            if let sig = region.sig {
+                sigCount[sig.code, default: 0] += 1
+                sigName[sig.code] = sig.name
             }
-            if let country = region.country, !countryCodes.contains(country.code) {
-                countryCodes.append(country.code)
-                if country.code != "KOR" { regionNames.append(country.name) }
+            if let country = region.country {
+                countryCount[country.code, default: 0] += 1
+                countryName[country.code] = country.name
             }
         }
+        // 머문 횟수 내림차순 → 동률이면 코드순(결정적). 첫 원소가 최다 체류지.
+        let sigCodes = sigCount.sorted { ($0.value, $1.key) > ($1.value, $0.key) }.map(\.key)
+        let countryCodes = countryCount.sorted { ($0.value, $1.key) > ($1.value, $0.key) }.map(\.key)
+        // 표시용 이름: 최다 체류 시군구 → 그다음 → …, 이어서 해외 국가(한국은 시군구로 대표)
+        var regionNames = sigCodes.compactMap { sigName[$0] }
+        regionNames += countryCodes.filter { $0 != "KOR" }.compactMap { countryName[$0] }
+
         guard !sigCodes.isEmpty || !countryCodes.isEmpty else {
             print("[Footprint] no region resolved — skip")
             return
@@ -74,7 +86,11 @@ final class FootprintService: ObservableObject {
 
             mySummary.sigCodes.formUnion(sigCodes)
             mySummary.countryCodes.formUnion(countryCodes)
-            if !newCodes.isEmpty { lastNewCodes = newCodes }
+            if !newCodes.isEmpty {
+                lastNewCodes = newCodes
+                // 대표 신규 지역 = 체류순 정렬(시군구 우선)에서 처음으로 등장하는 새 지역
+                lastPrimaryNewCode = (sigCodes + countryCodes).first { newCodes.contains($0) }
+            }
             print("[Footprint] recorded sig=\(sigCodes) country=\(countryCodes)")
         } catch {
             print("[Footprint] record failed:", error.localizedDescription)

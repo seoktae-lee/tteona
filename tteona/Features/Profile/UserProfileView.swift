@@ -176,6 +176,7 @@ struct UserProfileView: View {
                 summary: summary,
                 routes: routes,
                 interactive: true,
+                panZoom: false,   // 페이지 스크롤과 충돌 방지 — 탭만
                 initialFocus: initialFocus
             )
             .frame(height: 320)

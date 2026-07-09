@@ -158,15 +158,18 @@ struct ProfileTabView: View {
     private func playNewRegionRevealIfNeeded() {
         let newCodes = footprintService.lastNewCodes
         guard !newCodes.isEmpty else { return }
+        let primary = footprintService.lastPrimaryNewCode
         footprintService.lastNewCodes = []
+        footprintService.lastPrimaryNewCode = nil
         highlightCodes = newCodes
         greetingText = L("footprint.newRegion")
-        // 새 지역(시군구 우선)으로 카메라 이동
-        if let sigCode = newCodes.first(where: { $0.count == 5 }),
-           let region = FootprintAtlas.shared.koreaRegion(code: sigCode) {
+        // 대표(최다 체류) 신규 지역으로 카메라 이동 — 없으면 시군구 우선 폴백
+        let target = primary ?? newCodes.first(where: { $0.count == 5 }) ?? newCodes.first
+        if let code = target, code.count == 5,
+           let region = FootprintAtlas.shared.koreaRegion(code: code) {
             focusCommand = .point(lat: latOf(region.center), lng: lngOf(region.center))
-        } else if let country = newCodes.first(where: { $0.count == 3 }) {
-            focusCommand = .country(country)
+        } else if let code = target, code.count == 3 {
+            focusCommand = .country(code)
         }
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 6_000_000_000)
@@ -389,6 +392,7 @@ struct ProfileTabView: View {
                     routes: footprints.map(\.points),
                     highlightCodes: highlightCodes,
                     interactive: true,
+                    panZoom: false,   // 페이지 스크롤과 충돌 방지 — 탭만
                     initialFocus: homeFocus,
                     focusCommand: focusCommand
                 )

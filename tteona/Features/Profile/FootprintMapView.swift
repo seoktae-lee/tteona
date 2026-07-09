@@ -16,7 +16,9 @@ struct FootprintMapView: View {
     let summary: FootprintSummary
     var routes: [[FootprintPoint]] = []
     var highlightCodes: Set<String> = []     // 새로 칠해진 지역 — 펄스 연출
-    var interactive: Bool = true
+    var interactive: Bool = true             // 탭으로 지역 정보 표시
+    // 임베드(스크롤 안) 지도는 팬/핀치를 끈다 — 세로 드래그가 페이지 스크롤로 넘어가도록.
+    var panZoom: Bool = true
     var initialFocus: FootprintMapFocus = .korea
     /// 부모가 값을 바꾸면 해당 위치로 카메라가 날아간다 ("지금 여기 있네요" 연출 등)
     var focusCommand: FootprintMapFocus? = nil
@@ -63,7 +65,7 @@ struct FootprintMapView: View {
             }
             .contentShape(Rectangle())
             .clipped()
-            .gesture(interactive ? mapGestures(size: size) : nil)
+            .gesture(panZoom ? mapGestures(size: size) : nil)
             .onTapGesture(coordinateSpace: .local) { location in
                 guard interactive, atlasReady else { return }
                 handleTap(at: location, size: size)
