@@ -360,6 +360,7 @@ class AuthService: NSObject, ObservableObject {
     func signOut() {
         ActiveSessionStore.shared.clear()
         ImpromptuSessionStore.shared.clear()
+        Task { @MainActor in FootprintService.shared.clear() }
         try? Auth.auth().signOut()
         GIDSignIn.sharedInstance.signOut()
     }

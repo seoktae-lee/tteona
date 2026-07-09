@@ -1,5 +1,4 @@
 import SwiftUI
-import PhotosUI
 import UserNotifications
 
 struct SettingsView: View {
@@ -11,23 +10,19 @@ struct SettingsView: View {
     @State private var showDeleteFailedAlert = false
     @State private var deleteFailedMessage = L("settings.deleteFailed.message")
     @State private var notificationGranted: Bool? = nil
-    @State private var avatarPickerItem: PhotosPickerItem?
-    @State private var isUploadingAvatar = false
     @ObservedObject private var pro = ProManager.shared
     @State private var showPaywall = false
-    @State private var showNicknameEdit = false
 
     var body: some View {
-        NavigationStack {
-            List {
-                profileSection
-                proSection
-                appSection
-                accountSection
-            }
-            .navigationTitle(L("settings.title"))
-            .navigationBarTitleDisplayMode(.large)
+        // 프로필 탭에서 push되므로 자체 NavigationStack 없이 부모 스택을 사용한다
+        List {
+            personalSection
+            proSection
+            appSection
+            accountSection
         }
+        .navigationTitle(L("settings.title"))
+        .navigationBarTitleDisplayMode(.inline)
         .alert(L("settings.signOut"), isPresented: $showSignOutAlert) {
             Button(L("settings.signOut"), role: .destructive) { authService.signOut() }
             Button(L("common.cancel"), role: .cancel) {}
@@ -61,11 +56,6 @@ struct SettingsView: View {
             await checkNotificationStatus()
         }
         .sheet(isPresented: $showPaywall) { ProPaywallView() }
-        .sheet(isPresented: $showNicknameEdit) {
-            NicknameEditSheet()
-                .environmentObject(authService)
-                .environmentObject(userService)
-        }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             Task { await checkNotificationStatus() }
         }
@@ -86,79 +76,9 @@ struct SettingsView: View {
         }
     }
 
-    private var profileSection: some View {
+    // 프로필(아바타·닉네임·통계)은 프로필 탭으로 이동 — 여기는 취향 설정만 남긴다
+    private var personalSection: some View {
         Section {
-            HStack(spacing: 14) {
-                PhotosPicker(selection: $avatarPickerItem, matching: .images) {
-                    ZStack {
-                        Circle()
-                            .fill(Color.tteOrange.opacity(0.15))
-                            .frame(width: 56, height: 56)
-                        if let urlString = userService.currentUser?.profileImageUrl, let url = URL(string: urlString) {
-                            AsyncImage(url: url) { image in
-                                image.resizable().scaledToFill()
-                            } placeholder: {
-                                Text(String(userService.currentUser?.nickname.prefix(1) ?? "?"))
-                                    .font(.tte(22, .semibold))
-                                    .foregroundColor(.tteOrange)
-                            }
-                            .frame(width: 56, height: 56)
-                            .clipShape(Circle())
-                        } else {
-                            Text(String(userService.currentUser?.nickname.prefix(1) ?? "?"))
-                                .font(.tte(22, .semibold))
-                                .foregroundColor(.tteOrange)
-                        }
-                        if isUploadingAvatar {
-                            Circle()
-                                .fill(Color.black.opacity(0.4))
-                                .frame(width: 56, height: 56)
-                            ProgressView().tint(.white)
-                        }
-                        Image(systemName: "camera.fill")
-                            .font(.tte(11, .bold))
-                            .foregroundColor(.white)
-                            .frame(width: 20, height: 20)
-                            .background(Circle().fill(Color.tteOrange))
-                            .overlay(Circle().stroke(Color.white, lineWidth: 1.5))
-                            .offset(x: 20, y: 20)
-                    }
-                }
-                .disabled(isUploadingAvatar)
-                .onChange(of: avatarPickerItem) { _, newItem in
-                    Task { await uploadAvatar(from: newItem) }
-                }
-                // 닉네임 영역 탭 → 변경 시트 (updateNickname 서비스는 있었지만 진입점이 없던 문제 해결)
-                Button {
-                    showNicknameEdit = true
-                } label: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(spacing: 6) {
-                            Text(userService.currentUser?.nickname.isEmpty == false
-                                 ? userService.currentUser!.nickname : L("settings.noNickname"))
-                                .font(.tte(17, .semibold))
-                                .foregroundColor(.tteDarkGray)
-                            Image(systemName: "pencil")
-                                .font(.tte(12, .semibold))
-                                .foregroundColor(.tteMediumGray)
-                        }
-                        Text(authService.currentUser?.email ?? "")
-                            .font(.tte(13))
-                            .foregroundColor(.tteMediumGray)
-                    }
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(L("settings.editNickname"))
-            }
-            .padding(.vertical, 6)
-
-            NavigationLink {
-                TravelStatsView()
-                    .environmentObject(authService)
-            } label: {
-                Label(L("settings.travelStats"), systemImage: "chart.bar.fill")
-            }
-
             travelStyleRow
         }
     }
@@ -315,19 +235,6 @@ struct SettingsView: View {
     private func checkNotificationStatus() async {
         let settings = await UNUserNotificationCenter.current().notificationSettings()
         notificationGranted = settings.authorizationStatus == .authorized
-    }
-
-    private func uploadAvatar(from item: PhotosPickerItem?) async {
-        guard let item, let uid = authService.currentUser?.uid else { return }
-        guard let data = try? await item.loadTransferable(type: Data.self),
-              let image = UIImage(data: data) else { return }
-
-        isUploadingAvatar = true
-        defer { isUploadingAvatar = false }
-
-        if let url = await ProfileImageService.shared.upload(uid: uid, image: image) {
-            userService.setProfileImageUrl(url)
-        }
     }
 
     private var accountSection: some View {

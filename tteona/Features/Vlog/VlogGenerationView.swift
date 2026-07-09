@@ -476,6 +476,15 @@ struct VlogGenerationView: View {
                 savedFormatsCount = saved
                 vlogURL = mainURL
                 Haptics.success()
+                // 발자취 적재 — 브이로그가 완성된 여행만 지도에 칠해진다 (실패해도 흐름 방해 없음)
+                if let uid = Auth.auth().currentUser?.uid {
+                    let recordCourse = course
+                    let recordSessionId = sessionId
+                    Task {
+                        await FootprintService.shared.record(
+                            course: recordCourse, sessionId: recordSessionId, userId: uid)
+                    }
+                }
                 phase = .preview
             } catch {
                 errorMessage = error.localizedDescription

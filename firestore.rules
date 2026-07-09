@@ -23,6 +23,13 @@ service cloud.firestore {
       allow update: if isOwner(userId) &&
         !request.resource.data.diff(resource.data).affectedKeys()
           .hasAny(['isVerified', 'creatorLabel']);
+
+      // footprints 서브컬렉션 (발자취 여행 기록)
+      // 읽기: 로그인 유저 누구나(타인 프로필의 발자취 지도·경로 표시용), 쓰기: 본인만
+      match /footprints/{footprintId} {
+        allow read: if isSignedIn();
+        allow write: if isSignedIn() && isOwner(userId);
+      }
     }
 
     // users 민감정보 (FCM 토큰 등)

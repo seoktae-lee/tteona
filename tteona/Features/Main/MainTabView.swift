@@ -64,9 +64,9 @@ struct MainTabView: View {
                 .badge(roomService.unreadRoomIds.count)
                 .tag(2)
 
-            SettingsView()
+            ProfileTabView()
                 .tabItem {
-                    Label(L("tab.settings"), systemImage: "gearshape.fill")
+                    Label(L("tab.profile"), systemImage: "person.crop.circle.fill")
                 }
                 .tag(3)
         }
@@ -134,6 +134,10 @@ struct MainTabView: View {
         }
         .onAppear {
             #if DEBUG
+            // 시각 검증용: 프로필 탭 바로 진입
+            if ProcessInfo.processInfo.arguments.contains("-previewProfileTab") {
+                selectedTab = 3
+            }
             if ProcessInfo.processInfo.arguments.contains("-previewNavGuide") {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
                     withAnimation(.easeIn(duration: 0.3)) { showNavGuide = true }
