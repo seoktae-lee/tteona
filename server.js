@@ -405,7 +405,9 @@ app.post('/api/courses/:courseId/thumbnail', requireAuth, uploadLimiter, upload.
       .jpeg({ quality: 82 })
       .toFile(filepath);
 
-    const url = `https://tteona.kr/uploads/thumbnails/${filename}`;
+    // 파일명이 courseId로 고정이라 재업로드 시 URL이 동일 → 정적 캐시(30d)에 옛 이미지가 남는다.
+    // 아바타와 동일하게 버전 쿼리를 붙여 캐시 무효화 (fetchAllThumbnails 쓰는 탐색탭·프로필에 자동 전파)
+    const url = `https://tteona.kr/uploads/thumbnails/${filename}?v=${Date.now()}`;
     await pgPool.query(
       `INSERT INTO course_thumbnails (course_id, url, uploaded_at)
        VALUES ($1, $2, NOW())

@@ -8,20 +8,24 @@ import CoreLocation
 struct ProfileTabView: View {
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var userService: UserService
+    @EnvironmentObject private var courseService: CourseService
+    @EnvironmentObject private var roomService: RoomService
     @ObservedObject private var footprintService = FootprintService.shared
 
     @State private var footprints: [FootprintRecord] = []
     @State private var stats: TravelStats?
     @State private var isLoaded = false
 
-    // 내 코스 + 썸네일 (프로필에서 직접 썸네일 꾸미기)
+    // 내 코스 + 썸네일 (프로필에서 직접 썸네일 꾸미기 + 탭하면 상세)
     @State private var myCourses: [Course] = []
     @State private var thumbnails: [String: String] = [:]
+    @State private var selectedCourse: Course? = nil
 
     // 발자취 지도 연출
     @State private var focusCommand: FootprintMapFocus? = nil
     @State private var highlightCodes: Set<String> = []
     @State private var greetingText: String? = nil
+    @State private var showFullMap = false
 
     // 프로필 편집
     @State private var avatarPickerItem: PhotosPickerItem?
@@ -77,6 +81,21 @@ struct ProfileTabView: View {
                 .environmentObject(authService)
                 .environmentObject(userService)
         }
+        .sheet(item: $selectedCourse) { course in
+            CourseDetailView(course: course)
+                .environmentObject(authService)
+                .environmentObject(courseService)
+                .environmentObject(userService)
+                .environmentObject(roomService)
+        }
+        .fullScreenCover(isPresented: $showFullMap) {
+            FootprintFullMapView(
+                summary: summary,
+                routes: footprints.map(\.points),
+                initialFocus: homeFocus,
+                subtitle: progressText
+            )
+        }
         .task { await load() }
         .onChange(of: footprintService.mySummary) { _, _ in
             // 브이로그 생성 직후 탭 전환 시 새 지역 연출
@@ -105,17 +124,24 @@ struct ProfileTabView: View {
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
                 focusCommand = .country("JPN")
             }
+            // 전체화면 지도 검증 (-previewFullMap)
+            if ProcessInfo.processInfo.arguments.contains("-previewFullMap") {
+                try? await Task.sleep(nanoseconds: 800_000_000)
+                showFullMap = true
+            }
             return
         }
         #endif
         guard let uid = authService.currentUser?.uid else { return }
         if !isLoaded {
-            async let summaryTask: () = { _ = await footprintService.fetchSummary(userId: uid, isMe: true) }()
-            async let recordsTask = footprintService.fetchFootprints(userId: uid)
+            // 1) 요약 먼저 로드 → 2) 과거 코스 백필(1회, mySummary 즉시 갱신) → 3) 나머지 병렬 조회
+            _ = await footprintService.fetchSummary(userId: uid, isMe: true)
+            await footprintService.backfillFromMyCourses(userId: uid)
+
+            async let recordsTask = footprintService.fetchFootprints(userId: uid)   // 백필 후 재조회 → 과거 코스 포함
             async let statsTask = StatsService.shared.fetchMyStats(userId: uid)
             async let coursesTask = footprintService.fetchCourses(authorId: uid)
             async let thumbsTask = CourseThumbnailService.shared.fetchAllThumbnails()
-            _ = await summaryTask
             footprints = await recordsTask
             stats = await statsTask
             myCourses = await coursesTask
@@ -426,6 +452,20 @@ struct ProfileTabView: View {
                     RoundedRectangle(cornerRadius: 24)
                         .stroke(Color(hex: "#E8E2D6"), lineWidth: 1)
                 )
+                // 전체화면 확대 버튼 (우상단) — 여기서만 팬/핀치로 세계지도를 자유 탐색
+                .overlay(alignment: .topTrailing) {
+                    Button {
+                        showFullMap = true
+                    } label: {
+                        ZStack {
+                            Circle().fill(Color.black.opacity(0.45)).frame(width: 34, height: 34)
+                            Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                .font(.tte(14, .semibold))
+                                .foregroundColor(.white)
+                        }
+                    }
+                    .padding(12)
+                }
 
                 if let greeting = greetingText {
                     greetingBanner(greeting)
@@ -544,11 +584,13 @@ struct ProfileTabView: View {
                     ForEach(myCourses, id: \.courseId) { course in
                         EditableCourseCard(
                             course: course,
-                            thumbnailURL: thumbnails[course.courseId]
-                        ) { newURL in
-                            // 업로드 성공 → 캐시버스트 URL로 즉시 교체
-                            thumbnails[course.courseId] = newURL
-                        }
+                            thumbnailURL: thumbnails[course.courseId],
+                            onTap: { selectedCourse = course },
+                            onThumbnailChanged: { newURL in
+                                // 업로드 성공 → 서버 캐시버스트 URL로 즉시 교체 (탐색탭과 동일 URL)
+                                thumbnails[course.courseId] = newURL
+                            }
+                        )
                     }
                 }
                 .padding(.horizontal, 20)
@@ -619,6 +661,7 @@ struct ProfileTabView: View {
 private struct EditableCourseCard: View {
     let course: Course
     let thumbnailURL: String?
+    var onTap: (() -> Void)? = nil
     let onThumbnailChanged: (String) -> Void
 
     @State private var pickerItem: PhotosPickerItem?
@@ -635,6 +678,9 @@ private struct EditableCourseCard: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .clipped()
             }
+            // 카드 본문 탭 → 코스 상세 (카메라 버튼은 자체 hit-test 우선이라 충돌 안 함)
+            .contentShape(Rectangle())
+            .onTapGesture { onTap?() }
             .overlay(alignment: .bottom) {
                 LinearGradient(colors: [.clear, .black.opacity(0.15), .black.opacity(0.8)],
                                startPoint: .top, endPoint: .bottom)
@@ -716,11 +762,9 @@ private struct EditableCourseCard: View {
               let image = UIImage(data: data) else { state = .failed; return }
         state = .uploading
         if let url = await CourseThumbnailService.shared.upload(courseId: course.courseId, image: image) {
-            // 파일명이 고정이라 URL이 같음 → 캐시버스트 쿼리로 즉시 갱신
-            let busted = url.contains("?") ? "\(url)&t=\(Int(Date().timeIntervalSince1970))"
-                                           : "\(url)?t=\(Int(Date().timeIntervalSince1970))"
+            // 서버가 ?v=timestamp 캐시버스트를 붙여 반환 → 그대로 사용하면 탐색탭·DB와 완전히 동일
             state = .idle
-            onThumbnailChanged(busted)
+            onThumbnailChanged(url)
             Haptics.success()
         } else {
             state = .failed
