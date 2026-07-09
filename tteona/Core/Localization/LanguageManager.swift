@@ -43,6 +43,8 @@ final class LanguageManager: ObservableObject {
         let initial = saved ?? Self.systemDefault()
         language = initial
         bundle = Self.bundle(for: initial)
+        // 이전 버전에서 언어를 고른 유저는 AppleLanguages가 비어 있다 — 여기서 한 번 맞춰준다.
+        if saved != nil { Self.syncProcessLocale(initial) }
     }
 
     /// 저장된 선택이 없으면 시스템 언어를 따른다 (ko/ja 외에는 영어)
@@ -57,6 +59,7 @@ final class LanguageManager: ObservableObject {
         guard newLanguage != language else { return }
         bundle = Self.bundle(for: newLanguage)
         UserDefaults.standard.set(newLanguage.rawValue, forKey: Self.storageKey)
+        Self.syncProcessLocale(newLanguage)
         language = newLanguage
     }
 
@@ -66,6 +69,13 @@ final class LanguageManager: ObservableObject {
         guard let path = Bundle.main.path(forResource: language.rawValue, ofType: "lproj"),
               let bundle = Bundle(path: path) else { return .main }
         return bundle
+    }
+
+    /// GMSMapView는 타일 라벨을 프로세스 로케일(AppleLanguages)로 그리고, Google Maps iOS SDK에는
+    /// 런타임 언어 오버라이드 API가 없다. AppleLanguages는 프로세스 시작 시 한 번만 읽히므로
+    /// 여기서 써 둔 값은 다음 실행부터 적용된다 — 설정 화면이 재시작 안내를 띄우는 이유.
+    private static func syncProcessLocale(_ language: AppLanguage) {
+        UserDefaults.standard.set([language.rawValue], forKey: "AppleLanguages")
     }
 }
 

@@ -86,8 +86,18 @@ struct GroupChatView: View {
                     .padding(.horizontal, 14)
                     .padding(.vertical, 12)
                 }
+                // 키보드가 올라와 뷰포트가 줄어도 바닥(최신 메시지)을 계속 붙잡는다
+                .defaultScrollAnchor(.bottom)
                 .onChange(of: entries.count) { _, _ in
                     withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo("BOTTOM", anchor: .bottom) }
+                }
+                .onChange(of: inputFocused) { _, focused in
+                    // 앵커만으로는 이미 위로 스크롤해 둔 상태를 보정하지 못한다 —
+                    // 입력창을 탭한 순간엔 키보드 애니메이션에 맞춰 최신 메시지로 내려준다.
+                    guard focused else { return }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo("BOTTOM", anchor: .bottom) }
+                    }
                 }
                 .onChange(of: scrollTargetId) { _, target in
                     guard let target else { return }

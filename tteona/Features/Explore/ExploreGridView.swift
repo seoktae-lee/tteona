@@ -31,6 +31,10 @@ struct ExploreGridView: View {
     @State private var pendingSessionInfo: CourseSessionInfo?
     @State private var didRefetchWithLocation = false
     @State private var creatorRanking: [CreatorRank] = []
+    // 탭한 코스가 상세로 열릴 때까지 해당 카드에만 로딩 인디케이터
+    @State private var openingCourseId: String? = nil
+    // 코스 제목(UGC) 번역문 — 원문 → 번역문. 없으면 카드가 원문을 그대로 쓴다.
+    @State private var translatedTitles: [String: String] = [:]
 
     private let columns = [
         GridItem(.flexible(), spacing: 8),
@@ -80,8 +84,13 @@ struct ExploreGridView: View {
                         }
                         LazyVGrid(columns: columns, spacing: 8) {
                             ForEach(sortedCourses) { course in
-                                GridCell(course: course, thumbnailURL: thumbnails[course.courseId])
-                                    .onTapGesture { selectedCourse = course }
+                                GridCell(course: course, thumbnailURL: thumbnails[course.courseId],
+                                         translatedTitle: translatedTitles[course.courseName],
+                                         isOpening: openingCourseId == course.courseId) {
+                                    Haptics.light()
+                                    openingCourseId = course.courseId
+                                    selectedCourse = course
+                                }
                             }
                         }
                         .padding(.horizontal, 12)
@@ -93,6 +102,7 @@ struct ExploreGridView: View {
             .navigationBarTitleDisplayMode(.inline)
         }
         .fullScreenCover(item: $selectedCourse, onDismiss: {
+            openingCourseId = nil
             // 상세에서 "따라가기" 확정 시 → 닫힘 완료 후 세션 시작 (asyncAfter 타이밍 의존 제거)
             if let info = pendingSessionInfo {
                 pendingSessionInfo = nil
@@ -107,13 +117,16 @@ struct ExploreGridView: View {
             .environmentObject(courseService)
             .environmentObject(userService)
             .environmentObject(roomService)
+            .onAppear { openingCourseId = nil }
         }
         .task {
             locationService.requestPermission()
             locationService.startTracking(places: [])
             await loadAll()
         }
-        .refreshable { await loadAll() }
+        // 당김 제스처가 끝나면 SwiftUI가 refreshable 태스크를 취소해 조회들이 중도 실패한다.
+        // 비구조화 Task로 감싸 취소 전파를 끊고 끝까지 완주시킨다.
+        .refreshable { await Task { await loadAll() }.value }
         .onChange(of: locationService.currentLocation) { _, loc in
             // 위치를 처음 확보하면 위치 기반으로 추천 1회 재조회
             guard !didRefetchWithLocation, loc != nil else { return }
@@ -270,10 +283,22 @@ struct ExploreGridView: View {
         )
         async let rankTask = StatsService.shared.fetchCreatorRanking()
         _ = await coursesTask
-        thumbnails = await thumbsTask
+        let thumbs = await thumbsTask
+        if !thumbs.isEmpty { thumbnails = thumbs }
         recommendedIds = await recTask
-        creatorRanking = await rankTask
+        // 랭킹 조회가 실패하면(nil) 기존 스트립을 그대로 둔다 — 당겨서 새로고침 중
+        // 태스크가 취소되면 빈 배열이 내려와 섹션이 사라지는 문제가 있었다.
+        if let ranking = await rankTask { creatorRanking = ranking }
         isLoading = false
+
+        // 제목 번역은 기다리지 않는다 — loadAll을 await하는 .refreshable의 당김 스피너가
+        // 번역 왕복만큼 더 돌게 된다. 원문으로 먼저 그리고, 번역문이 오면 교체한다.
+        let titles = courseService.courses.map(\.courseName)
+        Task {
+            let translated = await TranslationService.shared.translate(
+                titles, to: LanguageManager.shared.language)
+            if !translated.isEmpty { translatedTitles = translated }
+        }
     }
 
     // 위치 확보·취향 변경 후 추천만 재조회 (전체 리로드 없이)
@@ -319,6 +344,9 @@ private struct SkeletonGridCell: View {
 private struct GridCell: View {
     let course: Course
     let thumbnailURL: String?
+    var translatedTitle: String? = nil
+    var isOpening: Bool = false
+    var onTap: () -> Void = {}
 
     // 커스텀 썸네일이 없는 코스는 첫 장소(메인 장소) 사진을 대체 썸네일로 사용
     @State private var placePhotoURL: String?
@@ -326,6 +354,18 @@ private struct GridCell: View {
     private var hasCustomThumbnail: Bool { thumbnailURL != nil }
 
     var body: some View {
+        Button(action: onTap) { cardBody }
+            .buttonStyle(PressableCardStyle())
+            .task {
+                // 커스텀 썸네일이 있으면 장소 사진을 굳이 조회하지 않음 (불필요한 API 호출 방지)
+                guard !hasCustomThumbnail, placePhotoURL == nil,
+                      let main = course.mainPlace else { return }
+                placePhotoURL = await PlacesPhotoService.shared.photoURL(
+                    for: main.placeName, latitude: main.latitude, longitude: main.longitude)
+            }
+    }
+
+    private var cardBody: some View {
         // Color로 열 너비에 맞는 3:4 세로 카드를 확정 → 이미지는 카드 크기에 맞춰 클립하고,
         // 그라디언트·텍스트는 "카드 하단"에 고정 (넘친 이미지 아래로 밀려 잘리지 않도록 레이어 분리)
         Color(UIColor.secondarySystemBackground)
@@ -344,12 +384,12 @@ private struct GridCell: View {
             .overlay(alignment: .bottomLeading) {
                 HStack(alignment: .bottom, spacing: 8) {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(course.courseName)
+                        Text(translatedTitle ?? course.courseName)
                             .font(.tte(14, .bold))
                             .foregroundColor(.white)
                             .lineLimit(2)
                             .shadow(color: .black.opacity(0.4), radius: 3, y: 1)
-                        Text("\(course.region) · \(course.tag.displayName)")
+                        Text("\(course.localizedRegion) · \(course.tag.displayName)")
                             .font(.tte(11))
                             .foregroundColor(.white.opacity(0.9))
                             .lineLimit(1)
@@ -370,14 +410,18 @@ private struct GridCell: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .clipShape(RoundedRectangle(cornerRadius: 14))
+            // 상세가 뜰 때까지 이 카드에만 로딩 인디케이터
+            .overlay {
+                if isOpening {
+                    ZStack {
+                        Color.black.opacity(0.35)
+                        ProgressView().tint(.white)
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                }
+            }
             .contentShape(Rectangle())
-            .task {
-            // 커스텀 썸네일이 있으면 장소 사진을 굳이 조회하지 않음 (불필요한 API 호출 방지)
-            guard !hasCustomThumbnail, placePhotoURL == nil,
-                  let main = course.mainPlace else { return }
-            placePhotoURL = await PlacesPhotoService.shared.photoURL(
-                for: main.placeName, latitude: main.latitude, longitude: main.longitude)
-        }
+            .animation(.easeInOut(duration: 0.15), value: isOpening)
     }
 
     // 커스텀 썸네일 우선, 없으면 장소사진/기본 썸네일 폴백 — 정사각형을 꽉 채움

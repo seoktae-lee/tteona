@@ -21,7 +21,15 @@ struct VlogGenerationView: View {
     @State private var stageText = L("vlog.creating")
     @State private var savedFormatsCount = 1
     @State private var selectedFormats: Set<String> = []   // 기본 포맷 외 추가 선택
-    @State private var didGenerate = false
+
+    // 생성 시도 관리 — attempt를 올리면 generatingView의 task가 다시 돈다
+    @State private var attempt = 0
+    // 서버를 건너뛰고 즉시 로컬 합성 (오류 화면에서 "음악 없이 지금 저장" 선택 시)
+    @State private var forceLocal = false
+    // 서버가 아직 렌더링 중이라 이어받기가 가능한 상태
+    @State private var canResume = false
+    // 저장된 영상이 서버본이 아니라 로컬 폴백본(BGM·워터마크·자막 없음)인가
+    @State private var didFallback = false
 
     // 촬영 방향 판별 — 클립 다수 방향 (nil = 판별 중, 기본 세로 가정)
     @State private var shotPortrait: Bool? = nil
@@ -44,7 +52,8 @@ struct VlogGenerationView: View {
         case .preview:
             if let url = vlogURL {
                 VlogPreviewView(vlogURL: url, thumbnailCourseId: thumbnailCourseId,
-                                savedFormatsCount: savedFormatsCount) {
+                                savedFormatsCount: savedFormatsCount,
+                                fallbackNotice: didFallback) {
                     // 부모가 전달한 종료 클로저가 화면 닫기까지 책임진다
                     if let onDismissToHome {
                         onDismissToHome()
@@ -412,84 +421,111 @@ struct VlogGenerationView: View {
                 Spacer()
             }
         }
-        .task {
-            guard !didGenerate else { return }
-            didGenerate = true
-            do {
-                var mainURL: URL
-                var extraURLs: [URL] = []
-                if let uid = Auth.auth().currentUser?.uid {
-                    do {
-                        // 1순위: 서버(WAS 8코어) 합성 — 폰 부담 없이 빠르고 BGM·멀티포맷 포함
-                        let result = try await VlogServerService.shared.generate(
-                            course: course, sessionId: sessionId, userId: uid,
-                            formats: Array(selectedFormats), bgm: selectedBgm,
-                            watermark: !pro.isPro,   // PRO 유저만 워터마크 제거
-                            priority: pro.isPro,     // PRO 유저 우선 렌더링
-                            onProgress: { p, stage in
-                                progress = p
-                                stageText = stage
-                            }
-                        )
-                        mainURL = result.main
-                        extraURLs = result.extras.map(\.url)
-                        print("[VlogGeneration] 서버 합성 성공 (추가 포맷: \(result.extras.map(\.format)))")
-                    } catch {
-                        // 서버 실패(네트워크·서버 다운 등) → 기존 로컬 합성 폴백으로 항상 동작 보장
-                        print("[VlogGeneration] 서버 합성 실패 → 로컬 폴백: \(error.localizedDescription)")
-                        await MainActor.run {
-                            stageText = L("vlog.creating")
-                            progress = 0.05
+        // 합성은 수 분이 걸린다. 화면이 잠기면 앱이 중단돼 업로드·폴링이 끊기고
+        // 결과적으로 BGM·워터마크가 빠진 로컬 폴백본이 저장된다 — 그 사이 잠금을 막는다.
+        .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
+        .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
+        .task(id: attempt) { await runGeneration() }
+    }
+
+    /// 서버 합성 → (필요 시) 로컬 폴백 → 앨범 저장 → 프리뷰.
+    private func runGeneration() async {
+        progress = 0
+        stageText = L("vlog.creating")
+        canResume = false
+        didFallback = false
+        do {
+            var mainURL: URL
+            var extraURLs: [URL] = []
+
+            if let uid = Auth.auth().currentUser?.uid, !forceLocal {
+                do {
+                    // 1순위: 서버(WAS 8코어) 합성 — 폰 부담 없이 빠르고 BGM·멀티포맷 포함
+                    let result = try await VlogServerService.shared.generate(
+                        course: course, sessionId: sessionId, userId: uid,
+                        formats: Array(selectedFormats), bgm: selectedBgm,
+                        watermark: !pro.isPro,   // PRO 유저만 워터마크 제거
+                        priority: pro.isPro,     // PRO 유저 우선 렌더링
+                        onProgress: { p, stage in
+                            progress = p
+                            stageText = stage
                         }
-                        mainURL = try await vlogService.generateVlog(
-                            course: course, sessionId: sessionId,
-                            onProgress: { p in Task { @MainActor in progress = p } }
-                        )
+                    )
+                    mainURL = result.main
+                    extraURLs = result.extras.map(\.url)
+                    print("[VlogGeneration] 서버 합성 성공 (추가 포맷: \(result.extras.map(\.format)))")
+                } catch {
+                    if Task.isCancelled || error is CancellationError { return }
+
+                    // 서버가 아직 이 잡을 붙잡고 있다면 로컬로 도망치지 않는다 —
+                    // 지금 폴백하면 음악·워터마크 없는 열화본이 저장되고, 서버는 헛일을 한다.
+                    // 대신 이어받기를 안내해 다음 시도에서 완성본을 그대로 받아오게 한다.
+                    let definitive = (error as? VlogServerService.ServerVlogError)?.isDefinitive ?? false
+                    let pending = await VlogServerService.shared.hasPendingJob(sessionId: sessionId)
+                    if !definitive, pending {
+                        print("[VlogGeneration] 서버 렌더링 진행 중 — 이어받기 안내: \(error.localizedDescription)")
+                        canResume = true
+                        errorMessage = L("vlog.error.serverBusy")
+                        phase = .error
+                        return
                     }
-                } else {
+
+                    // 서버가 확정 실패했거나 애초에 잡이 만들어지지 않았다 → 로컬 합성으로 결과는 보장
+                    print("[VlogGeneration] 서버 합성 실패 → 로컬 폴백: \(error.localizedDescription)")
+                    didFallback = true
+                    stageText = L("vlog.creating")
+                    progress = 0.05
                     mainURL = try await vlogService.generateVlog(
                         course: course, sessionId: sessionId,
                         onProgress: { p in Task { @MainActor in progress = p } }
                     )
                 }
-                print("[VlogGeneration] url=\(mainURL.path) exists=\(FileManager.default.fileExists(atPath: mainURL.path))")
-                // 앨범 저장 권한 확인
-                let status = PHPhotoLibrary.authorizationStatus(for: .addOnly)
-                let isAuthorized = status == .authorized || status == .limited
-                if !isAuthorized {
-                    let newStatus = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
-                    let ok = newStatus == .authorized || newStatus == .limited
-                    if !ok {
-                        throw NSError(
-                            domain: "tteona.permissions",
-                            code: 1,
-                            userInfo: [NSLocalizedDescriptionKey: L("vlog.photoPermission")]
-                        )
-                    }
-                }
-                try await vlogService.saveToPhotoLibrary(url: mainURL)
-                var saved = 1
-                for extra in extraURLs {
-                    // 추가 선택한 포맷 버전도 함께 저장 (실패해도 무시)
-                    if (try? await vlogService.saveToPhotoLibrary(url: extra)) != nil { saved += 1 }
-                }
-                savedFormatsCount = saved
-                vlogURL = mainURL
-                Haptics.success()
-                // 발자취 적재 — 브이로그가 완성된 여행만 지도에 칠해진다 (실패해도 흐름 방해 없음)
-                if let uid = Auth.auth().currentUser?.uid {
-                    let recordCourse = course
-                    let recordSessionId = sessionId
-                    Task {
-                        await FootprintService.shared.record(
-                            course: recordCourse, sessionId: recordSessionId, userId: uid)
-                    }
-                }
-                phase = .preview
-            } catch {
-                errorMessage = error.localizedDescription
-                phase = .error
+            } else {
+                didFallback = forceLocal
+                mainURL = try await vlogService.generateVlog(
+                    course: course, sessionId: sessionId,
+                    onProgress: { p in Task { @MainActor in progress = p } }
+                )
             }
+
+            print("[VlogGeneration] url=\(mainURL.path) exists=\(FileManager.default.fileExists(atPath: mainURL.path))")
+            // 앨범 저장 권한 확인
+            let status = PHPhotoLibrary.authorizationStatus(for: .addOnly)
+            let isAuthorized = status == .authorized || status == .limited
+            if !isAuthorized {
+                let newStatus = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+                let ok = newStatus == .authorized || newStatus == .limited
+                if !ok {
+                    throw NSError(
+                        domain: "tteona.permissions",
+                        code: 1,
+                        userInfo: [NSLocalizedDescriptionKey: L("vlog.photoPermission")]
+                    )
+                }
+            }
+            try await vlogService.saveToPhotoLibrary(url: mainURL)
+            var saved = 1
+            for extra in extraURLs {
+                // 추가 선택한 포맷 버전도 함께 저장 (실패해도 무시)
+                if (try? await vlogService.saveToPhotoLibrary(url: extra)) != nil { saved += 1 }
+            }
+            savedFormatsCount = saved
+            vlogURL = mainURL
+            Haptics.success()
+            // 발자취 적재 — 브이로그가 완성된 여행만 지도에 칠해진다 (실패해도 흐름 방해 없음)
+            if let uid = Auth.auth().currentUser?.uid {
+                let recordCourse = course
+                let recordSessionId = sessionId
+                Task {
+                    await FootprintService.shared.record(
+                        course: recordCourse, sessionId: recordSessionId, userId: uid)
+                }
+            }
+            phase = .preview
+        } catch {
+            if Task.isCancelled || error is CancellationError { return }
+            errorMessage = error.localizedDescription
+            phase = .error
         }
     }
 
@@ -498,17 +534,42 @@ struct VlogGenerationView: View {
         ZStack {
             Color.black.ignoresSafeArea()
             VStack(spacing: 20) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.tte(48)).foregroundColor(.red)
-                Text(L("vlog.failed"))
+                Image(systemName: canResume ? "clock.arrow.circlepath" : "exclamationmark.triangle.fill")
+                    .font(.tte(48))
+                    .foregroundColor(canResume ? .tteOrange : .red)
+                Text(canResume ? L("vlog.error.serverBusy.title") : L("vlog.failed"))
                     .font(.tte(18, .semibold)).foregroundColor(.white)
                 if let msg = errorMessage {
                     Text(msg)
                         .font(.tte(13)).foregroundColor(.white.opacity(0.7))
                         .multilineTextAlignment(.center).padding(.horizontal, 32)
                 }
-                Button(L("vlog.goBack")) { dismiss() }
-                    .buttonStyle(TteButtonStyle()).padding(.horizontal, 40)
+
+                VStack(spacing: 12) {
+                    // 다시 시도 — 서버에 잡이 남아 있으면 업로드를 건너뛰고 완성본만 받아온다
+                    Button(canResume ? L("vlog.resume") : L("vlog.retry")) {
+                        forceLocal = false
+                        attempt += 1
+                        phase = .generating
+                    }
+                    .buttonStyle(TteButtonStyle())
+
+                    if canResume {
+                        // 기다릴 수 없을 때의 탈출구 — 음악·워터마크 없는 기본본으로 지금 저장
+                        Button(L("vlog.saveWithoutMusic")) {
+                            forceLocal = true
+                            attempt += 1
+                            phase = .generating
+                        }
+                        .font(.tte(14, .medium))
+                        .foregroundColor(.white.opacity(0.75))
+                    }
+
+                    Button(L("vlog.goBack")) { dismiss() }
+                        .font(.tte(14))
+                        .foregroundColor(.white.opacity(0.5))
+                }
+                .padding(.horizontal, 40)
             }
         }
     }
@@ -554,6 +615,8 @@ struct VlogPreviewView: View {
     let vlogURL: URL
     let thumbnailCourseId: String?
     let savedFormatsCount: Int
+    /// 서버 합성에 실패해 음악·워터마크가 빠진 로컬 버전이 저장된 경우 — 조용히 넘기지 않고 알린다
+    let fallbackNotice: Bool
     let onDismiss: () -> Void
 
     @State private var player: AVPlayer
@@ -564,10 +627,12 @@ struct VlogPreviewView: View {
     private enum ThumbState { case idle, uploading, done, failed }
 
     init(vlogURL: URL, thumbnailCourseId: String? = nil,
-         savedFormatsCount: Int = 1, onDismiss: @escaping () -> Void) {
+         savedFormatsCount: Int = 1, fallbackNotice: Bool = false,
+         onDismiss: @escaping () -> Void) {
         self.vlogURL = vlogURL
         self.thumbnailCourseId = thumbnailCourseId
         self.savedFormatsCount = savedFormatsCount
+        self.fallbackNotice = fallbackNotice
         self.onDismiss = onDismiss
         _player = State(initialValue: AVPlayer(url: vlogURL))
     }
@@ -598,6 +663,21 @@ struct VlogPreviewView: View {
                     }
                     .padding(.horizontal, 12).padding(.vertical, 7)
                     .background(Capsule().fill(Color.white.opacity(0.12)))
+
+                    if fallbackNotice {
+                        HStack(spacing: 6) {
+                            Image(systemName: "wifi.exclamationmark")
+                                .font(.tte(11))
+                                .foregroundColor(.yellow)
+                            Text(L("vlog.done.fallbackNotice"))
+                                .font(.tte(11))
+                                .foregroundColor(.white.opacity(0.8))
+                                .multilineTextAlignment(.center)
+                        }
+                        .padding(.horizontal, 12).padding(.vertical, 6)
+                        .background(Capsule().fill(Color.yellow.opacity(0.12)))
+                        .padding(.horizontal, 24)
+                    }
                 }
                 .padding(.top, 28)
 

@@ -17,6 +17,8 @@ struct CourseDetailView: View {
     @State private var selectedRoomIds: Set<String> = []
     @State private var selectedPlaceIndex: Int = 0
     @State private var courseAuthor: AppUser?
+    // 코스 제목(UGC) 번역문 — 도착 전·실패 시에는 원문을 보여준다.
+    @State private var translatedTitle: String?
     @State private var selectedPlaceForDetail: Place?
     @State private var showReportAlert = false
     @State private var showBlockAlert = false
@@ -42,7 +44,7 @@ struct CourseDetailView: View {
                     .padding(.bottom, 36)
                     .background(Color.tteBackground)
             }
-            .navigationTitle(course.courseName)
+            .navigationTitle(translatedTitle ?? course.courseName)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -101,6 +103,8 @@ struct CourseDetailView: View {
             let uid = authService.currentUser?.uid ?? ""
             await courseService.fetchLikedCourseIds(userId: uid)
             courseAuthor = await userService.fetchAuthor(uid: course.authorId)
+            translatedTitle = await TranslationService.shared.translate(
+                course.courseName, to: LanguageManager.shared.language)
         }
         .fullScreenCover(isPresented: $showRoomSelect) {
             RoomSelectView(selectedRoomIds: $selectedRoomIds) {
@@ -287,7 +291,7 @@ struct CourseDetailView: View {
                             .padding(.vertical, 4)
                             .background(Capsule().fill(Color.tteOrange.opacity(0.12)))
 
-                        Text(course.region)
+                        Text(course.localizedRegion)
                             .font(.tte(12))
                             .foregroundColor(.tteMediumGray)
                             .padding(.horizontal, 10)

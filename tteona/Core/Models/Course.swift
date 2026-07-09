@@ -102,3 +102,19 @@ enum CourseTag: String, Codable, CaseIterable {
 }
 
 let courseRegions = ["서울", "부산", "제주", "경주", "강릉", "전주", "기타"]
+
+// Firestore의 region 값은 한 가지 형태가 아니다: 초기 코스는 courseRegions의 한글 지역명을,
+// 즉석 세션은 "37.5°N" 같은 좌표 문자열을 저장한다. 아는 지역명만 번역하고 나머지는 원문을 돌려준다.
+private let courseRegionKeys: [String: String] = [
+    "서울": "region.seoul", "부산": "region.busan", "제주": "region.jeju",
+    "경주": "region.gyeongju", "강릉": "region.gangneung", "전주": "region.jeonju",
+    "기타": "region.other",
+]
+
+extension Course {
+    /// 화면 표시용 지역명 — region을 그대로 그리면 영어/일본어 유저에게 한글이 노출된다.
+    var localizedRegion: String {
+        guard let key = courseRegionKeys[region] else { return region }
+        return L(key)
+    }
+}

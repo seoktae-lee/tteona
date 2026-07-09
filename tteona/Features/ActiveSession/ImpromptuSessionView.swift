@@ -665,9 +665,11 @@ struct ImpromptuSessionView: View {
         let name = courseName.trimmingCharacters(in: .whitespaces).isEmpty
             ? L("impromptu.myTodayDated", Date().formatted(.dateTime.month().day().locale(LanguageManager.shared.locale)))
             : courseName
+        // Firestore에 저장되는 값이므로 표시용 번역문이 아닌 표준 한글명을 쓴다.
+        // (번역은 읽는 쪽에서 Course.localizedRegion이 담당)
         let region = capturedPlaces.first.map {
             "\(String(format: "%.1f", $0.latitude))°N"
-        } ?? L("region.other")
+        } ?? "기타"
         let course = Course(
             courseId: UUID().uuidString, authorId: uid,
             courseName: name, tag: selectedTag, region: region,

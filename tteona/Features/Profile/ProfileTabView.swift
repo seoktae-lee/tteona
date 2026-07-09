@@ -20,6 +20,8 @@ struct ProfileTabView: View {
     @State private var myCourses: [Course] = []
     @State private var thumbnails: [String: String] = [:]
     @State private var selectedCourse: Course? = nil
+    // 탭한 코스가 상세로 열릴 때까지 해당 카드에만 로딩 인디케이터를 띄운다
+    @State private var openingCourseId: String? = nil
 
     // 발자취 지도 연출
     @State private var focusCommand: FootprintMapFocus? = nil
@@ -81,12 +83,13 @@ struct ProfileTabView: View {
                 .environmentObject(authService)
                 .environmentObject(userService)
         }
-        .sheet(item: $selectedCourse) { course in
+        .sheet(item: $selectedCourse, onDismiss: { openingCourseId = nil }) { course in
             CourseDetailView(course: course)
                 .environmentObject(authService)
                 .environmentObject(courseService)
                 .environmentObject(userService)
                 .environmentObject(roomService)
+                .onAppear { openingCourseId = nil }
         }
         .fullScreenCover(isPresented: $showFullMap) {
             FootprintFullMapView(
@@ -585,7 +588,12 @@ struct ProfileTabView: View {
                         EditableCourseCard(
                             course: course,
                             thumbnailURL: thumbnails[course.courseId],
-                            onTap: { selectedCourse = course },
+                            isOpening: openingCourseId == course.courseId,
+                            onTap: {
+                                Haptics.light()
+                                openingCourseId = course.courseId
+                                selectedCourse = course
+                            },
                             onThumbnailChanged: { newURL in
                                 // 업로드 성공 → 서버 캐시버스트 URL로 즉시 교체 (탐색탭과 동일 URL)
                                 thumbnails[course.courseId] = newURL
@@ -661,6 +669,7 @@ struct ProfileTabView: View {
 private struct EditableCourseCard: View {
     let course: Course
     let thumbnailURL: String?
+    var isOpening: Bool = false
     var onTap: (() -> Void)? = nil
     let onThumbnailChanged: (String) -> Void
 
@@ -671,6 +680,26 @@ private struct EditableCourseCard: View {
     private enum UploadState { case idle, uploading, failed }
 
     var body: some View {
+        // 카드 본문(탭 → 코스 상세)과 썸네일 교체 버튼을 형제로 겹친다.
+        // 버튼 label 안에 PhotosPicker를 넣으면 피커가 탭을 받지 못하므로 분리했다.
+        ZStack(alignment: .topTrailing) {
+            Button { onTap?() } label: { cardBody }
+                .buttonStyle(PressableCardStyle())
+            thumbnailPicker
+                .padding(8)
+        }
+        .onChange(of: pickerItem) { _, newItem in
+            Task { await upload(newItem) }
+        }
+        .task {
+            guard thumbnailURL == nil, placePhotoURL == nil,
+                  let main = course.mainPlace else { return }
+            placePhotoURL = await PlacesPhotoService.shared.photoURL(
+                for: main.placeName, latitude: main.latitude, longitude: main.longitude)
+        }
+    }
+
+    private var cardBody: some View {
         Color(UIColor.secondarySystemBackground)
             .aspectRatio(3.0 / 4.0, contentMode: .fit)
             .overlay {
@@ -678,9 +707,6 @@ private struct EditableCourseCard: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .clipped()
             }
-            // 카드 본문 탭 → 코스 상세 (카메라 버튼은 자체 hit-test 우선이라 충돌 안 함)
-            .contentShape(Rectangle())
-            .onTapGesture { onTap?() }
             .overlay(alignment: .bottom) {
                 LinearGradient(colors: [.clear, .black.opacity(0.15), .black.opacity(0.8)],
                                startPoint: .top, endPoint: .bottom)
@@ -711,33 +737,39 @@ private struct EditableCourseCard: View {
                 .padding(9)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            // 썸네일 교체 버튼 (우상단 카메라)
-            .overlay(alignment: .topTrailing) {
-                PhotosPicker(selection: $pickerItem, matching: .images) {
-                    ZStack {
-                        Circle().fill(Color.black.opacity(0.45)).frame(width: 30, height: 30)
-                        if state == .uploading {
-                            ProgressView().tint(.white).scaleEffect(0.7)
-                        } else {
-                            Image(systemName: state == .failed ? "exclamationmark.triangle.fill" : "camera.fill")
-                                .font(.tte(12, .semibold))
-                                .foregroundColor(state == .failed ? .yellow : .white)
-                        }
-                    }
-                }
-                .disabled(state == .uploading)
-                .padding(8)
-            }
             .clipShape(RoundedRectangle(cornerRadius: 14))
-            .onChange(of: pickerItem) { _, newItem in
-                Task { await upload(newItem) }
+            // 상세가 뜰 때까지 이 카드에만 로딩 인디케이터
+            .overlay {
+                if isOpening {
+                    ZStack {
+                        Color.black.opacity(0.35)
+                        ProgressView().tint(.white)
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                    .transition(.opacity)
+                }
             }
-            .task {
-                guard thumbnailURL == nil, placePhotoURL == nil,
-                      let main = course.mainPlace else { return }
-                placePhotoURL = await PlacesPhotoService.shared.photoURL(
-                    for: main.placeName, latitude: main.latitude, longitude: main.longitude)
+            .contentShape(Rectangle())
+            .animation(.easeInOut(duration: 0.15), value: isOpening)
+    }
+
+    // 썸네일 교체 버튼 (우상단 카메라)
+    private var thumbnailPicker: some View {
+        PhotosPicker(selection: $pickerItem, matching: .images) {
+            ZStack {
+                Circle().fill(Color.black.opacity(0.45)).frame(width: 30, height: 30)
+                if state == .uploading {
+                    ProgressView().tint(.white).scaleEffect(0.7)
+                } else {
+                    Image(systemName: state == .failed ? "exclamationmark.triangle.fill" : "camera.fill")
+                        .font(.tte(12, .semibold))
+                        .foregroundColor(state == .failed ? .yellow : .white)
+                }
             }
+        }
+        // 상세가 열리는 중에는 카드 위 딤 처리와 함께 비활성 (딤보다 위에 그려지므로 명시적으로)
+        .disabled(state == .uploading || isOpening)
+        .opacity(isOpening ? 0.4 : 1)
     }
 
     @ViewBuilder

@@ -55,15 +55,17 @@ actor StatsService {
 
     // MARK: - 크리에이터 랭킹
 
-    func fetchCreatorRanking() async -> [CreatorRank] {
-        guard let url = URL(string: "\(baseURL)/creators/ranking") else { return [] }
+    /// 실패(네트워크 오류·태스크 취소)와 "정말 랭킹이 비어 있음"을 구분한다.
+    /// nil이면 호출부가 기존 목록을 유지해야 한다 — 빈 배열로 덮으면 스트립이 통째로 사라진다.
+    func fetchCreatorRanking() async -> [CreatorRank]? {
+        guard let url = URL(string: "\(baseURL)/creators/ranking") else { return nil }
         do {
             let (data, _) = try await APIAuth.get(url)
             struct Response: Decodable { let ranking: [CreatorRank] }
             return try JSONDecoder().decode(Response.self, from: data).ranking
         } catch {
             print("[StatsService] ranking error:", error)
-            return []
+            return nil
         }
     }
 

@@ -14,7 +14,7 @@ const multer = require('multer');
 const sharp  = require('sharp');
 const path   = require('path');
 const fs     = require('fs');
-const { randomUUID } = require('crypto');
+const { randomUUID, createHash } = require('crypto');
 const { initializeApp, cert } = require('firebase-admin/app');
 const { getFirestore, FieldValue, Timestamp } = require('firebase-admin/firestore');
 const { getAuth } = require('firebase-admin/auth');
@@ -246,6 +246,7 @@ const vlogJobLimiter  = rateLimit({ windowMs: 10 * 60 * 1000, max: 15,  key: byU
 const uploadLimiter   = rateLimit({ windowMs: 60 * 1000,      max: 60,  key: byUidOrIp });
 const pushLimiter     = rateLimit({ windowMs: 60 * 1000,      max: 30,  key: byUidOrIp });
 const cacheWriteLimiter = rateLimit({ windowMs: 60 * 1000,    max: 120, key: byUidOrIp });
+const translateLimiter  = rateLimit({ windowMs: 60 * 1000,    max: 60,  key: byUidOrIp });
 // 전역 안전망 — 폴링(잡 상태 조회 등)을 감안해 넉넉하게, 순수 폭주만 차단
 const globalApiLimiter = rateLimit({ windowMs: 60 * 1000, max: 600, key: byUidOrIp });
 app.use('/api/', globalApiLimiter);
@@ -608,7 +609,9 @@ app.get('/api/users/:uid/stats', requireAuth, async (req, res) => {
 
 // ─── 크리에이터 랭킹 ──────────────────────────────────────────────────────────
 
-// 이번 주 인기 크리에이터 TOP 10 (좋아요 합계 → 코스 수 순, 10분 캐시)
+// 이번 주 인기 크리에이터 TOP 10 (좋아요 합계 → 코스 수 순, 2분 캐시)
+// 캐시가 10분일 땐 탐색탭을 당겨 새로고침해도 순위·좋아요가 그대로라 "반영이 안 된다"는
+// 인상을 줬다. Firestore 읽기 500건 × 시간당 30회 수준이라 2분으로 줄여도 비용은 미미하다.
 app.get('/api/creators/ranking', requireAuth, async (req, res) => {
   const cacheKey = 'creators:weekly';
   try {
@@ -650,8 +653,8 @@ app.get('/api/creators/ranking', requireAuth, async (req, res) => {
     const result = { ranking };
     await pgPool.query(
       `INSERT INTO recommendation_cache (cache_key, result, expires_at)
-       VALUES ($1, $2, NOW() + INTERVAL '10 minutes')
-       ON CONFLICT (cache_key) DO UPDATE SET result = $2, expires_at = NOW() + INTERVAL '10 minutes'`,
+       VALUES ($1, $2, NOW() + INTERVAL '2 minutes')
+       ON CONFLICT (cache_key) DO UPDATE SET result = $2, expires_at = NOW() + INTERVAL '2 minutes'`,
       [cacheKey, JSON.stringify(result)]
     );
     res.json(result);
@@ -840,6 +843,119 @@ app.post('/api/places/cache', requireAuth, cacheWriteLimiter, async (req, res) =
   } catch (err) {
     console.error('Places cache POST error:', err);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── 번역 프록시 (Google Cloud Translation v2, PostgreSQL 영구 캐시) ──────────
+// 코스 제목·장소명 같은 UGC는 정적 번역이 불가능하다. 원문→대상언어 결과를 영구 캐시하므로
+// 같은 제목의 두 번째 조회부터는 과금이 없다(제목은 사실상 불변).
+// GOOGLE_TRANSLATE_KEY가 없으면 원문을 그대로 돌려준다 — 키 발급 전에도 앱은 정상 동작한다.
+
+const GOOGLE_TRANSLATE_KEY = process.env.GOOGLE_TRANSLATE_KEY || '';
+const TRANSLATE_TARGETS   = new Set(['en', 'ja', 'ko']);
+const TRANSLATE_MAX_TEXTS = 50;   // 탐색탭 한 화면 분량 + 여유
+const TRANSLATE_MAX_CHARS = 500;  // 코스 제목 길이 상한 — 번역 API 남용 방지
+
+async function ensureTranslationSchema() {
+  await pgPool.query(`
+    CREATE TABLE IF NOT EXISTS translation_cache (
+      source_hash     TEXT        NOT NULL,
+      target_lang     TEXT        NOT NULL,
+      source_text     TEXT        NOT NULL,
+      translated_text TEXT        NOT NULL,
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (source_hash, target_lang)
+    )
+  `);
+}
+ensureTranslationSchema().catch(err => console.error('[Translate] schema migration error:', err.message));
+
+const textHash = (t) => createHash('sha256').update(t, 'utf8').digest('hex');
+
+// Translation v2는 format:'text'로 요청해도 결과에 HTML 엔티티를 남긴다 ("김밥 & 라면" → "&amp;").
+function decodeHtmlEntities(str) {
+  return str.replace(/&(amp|lt|gt|quot|apos);|&#(\d+);|&#x([0-9a-fA-F]+);/g,
+    (match, named, dec, hex) => {
+      if (dec) return String.fromCodePoint(parseInt(dec, 10));
+      if (hex) return String.fromCodePoint(parseInt(hex, 16));
+      return { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" }[named] ?? match;
+    });
+}
+
+async function googleTranslate(texts, target) {
+  const url = `https://translation.googleapis.com/language/translate/v2?key=${encodeURIComponent(GOOGLE_TRANSLATE_KEY)}`;
+  const r = await fetch(url, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ q: texts, target, format: 'text' }),
+  });
+  if (!r.ok) throw new Error(`Translation API ${r.status}`);
+  const out = (await r.json())?.data?.translations;
+  if (!Array.isArray(out) || out.length !== texts.length) throw new Error('unexpected response shape');
+  return out.map(t => decodeHtmlEntities(t.translatedText || ''));
+}
+
+app.post('/api/translate', requireAuth, translateLimiter, async (req, res) => {
+  const target = String(req.body?.target || '').toLowerCase();
+  const texts  = req.body?.texts;
+
+  if (!TRANSLATE_TARGETS.has(target))  return res.status(400).json({ error: 'invalid target' });
+  if (!Array.isArray(texts) || texts.length === 0) return res.status(400).json({ error: 'texts required' });
+  if (texts.length > TRANSLATE_MAX_TEXTS) return res.status(400).json({ error: 'too many texts' });
+  if (!texts.every(t => typeof t === 'string' && t.length <= TRANSLATE_MAX_CHARS)) {
+    return res.status(400).json({ error: 'invalid text' });
+  }
+
+  if (!GOOGLE_TRANSLATE_KEY) return res.json({ translations: texts, translated: false });
+
+  try {
+    // 같은 제목이 여러 번 들어와도 조회·번역은 1회만
+    const unique = [...new Set(texts.filter(t => t.trim()))];
+    const bySource = new Map(); // 원문 → 번역문
+
+    if (unique.length > 0) {
+      const cached = await pgPool.query(
+        `SELECT source_text, translated_text FROM translation_cache
+          WHERE target_lang = $1 AND source_hash = ANY($2::text[])`,
+        [target, unique.map(textHash)]
+      );
+      for (const row of cached.rows) bySource.set(row.source_text, row.translated_text);
+
+      const missing = unique.filter(t => !bySource.has(t));
+      if (missing.length > 0) {
+        const fresh = await googleTranslate(missing, target);
+        // 빈 번역문은 캐시하지 않는다 — 영구 캐시라 한 번 들어가면 제목이 계속 빈칸으로 보인다.
+        const fetched = missing
+          .map((t, i) => [t, fresh[i]])
+          .filter(([, translated]) => translated.trim().length > 0);
+        for (const [t, translated] of fetched) bySource.set(t, translated);
+
+        // 캐시 적재 실패는 응답을 막지 않는다 — 다음 요청에서 다시 시도된다.
+        if (fetched.length > 0) {
+          try {
+            const params = [];
+            const rows = fetched.map(([t, translated], i) => {
+              params.push(textHash(t), target, t, translated);
+              return `($${i * 4 + 1}, $${i * 4 + 2}, $${i * 4 + 3}, $${i * 4 + 4})`;
+            });
+            await pgPool.query(
+              `INSERT INTO translation_cache (source_hash, target_lang, source_text, translated_text)
+               VALUES ${rows.join(', ')}
+               ON CONFLICT (source_hash, target_lang) DO NOTHING`,
+              params
+            );
+          } catch (err) {
+            console.error('[Translate] cache write error:', err.message);
+          }
+        }
+      }
+    }
+
+    res.json({ translations: texts.map(t => bySource.get(t) ?? t), translated: true });
+  } catch (err) {
+    // 번역 실패 시 원문 반환 — 화면이 비는 것보다 한국어라도 보이는 편이 낫다.
+    console.error('[Translate] error:', err.message);
+    res.json({ translations: texts, translated: false });
   }
 });
 
@@ -2368,6 +2484,32 @@ app.post('/api/admin/users/:uid/unblock', adminAuth, async (req, res) => {
     await db.collection('users').doc(req.params.uid).update({ isBlocked: false });
     res.json({ ok: true });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 인증마크 부여/해제 — body: { verified: bool, label?: string }
+// Firebase 콘솔에서 users 문서를 직접 고치던 작업을 대시보드로 옮긴 것.
+// label은 뱃지 옆에 붙는 크리에이터 표기("developer", "여행작가" 등), 비우면 제거된다.
+app.post('/api/admin/users/:uid/verify', adminAuth, async (req, res) => {
+  const { verified, label } = req.body || {};
+  if (typeof verified !== 'boolean') {
+    return res.status(400).json({ error: 'verified(boolean) required' });
+  }
+  try {
+    const ref = db.collection('users').doc(req.params.uid);
+    if (!(await ref.get()).exists) return res.status(404).json({ error: 'user not found' });
+
+    const trimmed = typeof label === 'string' ? label.trim().slice(0, 30) : '';
+    await ref.update({
+      isVerified: verified,
+      // 인증 해제 시 라벨도 함께 지운다 — 뱃지 없이 라벨만 남는 상태를 만들지 않는다
+      creatorLabel: verified && trimmed ? trimmed : FieldValue.delete(),
+    });
+    console.log(`[Admin] verify ${req.params.uid} → ${verified}${trimmed ? ` (${trimmed})` : ''}`);
+    res.json({ ok: true, isVerified: verified, creatorLabel: verified ? trimmed : null });
+  } catch (err) {
+    console.error('admin verify error:', err);
     res.status(500).json({ error: err.message });
   }
 });

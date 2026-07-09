@@ -681,11 +681,16 @@ final class CameraViewController: UIViewController {
     }
 
     private func showSaveSuccessAndClose() {
+        // 무료(5초 자동 종료) 경로는 stopRecordingUI를 거치지 않아 오버레이가 아직 숨겨져 있다.
+        // 여기서 직접 띄워야 두 경로 모두에서 저장 완료 문구가 보인다.
+        savingOverlay?.isHidden = false
+        view.isUserInteractionEnabled = false
         savingOverlay?.viewWithTag(701)?.isHidden = true  // indicator
         savingOverlay?.viewWithTag(702)?.isHidden = false // checkMark
         if let label = savingOverlay?.viewWithTag(703) as? UILabel {
             label.text = L("camera.saveSuccess")
         }
+        // 성공 햅틱은 세션 화면의 onSaved 핸들러가 울린다 (여기서 울리면 두 번 진동)
         // 1.2초 대기 후 자동 닫기
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
             self?.onSaved?()

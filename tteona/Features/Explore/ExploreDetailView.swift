@@ -14,6 +14,8 @@ struct ExploreDetailView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var author: AppUser?
+    // 코스 제목(UGC) 번역문 — 도착 전·실패 시에는 원문을 보여준다.
+    @State private var translatedTitle: String?
     @State private var weather: WeatherInfo?
     @State private var carRoute: RouteInfo?
     @State private var walkRoute: RouteInfo?
@@ -64,6 +66,11 @@ struct ExploreDetailView: View {
             let uid = authService.currentUser?.uid ?? ""
             await courseService.fetchLikedCourseIds(userId: uid)
             author = await userService.fetchAuthor(uid: course.authorId)
+            // 날씨·경로 조회 뒤로 밀리지 않도록 별도 태스크로 — 도착 전까지는 원문이 보인다.
+            Task {
+                translatedTitle = await TranslationService.shared.translate(
+                    course.courseName, to: LanguageManager.shared.language)
+            }
             if let main = course.mainPlace {
                 weather = await ExploreInfoService.shared.fetchWeather(lat: main.latitude, lng: main.longitude)
             }
@@ -275,10 +282,10 @@ struct ExploreDetailView: View {
             .frame(height: 300)
 
             VStack(alignment: .leading, spacing: 6) {
-                Text("\(course.tag.emoji) \(course.tag.displayName) · \(course.region)")
+                Text("\(course.tag.emoji) \(course.tag.displayName) · \(course.localizedRegion)")
                     .font(.tte(13, .semibold))
                     .foregroundColor(.white.opacity(0.9))
-                Text(course.courseName)
+                Text(translatedTitle ?? course.courseName)
                     .font(.tte(26, .bold))
                     .foregroundColor(.white)
             }
