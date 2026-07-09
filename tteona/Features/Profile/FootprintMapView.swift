@@ -113,14 +113,13 @@ struct FootprintMapView: View {
                 height: canvasSize.height / scale
             ).insetBy(dx: -0.002, dy: -0.002)
 
-            // 1) 세계 국가 (한국 본토는 시군구 레이어가 덮는다)
-            for region in atlas.worldRegions where region.bbox.intersects(visible) {
+            // 1) 세계 주/도 (admin-1) — 해외는 주/도 단위로 색칠. 한국 주/도는 시군구 레이어가 덮는다.
+            for region in atlas.worldProvinces where region.bbox.intersects(visible) {
                 let path = Path(region.path)
-                let visited = summary.countryCodes.contains(region.code)
+                let visited = summary.provinceCodes.contains(region.code)
                 let highlighted = highlightCodes.contains(region.code)
-                if region.code == "KOR" {
-                    // 한국은 시군구가 본체 — 국가 폴리곤은 바탕색만 깔고 외곽선도 중립색 유지
-                    // (국가 경계 stroke가 시군구 지도 위에 겹쳐 그려지는 잡선 방지)
+                if region.country == "KOR" {
+                    // 한국은 시군구가 본체 — 주/도 폴리곤은 바탕색만 깔고 중립 외곽선 유지
                     ctx.fill(path, with: .color(landColor), style: FillStyle(eoFill: true))
                     ctx.stroke(path, with: .color(borderColor), lineWidth: hairline)
                 } else if highlighted {
@@ -254,13 +253,12 @@ struct FootprintMapView: View {
             return (CGPoint(x: 0.8549, y: 0.3929), 40)
         case .country(let code):
             if code == "KOR" { return Self.camera(for: .korea) }
-            guard let region = FootprintAtlas.shared.worldRegion(code: code) else {
+            guard let bbox = FootprintAtlas.shared.countryBBox[code] else {
                 return Self.camera(for: .world)
             }
-            let bbox = region.bbox
             let span = max(bbox.width, bbox.height * 1.4)
             let z = min(max(0.75 / max(span, 0.001), 1.2), 60)
-            return (region.center, z)
+            return (CGPoint(x: bbox.midX, y: bbox.midY), z)
         case .point(let lat, let lng):
             return (FootprintAtlas.project(lat: lat, lng: lng), 90)
         }
@@ -278,12 +276,12 @@ struct FootprintMapView: View {
         let lat = atan(sinh(.pi * (1 - 2 * Double(unit.y)))) * 180 / .pi
 
         let resolved = FootprintAtlas.shared.resolve(lat: lat, lng: lng)
-        let region = resolved.sig ?? resolved.country
+        let region = resolved.sig ?? resolved.province
         guard let region else {
             withAnimation(.easeOut(duration: 0.2)) { tappedRegion = nil }
             return
         }
-        let visited = summary.sigCodes.contains(region.code) || summary.countryCodes.contains(region.code)
+        let visited = summary.sigCodes.contains(region.code) || summary.provinceCodes.contains(region.code)
         withAnimation(.spring(duration: 0.35)) {
             tappedRegion = region
             tappedVisited = visited

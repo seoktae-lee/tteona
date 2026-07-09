@@ -2,12 +2,13 @@ import Foundation
 import CoreGraphics
 
 // MARK: - 지역 폴리곤 (발자취 지도용)
-/// 번들 GeoJSON에서 로드한 하나의 지역(한국 시군구 또는 세계 국가).
+/// 번들 GeoJSON에서 로드한 하나의 지역(한국 시군구 또는 세계 주/도).
 /// 링 좌표는 웹 메르카토르 단위공간(0~1)으로 투영해 보관 — 렌더링·판정 모두 이 공간에서 수행.
 struct GeoRegion: Identifiable {
-    let code: String        // 시군구 행정코드("11010") 또는 ISO3 국가코드("JPN")
+    let code: String        // 시군구 행정코드("11010") 또는 ISO 3166-2 주/도코드("JP-27")
     let name: String        // 한글/원어 이름
-    let nameEng: String?    // 영문 이름 (국가는 name이 영문)
+    let nameEng: String?    // 영문 이름 (주/도는 name이 이미 영문)
+    let country: String?    // 소속 국가 ISO3 (주/도만; 한국 시군구는 nil = 암묵적 KOR)
     let rings: [[CGPoint]]  // 외곽 + 구멍 링 (even-odd 채움)
     let bbox: CGRect        // 단위공간 바운딩박스 (빠른 후보 선별용)
     let path: CGPath        // 단위공간에 미리 구운 패스 (Canvas 렌더링 캐시)
@@ -17,13 +18,16 @@ struct GeoRegion: Identifiable {
 }
 
 // MARK: - 발자취 아틀라스
-/// 한국 시군구 250개 + 세계 국가 180개 경계를 앱 번들에서 로드하고,
+/// 한국 시군구 250개 + 세계 주/도(admin-1) 4,600여 개 경계를 앱 번들에서 로드하고,
 /// 좌표 → 지역 판정(point-in-polygon)을 오프라인으로 수행한다.
+/// 해외는 국가 통째가 아니라 주/도 단위로 칠해진다(한국 시군구에 대응하는 세분화).
 final class FootprintAtlas: @unchecked Sendable {
     static let shared = FootprintAtlas()
 
-    private(set) var koreaRegions: [GeoRegion] = []
-    private(set) var worldRegions: [GeoRegion] = []
+    private(set) var koreaRegions: [GeoRegion] = []      // 시군구 (250)
+    private(set) var worldProvinces: [GeoRegion] = []    // 세계 주/도 (admin-1)
+    /// 국가 ISO3 → 소속 주/도들의 합집합 바운딩박스 (카메라 포커스용)
+    private(set) var countryBBox: [String: CGRect] = [:]
 
     private let loadLock = NSLock()
     private var loaded = false
@@ -34,18 +38,30 @@ final class FootprintAtlas: @unchecked Sendable {
 
     // MARK: 로드
 
-    /// 최초 1회 GeoJSON 파싱 (약 0.1~0.3초, 백그라운드 스레드에서 호출할 것)
+    /// 최초 1회 GeoJSON 파싱 (약 0.3~0.6초, 백그라운드 스레드에서 호출할 것)
     func ensureLoaded() {
         loadLock.lock()
         defer { loadLock.unlock() }
         guard !loaded else { return }
-        koreaRegions = Self.load(resource: "korea-sig", codeKey: "code", nameKey: "name", nameEngKey: "name_eng")
-        worldRegions = Self.load(resource: "world-countries", codeKey: "iso", nameKey: "name", nameEngKey: nil)
+        koreaRegions = Self.load(resource: "korea-sig", codeKey: "code", nameKey: "name",
+                                 nameEngKey: "name_eng", countryKey: nil)
+        worldProvinces = Self.load(resource: "world-admin1", codeKey: "code", nameKey: "nm",
+                                   nameEngKey: nil, countryKey: "country")
+
+        // 국가별 바운딩박스 = 소속 주/도 bbox 합집합
+        var boxes: [String: CGRect] = [:]
+        for province in worldProvinces {
+            guard let iso3 = province.country else { continue }
+            boxes[iso3] = boxes[iso3].map { $0.union(province.bbox) } ?? province.bbox
+        }
+        countryBBox = boxes
+
         loaded = true
-        print("[FootprintAtlas] loaded korea=\(koreaRegions.count) world=\(worldRegions.count)")
+        print("[FootprintAtlas] loaded korea=\(koreaRegions.count) provinces=\(worldProvinces.count) countries=\(countryBBox.count)")
     }
 
-    private static func load(resource: String, codeKey: String, nameKey: String, nameEngKey: String?) -> [GeoRegion] {
+    private static func load(resource: String, codeKey: String, nameKey: String,
+                             nameEngKey: String?, countryKey: String?) -> [GeoRegion] {
         guard let url = Bundle.main.url(forResource: resource, withExtension: "geojson"),
               let data = try? Data(contentsOf: url),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -59,7 +75,7 @@ final class FootprintAtlas: @unchecked Sendable {
 
         for feature in features {
             guard let props = feature["properties"] as? [String: Any],
-                  let code = props[codeKey] as? String,
+                  let code = props[codeKey] as? String, !code.isEmpty,
                   let name = props[nameKey] as? String,
                   let geometry = feature["geometry"] as? [String: Any],
                   let type = geometry["type"] as? String,
@@ -93,6 +109,7 @@ final class FootprintAtlas: @unchecked Sendable {
                 code: code,
                 name: name,
                 nameEng: props[nameEngKey ?? ""] as? String,
+                country: countryKey.flatMap { props[$0] as? String },
                 rings: rings,
                 bbox: CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY),
                 path: mutablePath.copy() ?? mutablePath
@@ -119,11 +136,12 @@ final class FootprintAtlas: @unchecked Sendable {
     // MARK: 판정
 
     struct ResolvedRegion {
-        let sig: GeoRegion?      // 한국 시군구 (한국 밖이면 nil)
-        let country: GeoRegion?  // 국가
+        let sig: GeoRegion?        // 한국 시군구 (한국 밖이면 nil)
+        let province: GeoRegion?   // 세계 주/도
+        let countryCode: String?   // 소속 국가 ISO3
     }
 
-    /// 좌표가 속한 시군구·국가 판정. 단순화된 경계라 해안가 등에서 빗나가면 근접 폴리곤으로 보정.
+    /// 좌표가 속한 시군구·주도·국가 판정. 단순화된 경계라 해안가 등에서 빗나가면 근접 폴리곤으로 보정.
     func resolve(lat: Double, lng: Double) -> ResolvedRegion {
         ensureLoaded()
         let pt = Self.project(lat: lat, lng: lng)
@@ -134,13 +152,11 @@ final class FootprintAtlas: @unchecked Sendable {
                 ?? nearest(point: pt, in: koreaRegions, maxUnitDistance: 0.0006) // ≈ 20km
         }
 
-        var country = hit(point: pt, in: worldRegions)
-            ?? nearest(point: pt, in: worldRegions, maxUnitDistance: 0.009)      // ≈ 3°
-        // 시군구가 잡혔는데 국가 판정이 빗나갔으면 한국으로 보정
-        if sig != nil && country?.code != "KOR" {
-            country = worldRegions.first { $0.code == "KOR" } ?? country
-        }
-        return ResolvedRegion(sig: sig, country: country)
+        let province = hit(point: pt, in: worldProvinces)
+            ?? nearest(point: pt, in: worldProvinces, maxUnitDistance: 0.009)     // ≈ 3°
+        // 시군구가 잡혔으면 국가는 무조건 한국 (경계 오차로 주/도가 빗나가도 보정)
+        let countryCode = sig != nil ? "KOR" : province?.country
+        return ResolvedRegion(sig: sig, province: province, countryCode: countryCode)
     }
 
     private func hit(point: CGPoint, in regions: [GeoRegion]) -> GeoRegion? {
@@ -193,8 +209,8 @@ final class FootprintAtlas: @unchecked Sendable {
         return koreaRegions.first { $0.code == code }
     }
 
-    func worldRegion(code: String) -> GeoRegion? {
+    func province(code: String) -> GeoRegion? {
         ensureLoaded()
-        return worldRegions.first { $0.code == code }
+        return worldProvinces.first { $0.code == code }
     }
 }

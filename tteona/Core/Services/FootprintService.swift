@@ -32,28 +32,34 @@ final class FootprintService: ObservableObject {
 
         // 장소(=촬영 클립) 하나하나를 지역으로 집계 — "가장 많이 머문 지역"이 대표가 되도록.
         // 첫 장소가 아니라 체류 빈도가 기준이므로, 잠깐 스친 환승지가 대표로 뽑히지 않는다.
+        // 한국은 시군구, 해외는 주/도(admin-1) 단위로 색칠한다.
         var sigCount: [String: Int] = [:]
         var sigName: [String: String] = [:]
+        var provCount: [String: Int] = [:]
+        var provName: [String: String] = [:]
         var countryCount: [String: Int] = [:]
-        var countryName: [String: String] = [:]
         for (_, region) in resolved {
             if let sig = region.sig {
                 sigCount[sig.code, default: 0] += 1
                 sigName[sig.code] = sig.name
+            } else if let province = region.province {
+                // 한국이 아닌 곳만 주/도로 색칠 (한국은 시군구가 대표)
+                provCount[province.code, default: 0] += 1
+                provName[province.code] = province.name
             }
-            if let country = region.country {
-                countryCount[country.code, default: 0] += 1
-                countryName[country.code] = country.name
+            if let country = region.countryCode {
+                countryCount[country, default: 0] += 1
             }
         }
         // 머문 횟수 내림차순 → 동률이면 코드순(결정적). 첫 원소가 최다 체류지.
         let sigCodes = sigCount.sorted { ($0.value, $1.key) > ($1.value, $0.key) }.map(\.key)
+        let provinceCodes = provCount.sorted { ($0.value, $1.key) > ($1.value, $0.key) }.map(\.key)
         let countryCodes = countryCount.sorted { ($0.value, $1.key) > ($1.value, $0.key) }.map(\.key)
-        // 표시용 이름: 최다 체류 시군구 → 그다음 → …, 이어서 해외 국가(한국은 시군구로 대표)
+        // 표시용 이름: 최다 체류 시군구 → …, 이어서 해외 주/도 (체류순)
         var regionNames = sigCodes.compactMap { sigName[$0] }
-        regionNames += countryCodes.filter { $0 != "KOR" }.compactMap { countryName[$0] }
+        regionNames += provinceCodes.compactMap { provName[$0] }
 
-        guard !sigCodes.isEmpty || !countryCodes.isEmpty else {
+        guard !sigCodes.isEmpty || !provinceCodes.isEmpty else {
             print("[Footprint] no region resolved — skip")
             return
         }
@@ -64,6 +70,7 @@ final class FootprintService: ObservableObject {
             date: Date(),
             placeCount: places.count,
             sigCodes: sigCodes,
+            provinceCodes: provinceCodes,
             countryCodes: countryCodes,
             regionNames: regionNames,
             points: places.sorted { $0.order < $1.order }
@@ -73,7 +80,7 @@ final class FootprintService: ObservableObject {
         do {
             // 새로 칠해지는 지역 계산 (하이라이트 연출용) — 기존 요약과 비교
             let newCodes = Set(sigCodes).subtracting(mySummary.sigCodes)
-                .union(Set(countryCodes).subtracting(mySummary.countryCodes))
+                .union(Set(provinceCodes).subtracting(mySummary.provinceCodes))
 
             // 세션ID를 문서ID로 → 같은 세션 재생성 시 덮어쓰기(중복 방지)
             try db.collection("users").document(userId)
@@ -81,17 +88,19 @@ final class FootprintService: ObservableObject {
                 .setData(from: record)
             try await db.collection("users").document(userId).updateData([
                 "visitedSigCodes": FieldValue.arrayUnion(sigCodes),
+                "visitedProvinceCodes": FieldValue.arrayUnion(provinceCodes),
                 "visitedCountryCodes": FieldValue.arrayUnion(countryCodes)
             ])
 
             mySummary.sigCodes.formUnion(sigCodes)
+            mySummary.provinceCodes.formUnion(provinceCodes)
             mySummary.countryCodes.formUnion(countryCodes)
             if !newCodes.isEmpty {
                 lastNewCodes = newCodes
                 // 대표 신규 지역 = 체류순 정렬(시군구 우선)에서 처음으로 등장하는 새 지역
-                lastPrimaryNewCode = (sigCodes + countryCodes).first { newCodes.contains($0) }
+                lastPrimaryNewCode = (sigCodes + provinceCodes).first { newCodes.contains($0) }
             }
-            print("[Footprint] recorded sig=\(sigCodes) country=\(countryCodes)")
+            print("[Footprint] recorded sig=\(sigCodes) prov=\(provinceCodes) country=\(countryCodes)")
         } catch {
             print("[Footprint] record failed:", error.localizedDescription)
         }
@@ -105,6 +114,7 @@ final class FootprintService: ObservableObject {
         let data = doc?.data()
         var summary = FootprintSummary()
         summary.sigCodes = Set(data?["visitedSigCodes"] as? [String] ?? [])
+        summary.provinceCodes = Set(data?["visitedProvinceCodes"] as? [String] ?? [])
         summary.countryCodes = Set(data?["visitedCountryCodes"] as? [String] ?? [])
         if isMe { mySummary = summary }
         return summary

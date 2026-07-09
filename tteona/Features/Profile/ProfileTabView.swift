@@ -95,6 +95,11 @@ struct ProfileTabView: View {
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
                 focusCommand = .world
             }
+            // 일본 주/도 검증 (-previewJapanFocus) — 오사카부만 칠해지는지
+            if ProcessInfo.processInfo.arguments.contains("-previewJapanFocus") {
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                focusCommand = .country("JPN")
+            }
             return
         }
         #endif
@@ -127,27 +132,28 @@ struct ProfileTabView: View {
         let sigs = atlas.koreaRegions.filter { demoNames.contains($0.name) }.map(\.code)
         footprintService.mySummary = FootprintSummary(
             sigCodes: Set(sigs),
+            provinceCodes: ["JP-27", "TH-10"],   // 오사카부 · 방콕 (해외는 주/도만 색칠)
             countryCodes: ["KOR", "JPN", "THA"]
         )
         footprints = [
             FootprintRecord(id: "demo1", courseId: "c1", courseName: "성수동 감성 카페 투어",
                             date: Date(), placeCount: 4,
-                            sigCodes: [], countryCodes: ["KOR"],
+                            sigCodes: [], provinceCodes: [], countryCodes: ["KOR"],
                             regionNames: ["서울 성동구"],
                             points: [FootprintPoint(lat: 37.5446, lng: 127.0559),
                                      FootprintPoint(lat: 37.5479, lng: 127.0473),
                                      FootprintPoint(lat: 37.5512, lng: 127.0410)]),
             FootprintRecord(id: "demo2", courseId: "c2", courseName: "강릉 바다 브이로그",
                             date: Date().addingTimeInterval(-86400 * 12), placeCount: 5,
-                            sigCodes: [], countryCodes: ["KOR"],
+                            sigCodes: [], provinceCodes: [], countryCodes: ["KOR"],
                             regionNames: ["강릉시"],
                             points: [FootprintPoint(lat: 37.7710, lng: 128.9473),
                                      FootprintPoint(lat: 37.7896, lng: 128.9174),
                                      FootprintPoint(lat: 37.8054, lng: 128.8961)]),
             FootprintRecord(id: "demo3", courseId: "c3", courseName: "오사카 먹방 여행",
                             date: Date().addingTimeInterval(-86400 * 40), placeCount: 6,
-                            sigCodes: [], countryCodes: ["JPN"],
-                            regionNames: ["Japan"],
+                            sigCodes: [], provinceCodes: ["JP-27"], countryCodes: ["JPN"],
+                            regionNames: ["Ōsaka"],
                             points: [FootprintPoint(lat: 34.6687, lng: 135.5010),
                                      FootprintPoint(lat: 34.6525, lng: 135.5060)])
         ]
@@ -187,15 +193,15 @@ struct ProfileTabView: View {
             FootprintAtlas.shared.resolve(lat: location.coordinate.latitude,
                                           lng: location.coordinate.longitude)
         }.value
-        guard let region = resolved.sig ?? resolved.country else { return }
+        guard let region = resolved.sig ?? resolved.province else { return }
 
-        // 홈(가장 많이 기록된 나라)과 현재 국가가 같고 한국이면 시군구 단위로만 비교
-        let currentCountry = resolved.country?.code
+        // 홈(가장 많이 기록된 나라)과 현재 국가가 다르면 여행 중
+        let currentCountry = resolved.countryCode
         let home = homeCountryCode
         let travelling = currentCountry != nil && currentCountry != home
-        // 국내 이동도 아직 안 칠한 지역이면 안내
+        // 아직 안 칠한 지역(시군구/주도)이면 안내
         let unpainted = resolved.sig.map { !summary.sigCodes.contains($0.code) }
-            ?? (currentCountry.map { !summary.countryCodes.contains($0) } ?? false)
+            ?? (resolved.province.map { !summary.provinceCodes.contains($0.code) } ?? false)
         guard travelling || unpainted else { return }
 
         try? await Task.sleep(nanoseconds: 1_200_000_000)
@@ -219,9 +225,9 @@ struct ProfileTabView: View {
         if let top = counts.max(by: { $0.value < $1.value })?.key { return top }
         let alpha2 = Locale.current.region?.identifier ?? "KR"
         if alpha2 == "KR" { return "KOR" }
-        // 대부분의 ISO3는 ISO2로 시작 (US→USA, JP→JPN, FR→FRA …)
-        return FootprintAtlas.shared.worldRegions
-            .first { $0.code.hasPrefix(alpha2) }?.code ?? "KOR"
+        // ISO2 → ISO3 매핑: 해당 국가의 주/도 코드(ISO 3166-2, "US-CA")가 alpha2로 시작
+        return FootprintAtlas.shared.worldProvinces
+            .first { $0.code.hasPrefix(alpha2 + "-") }?.country ?? "KOR"
     }
 
     private var homeFocus: FootprintMapFocus {
