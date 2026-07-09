@@ -14183,6 +14183,52 @@
           }
         }
       }
+    },
+    "profile.myCourses": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "내 코스"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My Courses"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "マイコース"
+          }
+        }
+      }
+    },
+    "profile.myCourses.hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "카메라를 눌러 코스 카드 썸네일을 꾸며보세요"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap the camera to set a pretty course thumbnail"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "カメラを押してコースのサムネイルを飾りましょう"
+          }
+        }
+      }
     }
   },
   "version": "1.1"

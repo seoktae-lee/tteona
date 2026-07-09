@@ -14,6 +14,10 @@ struct ProfileTabView: View {
     @State private var stats: TravelStats?
     @State private var isLoaded = false
 
+    // 내 코스 + 썸네일 (프로필에서 직접 썸네일 꾸미기)
+    @State private var myCourses: [Course] = []
+    @State private var thumbnails: [String: String] = [:]
+
     // 발자취 지도 연출
     @State private var focusCommand: FootprintMapFocus? = nil
     @State private var highlightCodes: Set<String> = []
@@ -39,6 +43,7 @@ struct ProfileTabView: View {
                     header
                     statsStrip
                     footprintSection
+                    coursesSection
                     timelineSection
                 }
                 .padding(.top, 8)
@@ -108,15 +113,20 @@ struct ProfileTabView: View {
             async let summaryTask: () = { _ = await footprintService.fetchSummary(userId: uid, isMe: true) }()
             async let recordsTask = footprintService.fetchFootprints(userId: uid)
             async let statsTask = StatsService.shared.fetchMyStats(userId: uid)
+            async let coursesTask = footprintService.fetchCourses(authorId: uid)
+            async let thumbsTask = CourseThumbnailService.shared.fetchAllThumbnails()
             _ = await summaryTask
             footprints = await recordsTask
             stats = await statsTask
+            myCourses = await coursesTask
+            thumbnails = await thumbsTask
             isLoaded = true
             playNewRegionRevealIfNeeded()
             if highlightCodes.isEmpty { await greetIfTravelling() }
         } else {
             footprints = await footprintService.fetchFootprints(userId: uid)
             stats = await StatsService.shared.fetchMyStats(userId: uid)
+            myCourses = await footprintService.fetchCourses(authorId: uid)
         }
     }
 
@@ -156,6 +166,14 @@ struct ProfileTabView: View {
                             regionNames: ["Ōsaka"],
                             points: [FootprintPoint(lat: 34.6687, lng: 135.5010),
                                      FootprintPoint(lat: 34.6525, lng: 135.5060)])
+        ]
+        myCourses = [
+            Course(courseId: "c1", authorId: "me", courseName: "성수동 감성 카페 투어",
+                   tag: .friends, region: "서울", likeCount: 12, createdAt: Date(),
+                   places: [Place(order: 1, placeName: "대림창고", latitude: 37.5446, longitude: 127.0559)]),
+            Course(courseId: "c2", authorId: "me", courseName: "강릉 바다 브이로그",
+                   tag: .couple, region: "강릉", likeCount: 34, createdAt: Date(),
+                   places: [Place(order: 1, placeName: "안목해변", latitude: 37.7710, longitude: 128.9473)])
         ]
     }
     #endif
@@ -498,6 +516,46 @@ struct ProfileTabView: View {
         )
     }
 
+    // MARK: - 내 코스 (썸네일 꾸미기)
+
+    private let courseColumns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
+
+    @ViewBuilder
+    private var coursesSection: some View {
+        if !myCourses.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 6) {
+                    Text(L("profile.myCourses"))
+                        .font(.tte(18, .bold))
+                        .foregroundColor(.tteDarkGray)
+                    Image(systemName: "photo.badge.plus")
+                        .font(.tte(13))
+                        .foregroundColor(.tteMediumGray)
+                    Spacer()
+                }
+                .padding(.horizontal, 20)
+
+                Text(L("profile.myCourses.hint"))
+                    .font(.tte(12))
+                    .foregroundColor(.tteMediumGray)
+                    .padding(.horizontal, 20)
+
+                LazyVGrid(columns: courseColumns, spacing: 10) {
+                    ForEach(myCourses, id: \.courseId) { course in
+                        EditableCourseCard(
+                            course: course,
+                            thumbnailURL: thumbnails[course.courseId]
+                        ) { newURL in
+                            // 업로드 성공 → 캐시버스트 URL로 즉시 교체
+                            thumbnails[course.courseId] = newURL
+                        }
+                    }
+                }
+                .padding(.horizontal, 20)
+            }
+        }
+    }
+
     // MARK: - 여행 기록 타임라인
 
     private var timelineSection: some View {
@@ -555,6 +613,119 @@ struct ProfileTabView: View {
         f.dateStyle = .medium
         return f
     }()
+}
+
+// MARK: - 편집 가능한 코스 카드 (내 프로필 전용 — 썸네일 직접 교체)
+private struct EditableCourseCard: View {
+    let course: Course
+    let thumbnailURL: String?
+    let onThumbnailChanged: (String) -> Void
+
+    @State private var pickerItem: PhotosPickerItem?
+    @State private var state: UploadState = .idle
+    @State private var placePhotoURL: String?
+
+    private enum UploadState { case idle, uploading, failed }
+
+    var body: some View {
+        Color(UIColor.secondarySystemBackground)
+            .aspectRatio(3.0 / 4.0, contentMode: .fit)
+            .overlay {
+                thumbnailImage
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
+            }
+            .overlay(alignment: .bottom) {
+                LinearGradient(colors: [.clear, .black.opacity(0.15), .black.opacity(0.8)],
+                               startPoint: .top, endPoint: .bottom)
+                    .frame(height: 80)
+                    .frame(maxWidth: .infinity)
+            }
+            .overlay(alignment: .bottomLeading) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(course.courseName)
+                        .font(.tte(13, .bold))
+                        .foregroundColor(.white)
+                        .lineLimit(2)
+                        .shadow(color: .black.opacity(0.4), radius: 3, y: 1)
+                    HStack(spacing: 5) {
+                        Text("\(course.region) · \(course.tag.displayName)")
+                            .font(.tte(10))
+                            .foregroundColor(.white.opacity(0.9))
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                        HStack(spacing: 2) {
+                            Image(systemName: "heart.fill").font(.tte(9))
+                            Text("\(course.likeCount)").font(.tte(10, .semibold))
+                        }
+                        .foregroundColor(.white.opacity(0.95))
+                    }
+                    .shadow(color: .black.opacity(0.4), radius: 3, y: 1)
+                }
+                .padding(9)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            // 썸네일 교체 버튼 (우상단 카메라)
+            .overlay(alignment: .topTrailing) {
+                PhotosPicker(selection: $pickerItem, matching: .images) {
+                    ZStack {
+                        Circle().fill(Color.black.opacity(0.45)).frame(width: 30, height: 30)
+                        if state == .uploading {
+                            ProgressView().tint(.white).scaleEffect(0.7)
+                        } else {
+                            Image(systemName: state == .failed ? "exclamationmark.triangle.fill" : "camera.fill")
+                                .font(.tte(12, .semibold))
+                                .foregroundColor(state == .failed ? .yellow : .white)
+                        }
+                    }
+                }
+                .disabled(state == .uploading)
+                .padding(8)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .onChange(of: pickerItem) { _, newItem in
+                Task { await upload(newItem) }
+            }
+            .task {
+                guard thumbnailURL == nil, placePhotoURL == nil,
+                      let main = course.mainPlace else { return }
+                placePhotoURL = await PlacesPhotoService.shared.photoURL(
+                    for: main.placeName, latitude: main.latitude, longitude: main.longitude)
+            }
+    }
+
+    @ViewBuilder
+    private var thumbnailImage: some View {
+        if let url = (thumbnailURL ?? placePhotoURL).flatMap(URL.init) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image): image.resizable().scaledToFill()
+                case .failure: DefaultCourseThumbnail(compact: true)
+                default: Color(UIColor.secondarySystemBackground)
+                }
+            }
+            .id(url)   // URL 바뀌면(캐시버스트) 강제 리로드
+        } else {
+            DefaultCourseThumbnail(compact: true)
+        }
+    }
+
+    private func upload(_ item: PhotosPickerItem?) async {
+        guard let item else { return }
+        guard let data = try? await item.loadTransferable(type: Data.self),
+              let image = UIImage(data: data) else { state = .failed; return }
+        state = .uploading
+        if let url = await CourseThumbnailService.shared.upload(courseId: course.courseId, image: image) {
+            // 파일명이 고정이라 URL이 같음 → 캐시버스트 쿼리로 즉시 갱신
+            let busted = url.contains("?") ? "\(url)&t=\(Int(Date().timeIntervalSince1970))"
+                                           : "\(url)?t=\(Int(Date().timeIntervalSince1970))"
+            state = .idle
+            onThumbnailChanged(busted)
+            Haptics.success()
+        } else {
+            state = .failed
+        }
+    }
 }
 
 // MARK: - 지역 이름 칩 나열
