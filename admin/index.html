@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>tteona Admin</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg:#0f1117; --surface:#1a1d27; --surface2:#22263a; --surface3:#2a2f45;
+      --border:#2e3347; --accent:#ff6b35; --accent2:#ff9a6c;
+      --green:#3ecf8e; --red:#ff5c72; --yellow:#f5c842; --blue:#4e8ef7; --purple:#9b6dff;
+      --text:#e8eaf0; --muted:#7c829a;
+    }
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{background:var(--bg);color:var(--text);font-family:-apple-system,'Pretendard','Apple SD Gothic Neo',sans-serif;min-height:100vh;font-size:14px;}
+
+    /* ── 로그인 ── */
+    #login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:radial-gradient(ellipse at 50% 0%,rgba(255,107,53,.08) 0%,transparent 60%)}
+    .login-box{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:48px 40px;width:360px;text-align:center;}
+    .login-logo{font-size:32px;font-weight:900;color:var(--accent);letter-spacing:-1px;margin-bottom:6px;}
+    .login-sub{color:var(--muted);font-size:13px;margin-bottom:32px;}
+    .login-box input{width:100%;padding:14px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:15px;margin-bottom:12px;outline:none;transition:border .15s;}
+    .login-box input:focus{border-color:var(--accent);}
+    #login-error{color:var(--red);font-size:13px;margin-top:10px;min-height:18px;}
+
+    /* ── 버튼 ── */
+    .btn{padding:12px 20px;border-radius:10px;border:none;cursor:pointer;font-size:14px;font-weight:700;transition:opacity .15s;font-family:inherit;}
+    .btn:active{opacity:.8;}
+    .btn-primary{background:var(--accent);color:#fff;width:100%;}
+    .btn-danger{background:rgba(255,92,114,.15);color:var(--red);border:1px solid rgba(255,92,114,.3);padding:6px 12px;font-size:12px;}
+    .btn-ghost{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 14px;font-size:12px;}
+    .btn-success{background:rgba(62,207,142,.15);color:var(--green);border:1px solid rgba(62,207,142,.3);padding:6px 12px;font-size:12px;}
+    .btn-verify{background:rgba(78,142,247,.15);color:var(--blue);border:1px solid rgba(78,142,247,.3);padding:6px 12px;font-size:12px;}
+
+    /* ── 레이아웃 ── */
+    #dashboard{display:none;}
+    .layout{display:flex;min-height:100vh;}
+
+    /* ── 사이드바 ── */
+    .sidebar{width:220px;background:var(--surface);border-right:1px solid var(--border);padding:24px 0;flex-shrink:0;display:flex;flex-direction:column;}
+    .sidebar-logo{padding:0 20px 24px;border-bottom:1px solid var(--border);margin-bottom:16px;}
+    .sidebar-logo-text{font-size:22px;font-weight:900;color:var(--accent);letter-spacing:-0.5px;}
+    .sidebar-logo-sub{font-size:11px;color:var(--muted);margin-top:2px;}
+    .nav-item{display:flex;align-items:center;gap:10px;padding:10px 20px;cursor:pointer;color:var(--muted);border-radius:0;transition:all .15s;font-weight:500;border-left:3px solid transparent;}
+    .nav-item:hover{color:var(--text);background:var(--surface2);}
+    .nav-item.active{color:var(--accent);background:rgba(255,107,53,.08);border-left-color:var(--accent);}
+    .nav-icon{width:18px;height:18px;flex-shrink:0;}
+    .nav-section{padding:16px 20px 6px;font-size:10px;font-weight:700;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;}
+    .sidebar-bottom{margin-top:auto;padding:16px 20px;border-top:1px solid var(--border);}
+    .refresh-info{font-size:11px;color:var(--muted);margin-bottom:8px;}
+    .logout-btn{width:100%;padding:8px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--muted);cursor:pointer;font-size:12px;font-family:inherit;}
+    .logout-btn:hover{color:var(--text);}
+
+    /* ── 메인 ── */
+    .main{flex:1;overflow-y:auto;}
+    .topbar{padding:18px 28px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--surface);position:sticky;top:0;z-index:10;}
+    .topbar-title{font-size:18px;font-weight:800;}
+    .topbar-time{font-size:12px;color:var(--muted);}
+    .content{padding:28px;}
+
+    /* ── 통계 카드 ── */
+    .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;}
+    .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;position:relative;overflow:hidden;}
+    .stat-card::before{content:'';position:absolute;top:-30px;right:-20px;width:80px;height:80px;border-radius:50%;opacity:.06;}
+    .stat-card.c-accent::before{background:var(--accent);}
+    .stat-card.c-green::before{background:var(--green);}
+    .stat-card.c-blue::before{background:var(--blue);}
+    .stat-card.c-red::before{background:var(--red);}
+    .stat-card.c-yellow::before{background:var(--yellow);}
+    .stat-card.c-purple::before{background:var(--purple);}
+    .stat-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+    .stat-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;}
+    .stat-icon.i-accent{background:rgba(255,107,53,.15);}
+    .stat-icon.i-green{background:rgba(62,207,142,.15);}
+    .stat-icon.i-blue{background:rgba(78,142,247,.15);}
+    .stat-icon.i-red{background:rgba(255,92,114,.15);}
+    .stat-icon.i-yellow{background:rgba(245,200,66,.15);}
+    .stat-icon.i-purple{background:rgba(155,109,255,.15);}
+    .stat-icon svg{width:18px;height:18px;}
+    .stat-label{font-size:11px;font-weight:700;letter-spacing:.8px;color:var(--muted);text-transform:uppercase;}
+    .stat-value{font-size:32px;font-weight:900;letter-spacing:-1.5px;line-height:1;}
+    .stat-sub{font-size:12px;color:var(--muted);margin-top:6px;}
+
+    /* ── 2단 그리드 ── */
+    .two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;}
+    .three-col{display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:24px;}
+
+    /* ── 패널 ── */
+    .panel{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;}
+    .panel-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+    .panel-title{font-size:14px;font-weight:700;}
+    .panel-body{padding:0;}
+
+    /* ── 차트 ── */
+    .chart-wrap{padding:16px 20px 20px;}
+
+    /* ── 리스트 ── */
+    .list-item{display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:1px solid var(--border);transition:background .1s;}
+    .list-item:last-child{border-bottom:none;}
+    .list-item:hover{background:var(--surface2);}
+    .avatar{width:36px;height:36px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0;}
+    .list-info{flex:1;min-width:0;}
+    .list-name{font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .list-sub{font-size:11px;color:var(--muted);margin-top:2px;}
+    .list-right{font-size:11px;color:var(--muted);flex-shrink:0;}
+
+    /* ── 신고 카드 ── */
+    .report-card{padding:16px 20px;border-bottom:1px solid var(--border);}
+    .report-card:last-child{border-bottom:none;}
+    .report-card:hover{background:var(--surface2);}
+    .report-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px;}
+    .report-meta{flex:1;}
+    .report-reason{font-weight:600;font-size:13px;margin-bottom:4px;}
+    .report-ids{font-size:11px;color:var(--muted);font-family:monospace;}
+    .report-actions{display:flex;gap:8px;flex-shrink:0;}
+
+    /* ── 배지 ── */
+    .badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;}
+    .badge-red{background:rgba(255,92,114,.15);color:var(--red);}
+    .badge-green{background:rgba(62,207,142,.15);color:var(--green);}
+    .badge-blue{background:rgba(78,142,247,.15);color:var(--blue);}
+    .badge-yellow{background:rgba(245,200,66,.15);color:var(--yellow);}
+    .badge-muted{background:var(--surface2);color:var(--muted);}
+
+    /* ── 테이블 ── */
+    .table-wrap{overflow-x:auto;}
+    table{width:100%;border-collapse:collapse;}
+    thead th{padding:10px 20px;text-align:left;font-size:10px;font-weight:700;letter-spacing:1px;color:var(--muted);text-transform:uppercase;border-bottom:1px solid var(--border);white-space:nowrap;}
+    tbody td{padding:13px 20px;border-bottom:1px solid var(--border);vertical-align:middle;}
+    tbody tr:last-child td{border-bottom:none;}
+    tbody tr:hover td{background:var(--surface2);}
+
+    /* 검색 */
+    .search-wrap{padding:12px 20px;border-bottom:1px solid var(--border);}
+    .search-input{width:100%;padding:9px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;outline:none;}
+    .search-input:focus{border-color:var(--accent);}
+
+    /* 탭 숨김 */
+    .tab-content{display:none;}
+    .tab-content.active{display:block;}
+
+    /* 빈 상태 */
+    .empty{text-align:center;padding:48px 20px;color:var(--muted);}
+    .empty-icon{font-size:36px;margin-bottom:12px;}
+    .empty-text{font-size:14px;}
+
+    /* 로딩 */
+    .skeleton{background:linear-gradient(90deg,var(--surface2) 25%,var(--surface3) 50%,var(--surface2) 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:6px;height:20px;}
+    @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+  </style>
+</head>
+<body>
+
+<!-- 로그인 -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">tteona</div>
+    <div class="login-sub">관리자 대시보드</div>
+    <input type="password" id="pw-input" placeholder="관리자 비밀번호" onkeydown="if(event.key==='Enter')login()">
+    <button class="btn btn-primary" onclick="login()">로그인</button>
+    <div id="login-error"></div>
+  </div>
+</div>
+
+<!-- 대시보드 -->
+<div id="dashboard">
+  <div class="layout">
+
+    <!-- 사이드바 -->
+    <div class="sidebar">
+      <div class="sidebar-logo">
+        <div class="sidebar-logo-text">tteona</div>
+        <div class="sidebar-logo-sub">Admin Dashboard</div>
+      </div>
+
+      <div class="nav-section">메뉴</div>
+      <div class="nav-item active" onclick="switchTab('overview',this)">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1" stroke-width="2"/><rect x="14" y="3" width="7" height="7" rx="1" stroke-width="2"/><rect x="3" y="14" width="7" height="7" rx="1" stroke-width="2"/><rect x="14" y="14" width="7" height="7" rx="1" stroke-width="2"/></svg>
+        개요
+      </div>
+      <div class="nav-item" onclick="switchTab('reports',this)">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+        신고 관리
+        <span id="report-badge" style="margin-left:auto;background:var(--red);color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;display:none"></span>
+      </div>
+      <div class="nav-item" onclick="switchTab('users',this)">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+        유저 관리
+      </div>
+
+      <div class="sidebar-bottom">
+        <div class="refresh-info" id="refresh-countdown">30초 후 자동 새로고침</div>
+        <button class="logout-btn" onclick="logout()">로그아웃</button>
+      </div>
+    </div>
+
+    <!-- 메인 -->
+    <div class="main">
+      <div class="topbar">
+        <div class="topbar-title" id="page-title">개요</div>
+        <div class="topbar-time" id="update-time">—</div>
+      </div>
+
+      <div class="content">
+
+        <!-- ── 개요 탭 ── -->
+        <div id="tab-overview" class="tab-content active">
+
+          <!-- 통계 카드 -->
+          <div class="stats-row">
+            <div class="stat-card c-accent">
+              <div class="stat-top">
+                <div class="stat-label">전체 유저</div>
+                <div class="stat-icon i-accent">
+                  <svg fill="none" stroke="#ff6b35" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8z"/></svg>
+                </div>
+              </div>
+              <div class="stat-value" id="s-users" style="color:var(--accent)">—</div>
+              <div class="stat-sub">가입자 수</div>
+            </div>
+            <div class="stat-card c-blue">
+              <div class="stat-top">
+                <div class="stat-label">전체 코스</div>
+                <div class="stat-icon i-blue">
+                  <svg fill="none" stroke="#4e8ef7" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+                </div>
+              </div>
+              <div class="stat-value" id="s-courses" style="color:var(--blue)">—</div>
+              <div class="stat-sub">생성된 코스</div>
+            </div>
+            <div class="stat-card c-green">
+              <div class="stat-top">
+                <div class="stat-label">신규 유저 7일</div>
+                <div class="stat-icon i-green">
+                  <svg fill="none" stroke="#3ecf8e" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3M13 7a4 4 0 11-8 0 4 4 0 018 0zM6 20v-2a4 4 0 014-4h2"/></svg>
+                </div>
+              </div>
+              <div class="stat-value" id="s-new7" style="color:var(--green)">—</div>
+              <div class="stat-sub">최근 7일 신규</div>
+            </div>
+            <div class="stat-card c-red">
+              <div class="stat-top">
+                <div class="stat-label">미처리 신고</div>
+                <div class="stat-icon i-red">
+                  <svg fill="none" stroke="#ff5c72" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+                </div>
+              </div>
+              <div class="stat-value" id="s-reports" style="color:var(--red)">—</div>
+              <div class="stat-sub">처리 대기 중</div>
+            </div>
+          </div>
+
+          <div class="stats-row" style="grid-template-columns:repeat(3,1fr)">
+            <div class="stat-card c-yellow">
+              <div class="stat-top">
+                <div class="stat-label">활성 유저 7일</div>
+                <div class="stat-icon i-yellow">
+                  <svg fill="none" stroke="#f5c842" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                </div>
+              </div>
+              <div class="stat-value" id="s-active7" style="color:var(--yellow)">—</div>
+              <div class="stat-sub">최근 7일 활성</div>
+            </div>
+            <div class="stat-card c-blue">
+              <div class="stat-top">
+                <div class="stat-label">코스 생성 7일</div>
+                <div class="stat-icon i-blue">
+                  <svg fill="none" stroke="#4e8ef7" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" d="M12 4v16m8-8H4"/></svg>
+                </div>
+              </div>
+              <div class="stat-value" id="s-courses7" style="color:var(--blue)">—</div>
+              <div class="stat-sub">최근 7일 생성</div>
+            </div>
+            <div class="stat-card c-green">
+              <div class="stat-top">
+                <div class="stat-label">Places 캐시</div>
+                <div class="stat-icon i-green">
+                  <svg fill="none" stroke="#3ecf8e" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V9c0-2-1-3-3-3H7C5 6 4 7 4 7zm0 0l4-4m12 4l-4-4M8 3h8"/></svg>
+                </div>
+              </div>
+              <div class="stat-value" id="s-cache" style="color:var(--green)">—</div>
+              <div class="stat-sub" id="s-cache-sub">유효 캐시 비율</div>
+            </div>
+          </div>
+
+          <!-- 차트 + 최근 유저 -->
+          <div class="three-col">
+            <div class="panel">
+              <div class="panel-header">
+                <div class="panel-title">7일 활동 추이</div>
+                <span style="font-size:11px;color:var(--muted)">PostgreSQL daily_stats</span>
+              </div>
+              <div class="chart-wrap">
+                <canvas id="activity-chart" height="120"></canvas>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-header">
+                <div class="panel-title">최근 가입 유저</div>
+              </div>
+              <div id="recent-users-list">
+                <div class="list-item"><div class="skeleton" style="width:100%"></div></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 최근 신고 미리보기 -->
+          <div class="panel">
+            <div class="panel-header">
+              <div class="panel-title">최근 신고</div>
+              <button class="btn btn-ghost" onclick="switchTab('reports',document.querySelector('.nav-item:nth-child(4)'))">전체 보기</button>
+            </div>
+            <div id="recent-reports-list">
+              <div class="list-item"><div class="skeleton" style="width:100%;height:16px"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── 신고 관리 탭 ── -->
+        <div id="tab-reports" class="tab-content">
+          <div class="panel">
+            <div class="panel-header">
+              <div class="panel-title">신고 목록</div>
+              <span id="reports-count" style="font-size:12px;color:var(--muted)"></span>
+            </div>
+            <div id="reports-list">
+              <div class="empty"><div class="skeleton" style="width:60%;margin:0 auto"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── 유저 관리 탭 ── -->
+        <div id="tab-users" class="tab-content">
+          <div class="panel">
+            <div class="panel-header">
+              <div class="panel-title">유저 목록</div>
+              <span id="users-count" style="font-size:12px;color:var(--muted)"></span>
+            </div>
+            <div class="search-wrap">
+              <input class="search-input" id="user-search" placeholder="🔍  닉네임 또는 이메일 검색..." oninput="filterUsers(this.value)">
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>유저</th><th>이메일</th><th>가입일</th><th>상태</th><th>인증</th><th>관리</th></tr></thead>
+                <tbody id="users-body"><tr><td colspan="6" style="padding:32px;text-align:center;color:var(--muted)">로딩 중...</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '/api/admin';
+let TOKEN = localStorage.getItem('admin_token') || '';
+let allUsers = [], allReports = [];
+let refreshTimer, countdownTimer, countdown = 30;
+let activityChart = null;
+
+// ── 초기화 ──
+if (TOKEN) { showDashboard(); loadAll(); }
+
+async function login() {
+  const pw = document.getElementById('pw-input').value;
+  const r = await fetch(`${API}/login`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({password:pw}) });
+  const data = await r.json();
+  if (r.ok) {
+    TOKEN = data.token;
+    localStorage.setItem('admin_token', TOKEN);
+    showDashboard();
+    loadAll();
+  } else {
+    document.getElementById('login-error').textContent = data.error;
+    document.getElementById('pw-input').style.borderColor = 'var(--red)';
+  }
+}
+
+function logout() {
+  localStorage.removeItem('admin_token');
+  clearInterval(refreshTimer);
+  clearInterval(countdownTimer);
+  TOKEN = '';
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+}
+
+function showDashboard() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'block';
+  startAutoRefresh();
+}
+
+function startAutoRefresh() {
+  countdown = 30;
+  clearInterval(refreshTimer);
+  clearInterval(countdownTimer);
+  countdownTimer = setInterval(() => {
+    countdown--;
+    const el = document.getElementById('refresh-countdown');
+    if (el) el.textContent = `${countdown}초 후 자동 새로고침`;
+    if (countdown <= 0) { countdown = 30; loadAll(); }
+  }, 1000);
+}
+
+async function api(path, opts={}) {
+  const r = await fetch(`${API}${path}`, {
+    ...opts,
+    headers:{'Authorization':`Bearer ${TOKEN}`,'Content-Type':'application/json',...(opts.headers||{})}
+  });
+  if (r.status === 401) { logout(); return null; }
+  return r.json();
+}
+
+async function loadAll() {
+  await Promise.all([loadStats(), loadReports(), loadUsers()]);
+  document.getElementById('update-time').textContent = '업데이트 ' + new Date().toLocaleTimeString('ko-KR');
+  countdown = 30;
+}
+
+// ── 통계 ──
+async function loadStats() {
+  const d = await api('/stats');
+  if (!d) return;
+  document.getElementById('s-users').textContent     = d.totalUsers.toLocaleString();
+  document.getElementById('s-courses').textContent   = d.totalCourses.toLocaleString();
+  document.getElementById('s-reports').textContent   = d.pendingReports;
+  document.getElementById('s-new7').textContent      = d.newUsers7d;
+  document.getElementById('s-active7').textContent   = d.activeUsers7d;
+  document.getElementById('s-courses7').textContent  = d.coursesCreated7d;
+  const pct = d.placesCacheTotal > 0 ? Math.round(d.placesCacheValid / d.placesCacheTotal * 100) : 0;
+  document.getElementById('s-cache').textContent     = pct + '%';
+  document.getElementById('s-cache-sub').textContent = `${d.placesCacheValid} / ${d.placesCacheTotal}건 유효`;
+
+  // 신고 배지
+  const badge = document.getElementById('report-badge');
+  if (d.pendingReports > 0) { badge.textContent = d.pendingReports; badge.style.display = ''; }
+  else badge.style.display = 'none';
+
+  renderActivityChart(d);
+}
+
+function renderActivityChart(d) {
+  const labels = Array.from({length:7}, (_,i) => {
+    const dt = new Date(); dt.setDate(dt.getDate() - (6-i));
+    return (dt.getMonth()+1) + '/' + dt.getDate();
+  });
+  // daily_stats가 아직 비어있으면 0으로 채운 데이터 표시
+  const userData    = Array(7).fill(0);
+  const courseData  = Array(7).fill(0);
+  if (d.dailyBreakdown) {
+    d.dailyBreakdown.forEach((row, i) => {
+      if (i < 7) { userData[i] = row.new_users; courseData[i] = row.courses_created; }
+    });
+  }
+
+  const ctx = document.getElementById('activity-chart').getContext('2d');
+  if (activityChart) activityChart.destroy();
+  activityChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label:'신규 유저', data: userData,   backgroundColor:'rgba(255,107,53,.6)', borderRadius:4 },
+        { label:'코스 생성', data: courseData, backgroundColor:'rgba(78,142,247,.6)',  borderRadius:4 }
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:true,
+      plugins:{ legend:{ labels:{ color:'#7c829a', font:{size:11} } } },
+      scales:{
+        x:{ ticks:{color:'#7c829a',font:{size:11}}, grid:{color:'rgba(46,51,71,.5)'} },
+        y:{ ticks:{color:'#7c829a',font:{size:11},stepSize:1}, grid:{color:'rgba(46,51,71,.5)'}, beginAtZero:true }
+      }
+    }
+  });
+}
+
+// ── 신고 ──
+async function loadReports() {
+  const data = await api('/reports');
+  if (!data) return;
+  allReports = data;
+  const pending = data.filter(r => !r.processed);
+  document.getElementById('reports-count').textContent = `총 ${data.length}건 · 미처리 ${pending.length}건`;
+  renderReports(pending);
+  renderRecentReports(pending.slice(0,3));
+}
+
+function renderReports(reports) {
+  const el = document.getElementById('reports-list');
+  if (!reports.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">✅</div><div class="empty-text">미처리 신고가 없습니다</div></div>';
+    return;
+  }
+  el.innerHTML = reports.map(r => `
+    <div class="report-card" id="report-${r.id}">
+      <div class="report-top">
+        <div class="report-meta">
+          <div class="report-reason">
+            <span class="badge ${r.targetType==='course'?'badge-blue':'badge-yellow'}">${r.targetType || '기타'}</span>
+            &nbsp;${r.reason || '사유 없음'}
+          </div>
+          <div class="report-ids" style="margin-top:6px">
+            신고 대상: ${r.targetId || '—'}<br>
+            신고자: ${r.reporterId?.slice(0,20) || '—'}... · ${r.createdAt ? new Date(r.createdAt).toLocaleString('ko-KR') : '—'}
+          </div>
+        </div>
+        <div class="report-actions">
+          ${r.targetType === 'course' ? `<button class="btn btn-danger" onclick="deleteCourse('${r.targetId}','${r.id}')">코스 삭제</button>` : ''}
+          <button class="btn btn-success" onclick="resolveReport('${r.id}')">해결</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderRecentReports(reports) {
+  const el = document.getElementById('recent-reports-list');
+  if (!reports.length) {
+    el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">신고 없음</div>';
+    return;
+  }
+  el.innerHTML = reports.map(r => `
+    <div class="list-item">
+      <div class="stat-icon i-red" style="width:32px;height:32px;flex-shrink:0">
+        <svg width="14" height="14" fill="none" stroke="#ff5c72" viewBox="0 0 24 24"><path stroke-width="2" d="M12 9v4m0 4h.01"/></svg>
+      </div>
+      <div class="list-info">
+        <div class="list-name">${r.reason || '(사유 없음)'}</div>
+        <div class="list-sub">${r.targetType} · ${r.createdAt ? new Date(r.createdAt).toLocaleDateString('ko-KR') : '—'}</div>
+      </div>
+      <span class="badge badge-red">미처리</span>
+    </div>
+  `).join('');
+}
+
+async function deleteCourse(courseId, reportId) {
+  if (!confirm('이 코스를 삭제하시겠습니까?\n삭제 후 복구할 수 없습니다.')) return;
+  await api(`/courses/${courseId}`, {method:'DELETE'});
+  await api(`/reports/${reportId}/resolve`, {method:'POST'});
+  loadReports(); loadStats();
+}
+
+async function resolveReport(reportId) {
+  await api(`/reports/${reportId}/resolve`, {method:'POST'});
+  const el = document.getElementById(`report-${reportId}`);
+  if (el) el.style.opacity = '0.3';
+  setTimeout(() => { loadReports(); loadStats(); }, 400);
+}
+
+// ── 유저 ──
+async function loadUsers() {
+  const data = await api('/users');
+  if (!data) return;
+  allUsers = data;
+  document.getElementById('users-count').textContent = `총 ${data.length}명`;
+  renderUsers(data);
+  renderRecentUsers(data.slice(0,5));
+}
+
+function filterUsers(q) {
+  const filtered = q
+    ? allUsers.filter(u => (u.nickname||'').toLowerCase().includes(q.toLowerCase()) || (u.email||'').toLowerCase().includes(q.toLowerCase()))
+    : allUsers;
+  renderUsers(filtered);
+}
+
+function renderUsers(users) {
+  const tbody = document.getElementById('users-body');
+  if (!users.length) { tbody.innerHTML = '<tr><td colspan="6" style="padding:32px;text-align:center;color:var(--muted)">유저 없음</td></tr>'; return; }
+  tbody.innerHTML = users.map(u => `
+    <tr>
+      <td>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="avatar" style="background:${avatarColor(u.uid)}">${(u.nickname||'?')[0].toUpperCase()}</div>
+          <div>
+            <div style="font-weight:600">${u.nickname || '(닉네임 없음)'}</div>
+            <div style="font-size:11px;color:var(--muted)">${u.uid?.slice(0,12)}...</div>
+          </div>
+        </div>
+      </td>
+      <td style="color:var(--muted);font-size:12px">${u.email || '—'}</td>
+      <td style="color:var(--muted);font-size:12px">${u.createdAt ? new Date(u.createdAt).toLocaleDateString('ko-KR') : '—'}</td>
+      <td>${u.isBlocked ? '<span class="badge badge-red">차단됨</span>' : '<span class="badge badge-green">정상</span>'}</td>
+      <td>${u.isVerified
+          ? `<span class="badge badge-blue">✓ ${escapeHtml(u.creatorLabel || '인증')}</span>`
+          : '<span class="badge badge-muted">미인증</span>'}</td>
+      <td>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          ${u.isVerified
+            ? `<button class="btn btn-ghost" onclick="verifyUser('${u.uid}', false)">인증 해제</button>`
+            : `<button class="btn btn-verify" onclick="verifyUser('${u.uid}', true)">인증 부여</button>`}
+          ${u.isBlocked
+            ? `<button class="btn btn-success" onclick="blockUser('${u.uid}', false)">차단 해제</button>`
+            : `<button class="btn btn-danger" onclick="blockUser('${u.uid}', true)">차단</button>`}
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+// ── 유저 관리 액션 ──
+
+async function blockUser(uid, block) {
+  const user = allUsers.find(u => u.uid === uid);
+  const name = user?.nickname || uid.slice(0, 12);
+  if (!confirm(`${name} 님을 ${block ? '차단' : '차단 해제'}하시겠습니까?`)) return;
+  const r = await api(`/users/${uid}/${block ? 'block' : 'unblock'}`, {method:'POST'});
+  if (!r || r.error) return alert(`실패: ${r?.error || '알 수 없는 오류'}`);
+  loadUsers();
+}
+
+// 인증마크 부여/해제 — Firebase 콘솔에서 users 문서를 직접 고치는 대신 여기서 처리한다.
+// 라벨은 뱃지 옆에 붙는 크리에이터 표기(예: developer, 여행작가). 비우면 뱃지만 붙는다.
+async function verifyUser(uid, verified) {
+  const user = allUsers.find(u => u.uid === uid);
+  const name = user?.nickname || uid.slice(0, 12);
+  let label = '';
+  if (verified) {
+    const input = prompt(`${name} 님에게 인증마크를 부여합니다.\n크리에이터 라벨 (선택, 비워도 됨):`, user?.creatorLabel || '');
+    if (input === null) return;   // 취소
+    label = input.trim();
+  } else if (!confirm(`${name} 님의 인증마크를 해제하시겠습니까?`)) {
+    return;
+  }
+  const r = await api(`/users/${uid}/verify`, {
+    method:'POST',
+    body: JSON.stringify({ verified, label })
+  });
+  if (!r || r.error) return alert(`실패: ${r?.error || '알 수 없는 오류'}`);
+  loadUsers();
+}
+
+function renderRecentUsers(users) {
+  const el = document.getElementById('recent-users-list');
+  if (!users.length) { el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">유저 없음</div>'; return; }
+  el.innerHTML = users.map(u => `
+    <div class="list-item">
+      <div class="avatar" style="background:${avatarColor(u.uid)};color:#fff">${(u.nickname||'?')[0].toUpperCase()}</div>
+      <div class="list-info">
+        <div class="list-name">${u.nickname || '(닉네임 없음)'}</div>
+        <div class="list-sub">${u.email || '—'}</div>
+      </div>
+      <div class="list-right">${u.createdAt ? new Date(u.createdAt).toLocaleDateString('ko-KR') : '—'}</div>
+    </div>
+  `).join('');
+}
+
+// ── 탭 전환 ──
+function switchTab(id, navEl) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById(`tab-${id}`).classList.add('active');
+  if (navEl) navEl.classList.add('active');
+  const titles = {overview:'개요', reports:'신고 관리', users:'유저 관리'};
+  document.getElementById('page-title').textContent = titles[id] || id;
+}
+
+// ── 유틸 ──
+const COLORS = ['#ff6b35','#4e8ef7','#3ecf8e','#f5c842','#9b6dff','#ff5c72'];
+function avatarColor(uid) { return COLORS[(uid||'').charCodeAt(0) % COLORS.length]; }
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+</script>
+</body>
+</html>

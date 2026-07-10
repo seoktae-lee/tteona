@@ -15,7 +15,8 @@ WAS_HOST="ubuntu@114.110.181.49"
 WEB_HOST="ubuntu@114.110.182.45"
 PORT=30022
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ADMIN_HTML="$HOME/Documents/tteona-web/admin/index.html"
+# 관리자 대시보드는 이 저장소(private)에서 관리한다 — 공개 저장소 tteona-web에 두지 않는다.
+ADMIN_HTML="$SCRIPT_DIR/admin/index.html"
 
 echo "▶ [0/5] 로컬 문법 검사..."
 node --check "$SCRIPT_DIR/server.js"
