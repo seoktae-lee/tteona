@@ -5,7 +5,6 @@ import SwiftUI
 /// 이 전체화면에서만 팬·핀치·탭이 모두 살아나 세계지도를 자유롭게 탐색한다.
 struct FootprintFullMapView: View {
     let summary: FootprintSummary
-    var routes: [[FootprintPoint]] = []
     var initialFocus: FootprintMapFocus = .korea
     var subtitle: String? = nil
 
@@ -17,7 +16,6 @@ struct FootprintFullMapView: View {
 
             FootprintMapView(
                 summary: summary,
-                routes: routes,
                 interactive: true,
                 panZoom: true,          // 전체화면에서는 팬/핀치 활성 — 이 뷰의 존재 이유
                 initialFocus: initialFocus

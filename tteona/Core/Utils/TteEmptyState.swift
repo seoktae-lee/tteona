@@ -19,8 +19,13 @@ struct TteEmptyState: View {
                 .scaledToFit()
                 .frame(width: imageSize, height: imageSize)
                 .offset(y: bounce ? -6 : 0)
-                .animation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true), value: bounce)
-                .onAppear { bounce = true }
+                // 암시적 .animation(_:value:)은 같은 트랜잭션의 레이아웃 이동까지 물고 repeatForever로
+                // 되풀이해 캐릭터가 사선으로 흔들렸다. withAnimation으로 offset 변화만 애니메이션한다.
+                .onAppear {
+                    withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) {
+                        bounce = true
+                    }
+                }
                 .accessibilityHidden(true)
 
             Text(title)

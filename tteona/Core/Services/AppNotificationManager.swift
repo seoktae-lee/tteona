@@ -21,6 +21,12 @@ class AppNotificationManager: NSObject, ObservableObject {
     @Published var pendingPlaceName: String? = nil
     @Published var shouldOpenTodaySession: Bool = false
     @Published var pendingChatRoom: PendingChatRoom? = nil
+    /// 좋아요·코스 따라가기 알림 탭 → 해당 코스 상세
+    @Published var pendingCourseId: String? = nil
+    /// Vlog 완성 알림 탭 → 완성본 재생
+    @Published var pendingVlogURL: URL? = nil
+    /// 주간 리포트 알림 탭 → 프로필(여행 통계)
+    @Published var shouldOpenProfile: Bool = false
 
     // 현재 유저가 보고 있는 채팅방 (roomId + memberUserId)
     var activeChatRoom: PendingChatRoom? = nil
@@ -103,9 +109,29 @@ extension AppNotificationManager: UNUserNotificationCenterDelegate {
                     break
                 }
             }
-            // FCM data payload
-            guard let type = userInfo["type"] as? String,
-                  let roomId = userInfo["roomId"] as? String, !roomId.isEmpty,
+            guard let type = userInfo["type"] as? String else { return }
+
+            // 방(roomId)과 무관한 알림 — 그동안 탭해도 앱만 열리고 아무 데도 가지 않았다.
+            switch type {
+            case "course_liked", "course_followed":
+                if let courseId = userInfo["courseId"] as? String, !courseId.isEmpty {
+                    self.pendingCourseId = courseId
+                }
+                return
+            case "vlog_done":
+                if let urlString = userInfo["url"] as? String, let url = URL(string: urlString) {
+                    self.pendingVlogURL = url
+                }
+                return
+            case "weekly_report":
+                self.shouldOpenProfile = true
+                return
+            default:
+                break
+            }
+
+            // 이하 그룹/채팅 알림 — roomId로 열 화면을 정한다.
+            guard let roomId = userInfo["roomId"] as? String, !roomId.isEmpty,
                   let senderUserId = userInfo["senderUserId"] as? String else { return }
 
             switch type {

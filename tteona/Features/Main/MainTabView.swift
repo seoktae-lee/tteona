@@ -1,5 +1,11 @@
 import SwiftUI
 
+/// fullScreenCover(item:)에 쓰려면 Identifiable이 필요하다 — URL은 그렇지 않다.
+private struct IdentifiedURL: Identifiable {
+    let url: URL
+    var id: String { url.absoluteString }
+}
+
 struct MainTabView: View {
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var courseService: CourseService
@@ -15,6 +21,7 @@ struct MainTabView: View {
     @State private var selectedTab: Int = 0
     @State private var deepLinkTask: Task<Void, Never>? = nil
     @State private var showNavGuide = false
+    @State private var notificationVlogURL: IdentifiedURL? = nil
 
     // 내비게이션 가이드는 계정별로 1회 표시 (온보딩이 계정별인 것과 일관되게)
     private var navGuideSeenKey: String? {
@@ -28,7 +35,7 @@ struct MainTabView: View {
 
     var body: some View {
         ZStack {
-            tabContent
+            routedTabContent
 
             if showNavGuide {
                 NavGuideOverlay(selectedTab: $selectedTab) {
@@ -41,6 +48,38 @@ struct MainTabView: View {
                 .zIndex(10)
             }
         }
+    }
+
+    /// 알림 탭 라우팅 — tabContent의 모디파이어 체인에 그대로 이어 붙이면
+    /// 타입체커가 감당하지 못해(unable to type-check in reasonable time) 분리해 둔다.
+    private var routedTabContent: some View {
+        tabContent
+            // 좋아요·코스 따라가기 알림 탭 → 딥링크와 같은 경로로 코스 상세를 연다
+            .onChange(of: notificationManager.pendingCourseId) { _, courseId in
+                guard let courseId else { return }
+                notificationManager.pendingCourseId = nil
+                deepLinkTask?.cancel()
+                deepLinkTask = Task {
+                    deepLinkedCourse = try? await courseService.fetchCourse(by: courseId)
+                }
+            }
+            // 주간 리포트 알림 탭 → 프로필 탭(여행 통계)
+            .onChange(of: notificationManager.shouldOpenProfile) { _, should in
+                guard should else { return }
+                notificationManager.shouldOpenProfile = false
+                selectedTab = 3
+            }
+            // Vlog 완성 알림 탭 → 서버가 보내준 완성본을 바로 재생
+            .onChange(of: notificationManager.pendingVlogURL) { _, url in
+                guard let url else { return }
+                notificationManager.pendingVlogURL = nil
+                notificationVlogURL = IdentifiedURL(url: url)
+            }
+            .fullScreenCover(item: $notificationVlogURL) { item in
+                VlogPreviewView(vlogURL: item.url) {
+                    notificationVlogURL = nil
+                }
+            }
     }
 
     private var tabContent: some View {

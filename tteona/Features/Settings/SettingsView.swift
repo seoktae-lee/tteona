@@ -24,7 +24,9 @@ struct SettingsView: View {
         .navigationTitle(L("settings.title"))
         .navigationBarTitleDisplayMode(.inline)
         .alert(L("settings.signOut"), isPresented: $showSignOutAlert) {
-            Button(L("settings.signOut"), role: .destructive) { authService.signOut() }
+            Button(L("settings.signOut"), role: .destructive) {
+                Task { await authService.signOut() }
+            }
             Button(L("common.cancel"), role: .cancel) {}
         } message: {
             Text(L("settings.signOut.confirm"))

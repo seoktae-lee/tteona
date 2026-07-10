@@ -94,7 +94,6 @@ struct ProfileTabView: View {
         .fullScreenCover(isPresented: $showFullMap) {
             FootprintFullMapView(
                 summary: summary,
-                routes: footprints.map(\.points),
                 initialFocus: homeFocus,
                 subtitle: progressText
             )
@@ -442,7 +441,6 @@ struct ProfileTabView: View {
             ZStack(alignment: .top) {
                 FootprintMapView(
                     summary: summary,
-                    routes: footprints.map(\.points),
                     highlightCodes: highlightCodes,
                     interactive: true,
                     panZoom: false,   // 페이지 스크롤과 충돌 방지 — 탭만

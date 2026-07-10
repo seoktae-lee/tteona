@@ -10,11 +10,10 @@ enum FootprintMapFocus: Equatable {
 }
 
 // MARK: - 발자취 지도
-/// 빈 도화지 스타일의 세계지도 위에 방문 지역(한국 시군구·세계 국가)을 색칠하고
-/// 여행 경로를 점선으로 얹는 커스텀 렌더러. 팬·핀치·탭 지원.
+/// 빈 도화지 스타일의 세계지도 위에 방문 지역(한국 시군구·세계 국가)을 색칠하는 커스텀 렌더러.
+/// 팬·핀치·탭 지원. 색칠만으로 발자취를 읽히게 하는 게 목적이라 경로선·장소점은 그리지 않는다.
 struct FootprintMapView: View {
     let summary: FootprintSummary
-    var routes: [[FootprintPoint]] = []
     var highlightCodes: Set<String> = []     // 새로 칠해진 지역 — 펄스 연출
     var interactive: Bool = true             // 탭으로 지역 정보 표시
     // 임베드(스크롤 안) 지도는 팬/핀치를 끈다 — 세로 드래그가 페이지 스크롤로 넘어가도록.
@@ -150,31 +149,6 @@ struct FootprintMapView: View {
                     }
                     ctx.stroke(path, with: .color(visited ? Color.white.opacity(0.7) : borderColor),
                                lineWidth: hairline)
-                }
-            }
-
-            // 3) 여행 경로 (점선 + 장소 점)
-            if !routes.isEmpty, effectiveZoom > 8 {
-                let routeWidth = max(1.6 / scale, hairline)
-                for route in routes where route.count >= 1 {
-                    let pts = route.map { FootprintAtlas.project(lat: $0.lat, lng: $0.lng) }
-                    if pts.count >= 2 {
-                        var line = Path()
-                        line.move(to: pts[0])
-                        for pt in pts.dropFirst() { line.addLine(to: pt) }
-                        ctx.stroke(line, with: .color(visitedColor.opacity(0.55)),
-                                   style: StrokeStyle(lineWidth: routeWidth, lineCap: .round,
-                                                      lineJoin: .round,
-                                                      dash: [routeWidth * 2.2, routeWidth * 2.2]))
-                    }
-                    // 장소 점
-                    let r = routeWidth * 1.4
-                    for pt in pts {
-                        let dot = Path(ellipseIn: CGRect(x: pt.x - r, y: pt.y - r,
-                                                         width: r * 2, height: r * 2))
-                        ctx.fill(dot, with: .color(.white))
-                        ctx.stroke(dot, with: .color(visitedColor), lineWidth: routeWidth * 0.7)
-                    }
                 }
             }
         }

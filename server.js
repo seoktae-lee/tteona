@@ -57,16 +57,36 @@ const pgPool = new Pool({
 pgPool.on('error', (err) => console.error('PostgreSQL pool error:', err));
 
 // 기동 시 device_tokens 스키마 보정 — Android(FCM) 지원을 위해 platform 컬럼 추가,
-// 유저당 1행(user_id 유니크) → 플랫폼별 1행(user_id, platform 유니크)으로 전환
+// 유니크 키는 (user_id, platform) → token 으로 전환.
+//
+// (user_id, platform) 유니크는 두 가지를 동시에 깨뜨렸다:
+//  1) 한 유저가 기기 2대를 쓰면 나중에 등록한 기기만 푸시를 받는다.
+//  2) 한 기기에서 A가 로그아웃하고 B가 로그인하면 같은 토큰이 두 user_id에 묶여,
+//     A에게 갈 알림이 B의 화면에 뜬다(실제로 운영 DB에 이런 토큰이 있었다).
+// 토큰은 기기당 하나이므로 token을 유니크로 두면 두 문제가 함께 사라진다.
 async function ensurePushSchema() {
   await pgPool.query(
     `ALTER TABLE device_tokens ADD COLUMN IF NOT EXISTS platform TEXT NOT NULL DEFAULT 'ios'`
   );
+  // 알림 문구는 수신자의 앱 언어로 쓴다 — 기기가 등록 시 알려준다.
+  await pgPool.query(
+    `ALTER TABLE device_tokens ADD COLUMN IF NOT EXISTS lang TEXT NOT NULL DEFAULT 'ko'`
+  );
   await pgPool.query(`ALTER TABLE device_tokens DROP CONSTRAINT IF EXISTS device_tokens_pkey`);
   await pgPool.query(`ALTER TABLE device_tokens DROP CONSTRAINT IF EXISTS device_tokens_user_id_key`);
+
+  // 유니크 인덱스를 걸기 전에 같은 토큰의 낡은 행을 정리한다(최신 updated_at만 남김).
+  await pgPool.query(`
+    DELETE FROM device_tokens a
+     USING device_tokens b
+     WHERE a.token = b.token
+       AND (a.updated_at < b.updated_at
+            OR (a.updated_at = b.updated_at AND a.ctid < b.ctid))
+  `);
   await pgPool.query(
-    `CREATE UNIQUE INDEX IF NOT EXISTS device_tokens_user_platform_idx ON device_tokens (user_id, platform)`
+    `CREATE UNIQUE INDEX IF NOT EXISTS device_tokens_token_idx ON device_tokens (token)`
   );
+  await pgPool.query(`DROP INDEX IF EXISTS device_tokens_user_platform_idx`);
 }
 ensurePushSchema().catch(err => console.error('[Push] schema migration error:', err.message));
 
@@ -93,23 +113,114 @@ async function requireAuth(req, res, next) {
   next();
 }
 
+// ─── 푸시 문구 (수신자 언어 기준) ─────────────────────────────────────────────
+// 알림은 "보내는 사람"이 아니라 "받는 사람"의 언어로 쓰여야 한다.
+// device_tokens.lang에 기기 언어를 저장해 두고, 발송 직전에 문구를 고른다.
+const PUSH_LANGS = new Set(['ko', 'en', 'ja']);
+const pushLang = (lang) => (PUSH_LANGS.has(lang) ? lang : 'ko');
+
+const PUSH_TEXT = {
+  courseLiked: {
+    ko: (p) => ({ title: '코스에 좋아요가 달렸어요 ❤️', body: `${p.nickname}님이 "${p.courseName}" 코스를 좋아합니다` }),
+    en: (p) => ({ title: 'Someone liked your course ❤️', body: `${p.nickname} liked your course "${p.courseName}"` }),
+    ja: (p) => ({ title: 'コースにいいねがつきました ❤️', body: `${p.nickname}さんがコース「${p.courseName}」にいいねしました` }),
+  },
+  courseFollowed: {
+    ko: (p) => ({ title: '누군가 내 코스를 따라가고 있어요 🗺️', body: `${p.nickname}님이 "${p.courseName}" 코스 여행을 시작했어요` }),
+    en: (p) => ({ title: 'Someone is following your course 🗺️', body: `${p.nickname} started traveling your course "${p.courseName}"` }),
+    ja: (p) => ({ title: '誰かがあなたのコースをたどっています 🗺️', body: `${p.nickname}さんがコース「${p.courseName}」の旅を始めました` }),
+  },
+  // 한쪽만 0인 경우가 흔하다(코스만 만들고 여행은 안 감). 두 항목을 단순히 이어붙이면
+  // "코스 3개 만들었고!"처럼 어미가 끊기므로 언어별로 문장을 완성해서 고른다.
+  weeklyReport: {
+    ko: (p) => ({
+      title: '이번 주 여행 리포트 📊',
+      body: `지난 7일간 ${
+        p.courses > 0 && p.places > 0 ? `코스 ${p.courses}개 만들었고, 장소 ${p.places}곳 방문했어요`
+        : p.courses > 0               ? `코스 ${p.courses}개 만들었어요`
+        :                               `장소 ${p.places}곳 방문했어요`}!`,
+    }),
+    en: (p) => {
+      const c = `created ${p.courses} course${p.courses > 1 ? 's' : ''}`;
+      const v = `visited ${p.places} place${p.places > 1 ? 's' : ''}`;
+      return {
+        title: 'Your weekly travel report 📊',
+        body: `In the last 7 days you ${
+          p.courses > 0 && p.places > 0 ? `${c} and ${v}` : p.courses > 0 ? c : v}!`,
+      };
+    },
+    ja: (p) => ({
+      title: '今週の旅レポート 📊',
+      body: `この7日間で${
+        p.courses > 0 && p.places > 0 ? `コースを${p.courses}件作成し、${p.places}か所を訪れました`
+        : p.courses > 0               ? `コースを${p.courses}件作成しました`
+        :                               `${p.places}か所を訪れました`}！`,
+    }),
+  },
+  vlogDone: {
+    ko: (p) => ({ title: '🎬 Vlog 완성!', body: `${p.courseName || '나의 오늘'} 영상이 완성됐어요. 앱에서 확인해보세요!` }),
+    en: (p) => ({ title: '🎬 Your Vlog is ready!', body: `Your "${p.courseName || 'My Day'}" video is ready. Check it out in the app!` }),
+    ja: (p) => ({ title: '🎬 Vlog 完成！', body: `「${p.courseName || '私の今日'}」の動画が完成しました。アプリで確認してみてください！` }),
+  },
+};
+
+/// PUSH_TEXT 항목을 sendPush가 쓰는 (lang) => {title, body} 형태로 바꾼다.
+const localized = (key, params) => (lang) => PUSH_TEXT[key][pushLang(lang)](params);
+/// 채팅처럼 언어와 무관한 문구(방 이름·발신자 닉네임)는 그대로 흘려보낸다.
+const literal = (title, body) => () => ({ title, body });
+
 // ─── APNs Provider ────────────────────────────────────────────────────────────
 
-const apnProvider = new apn.Provider({
+// APNs 토큰은 발급된 환경에서만 유효하다. Xcode로 설치한 빌드는 sandbox 토큰을,
+// TestFlight/App Store 빌드는 production 토큰을 받는다. production으로만 보내던 탓에
+// 개발 빌드의 토큰은 전부 400 BadDeviceToken으로 떨어졌다(운영 로그에서 확인).
+// 두 환경을 모두 열어두고, production이 BadDeviceToken을 주면 sandbox로 재시도한다.
+const apnCredentials = {
   token: {
     key:    process.env.APNS_KEY_PATH || '/home/ubuntu/tteona-api/keys/AuthKey_Z255DQRVA2.p8',
     keyId:  process.env.APNS_KEY_ID   || 'Z255DQRVA2',
     teamId: process.env.APNS_TEAM_ID  || 'M576JMA5A7',
   },
-  production: true,
-});
+};
+const apnProduction = new apn.Provider({ ...apnCredentials, production: true });
+const apnSandbox    = new apn.Provider({ ...apnCredentials, production: false });
 
 const BUNDLE_ID = 'com.seoktaedev.tteona';
 
-async function sendPush({ userId, title, body, data = {} }) {
+// 토큰 → 마지막으로 성공한 환경. 개발 기기가 매번 production을 헛치는 왕복을 줄인다.
+// 프로세스 메모리라 재시작하면 비지만, 첫 발송 한 번만 재시도하면 다시 채워진다.
+const apnsEnvHint = new Map();
+
+/// 한 기기에 알림 1건 전송. 성공하면 { ok: true }, 토큰이 죽었으면 { dead: true }.
+async function sendApns(token, note) {
+  const order = apnsEnvHint.get(token) === 'sandbox'
+    ? [['sandbox', apnSandbox], ['production', apnProduction]]
+    : [['production', apnProduction], ['sandbox', apnSandbox]];
+
+  let lastReason = null;
+  for (const [env, provider] of order) {
+    const res = await provider.send(note, token);
+    if (res.sent.length > 0) {
+      apnsEnvHint.set(token, env);
+      return { ok: true };
+    }
+    lastReason = res.failed[0]?.response?.reason || res.failed[0]?.error?.message || 'unknown';
+    // 다른 환경에서는 살아있을 수 있는 토큰 — 남은 환경으로 계속 시도한다.
+    if (lastReason !== 'BadDeviceToken') break;
+  }
+
+  apnsEnvHint.delete(token);
+  // 두 환경 모두 거절 = 이 토큰은 어디서도 유효하지 않다. Unregistered는 앱 삭제.
+  const dead = lastReason === 'BadDeviceToken' || lastReason === 'Unregistered';
+  return { ok: false, dead, error: lastReason };
+}
+
+/// message: (lang) => ({ title, body }) — 기기마다 등록된 언어로 문구를 만든다.
+/// 한 유저가 한국어 폰과 영어 폰을 함께 쓰면 각 기기가 제 언어로 받는다.
+async function sendPush({ userId, message, data = {} }) {
   try {
     const result = await pgPool.query(
-      'SELECT token, platform FROM device_tokens WHERE user_id = $1',
+      'SELECT token, platform, lang FROM device_tokens WHERE user_id = $1',
       [userId]
     );
     if (result.rows.length === 0) return { skipped: true, reason: 'no token' };
@@ -117,6 +228,7 @@ async function sendPush({ userId, title, body, data = {} }) {
     let ok = false;
     let lastError = null;
     for (const row of result.rows) {
+      const { title, body } = message(row.lang);
       if (row.platform === 'android') {
         // Android — FCM (data 값은 문자열만 허용)
         try {
@@ -149,13 +261,18 @@ async function sendPush({ userId, title, body, data = {} }) {
         note.alert  = { title, body };
         note.payload = data;
         note.topic   = BUNDLE_ID;
+        note.pushType = 'alert';
 
-        const res = await apnProvider.send(note, row.token);
-        if (res.failed.length > 0) {
-          lastError = res.failed[0].response;
-          console.error('[APNs] failed:', JSON.stringify(res.failed));
-        } else {
+        const res = await sendApns(row.token, note);
+        if (res.ok) {
           ok = true;
+        } else {
+          lastError = res.error;
+          console.error(`[APNs] failed (${res.error}) user=${userId}`);
+          // 죽은 토큰 정리 — Android와 달리 그동안 쌓이기만 했다.
+          if (res.dead) {
+            pgPool.query('DELETE FROM device_tokens WHERE token = $1', [row.token]).catch(() => {});
+          }
         }
       }
     }
@@ -727,18 +844,40 @@ app.post('/api/moderate', requireAuth, (req, res) => {
 app.post('/api/push/register', requireAuth, pushLimiter, async (req, res) => {
   const { token } = req.body;
   const platform = req.body.platform === 'android' ? 'android' : 'ios';
+  const lang = pushLang(String(req.body.lang || 'ko').toLowerCase());
   const userId = req.uid || req.body.userId; // 검증된 uid 우선 — 타인 토큰 탈취 방지
   if (!userId || !token) return res.status(400).json({ error: 'userId and token required' });
 
   try {
+    // 토큰이 유니크 — 같은 기기를 다른 계정이 쓰면 소유자만 바뀐다(이전 계정 알림이 새 계정 기기로 가지 않도록).
+    // 앱에서 언어를 바꾸면 같은 토큰으로 다시 등록되어 lang만 갱신된다.
     await pgPool.query(`
-      INSERT INTO device_tokens (user_id, token, platform, updated_at)
-      VALUES ($1, $2, $3, NOW())
-      ON CONFLICT (user_id, platform) DO UPDATE SET token = EXCLUDED.token, updated_at = NOW()
-    `, [userId, token, platform]);
+      INSERT INTO device_tokens (user_id, token, platform, lang, updated_at)
+      VALUES ($1, $2, $3, $4, NOW())
+      ON CONFLICT (token) DO UPDATE
+        SET user_id = EXCLUDED.user_id, platform = EXCLUDED.platform,
+            lang = EXCLUDED.lang, updated_at = NOW()
+    `, [userId, token, platform, lang]);
     res.json({ ok: true });
   } catch (err) {
     console.error('push register error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// 로그아웃 시 이 기기의 토큰만 해제 — 본인 소유 행만 지운다.
+app.post('/api/push/unregister', requireAuth, pushLimiter, async (req, res) => {
+  const { token } = req.body;
+  if (!token) return res.status(400).json({ error: 'token required' });
+
+  try {
+    await pgPool.query(
+      'DELETE FROM device_tokens WHERE token = $1 AND user_id = $2',
+      [token, req.uid]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('push unregister error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -756,32 +895,31 @@ async function nicknameOf(uid, fallback) {
 
 // 코스 좋아요 알림 — 코스 작성자에게 발송
 app.post('/api/push/course-liked', requireAuth, pushLimiter, async (req, res) => {
-  const { courseOwnerId, likerNickname, courseName } = req.body;
+  const { courseOwnerId, likerNickname, courseName, courseId } = req.body;
   if (!courseOwnerId || !likerNickname) return res.status(400).json({ error: 'missing fields' });
   if (req.uid === courseOwnerId) return res.json({ skipped: true, reason: 'self' });
 
   const nickname = await nicknameOf(req.uid, likerNickname);
   const result = await sendPush({
-    userId: courseOwnerId,
-    title:  '코스에 좋아요가 달렸어요 ❤️',
-    body:   `${nickname}님이 "${courseName}" 코스를 좋아합니다`,
-    data:   { type: 'course_liked', courseName },
+    userId:  courseOwnerId,
+    message: localized('courseLiked', { nickname, courseName }),
+    // courseId가 있어야 알림을 탭했을 때 해당 코스 상세로 열 수 있다.
+    data:    { type: 'course_liked', courseName, courseId: courseId || '' },
   });
   res.json(result);
 });
 
 // 코스 따라가기 알림 — 코스 작성자에게 발송
 app.post('/api/push/course-followed', requireAuth, pushLimiter, async (req, res) => {
-  const { courseOwnerId, followerNickname, courseName } = req.body;
+  const { courseOwnerId, followerNickname, courseName, courseId } = req.body;
   if (!courseOwnerId || !followerNickname) return res.status(400).json({ error: 'missing fields' });
   if (req.uid === courseOwnerId) return res.json({ skipped: true, reason: 'self' });
 
   const nickname = await nicknameOf(req.uid, followerNickname);
   const result = await sendPush({
-    userId: courseOwnerId,
-    title:  '누군가 내 코스를 따라가고 있어요 🗺️',
-    body:   `${nickname}님이 "${courseName}" 코스 여행을 시작했어요`,
-    data:   { type: 'course_followed', courseName },
+    userId:  courseOwnerId,
+    message: localized('courseFollowed', { nickname, courseName }),
+    data:    { type: 'course_followed', courseName, courseId: courseId || '' },
   });
   res.json(result);
 });
@@ -807,16 +945,10 @@ cron.schedule('0 9 * * 1', async () => {
 
     let sent = 0;
     for (const row of users.rows) {
-      const body = [
-        row.courses > 0 ? `코스 ${row.courses}개 만들었고` : null,
-        row.places  > 0 ? `장소 ${row.places}곳 방문했어요` : null,
-      ].filter(Boolean).join(', ');
-
       await sendPush({
-        userId: row.user_id,
-        title:  '이번 주 여행 리포트 📊',
-        body:   `지난 7일간 ${body}!`,
-        data:   { type: 'weekly_report' },
+        userId:  row.user_id,
+        message: localized('weeklyReport', { courses: Number(row.courses), places: Number(row.places) }),
+        data:    { type: 'weekly_report' },
       });
       sent++;
     }
@@ -914,7 +1046,13 @@ async function googleTranslate(texts, target) {
     headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify({ q: texts, target, format: 'text' }),
   });
-  if (!r.ok) throw new Error(`Translation API ${r.status}`);
+  if (!r.ok) {
+    // 상태코드만으론 원인을 못 찾는다 — 실제로 403의 정체는 "API 키 IP 제한"이었고,
+    // NAT 송신 IP가 두 개(.4/.5)라 그중 하나만 허용돼 요청의 절반이 조용히 실패했다.
+    const detail = await r.json().catch(() => null);
+    const reason = detail?.error?.message || '(본문 없음)';
+    throw new Error(`Translation API ${r.status}: ${reason}`);
+  }
   const out = (await r.json())?.data?.translations;
   if (!Array.isArray(out) || out.length !== texts.length) throw new Error('unexpected response shape');
   return out.map(t => decodeHtmlEntities(t.translatedText || ''));
@@ -1696,10 +1834,10 @@ setInterval(async () => {
     );
     console.log(`[Vlog] job ${job.id} 완성 → ${url}`);
     sendPush({
-      userId: job.user_id,
-      title: '🎬 Vlog 완성!',
-      body: `${job.course_name || '나의 오늘'} 영상이 완성됐어요. 앱에서 확인해보세요!`,
-      data: { type: 'vlog_done', jobId: String(job.id) },
+      userId:  job.user_id,
+      message: localized('vlogDone', { courseName: job.course_name }),
+      // url이 있어야 알림을 탭했을 때 완성본을 바로 재생할 수 있다.
+      data:    { type: 'vlog_done', jobId: String(job.id), url },
     }).catch(() => {});
   } catch (err) {
     console.error(`[Vlog] job ${job.id} 실패:`, err.message);
@@ -2711,10 +2849,10 @@ async function pushChatToOfflineMembers(roomId, senderId, senderNick, text, conn
     const targets = info.memberIds.filter(id => id !== senderId && !connectedSet.has(id));
     for (const id of targets) {
       sendPush({
-        userId: id,
-        title:  info.name,
-        body:   `${senderNick}: ${text}`,
-        data:   { type: 'chat', roomId, senderUserId: senderId },
+        userId:  id,
+        // 방 이름과 발신자 닉네임은 번역 대상이 아니다 — 언어와 무관하게 그대로.
+        message: literal(info.name, `${senderNick}: ${text}`),
+        data:    { type: 'chat', roomId, senderUserId: senderId },
       }).catch(() => {});
     }
   } catch (e) {

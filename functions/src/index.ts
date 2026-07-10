@@ -45,46 +45,64 @@ interface FCMRequest {
   createdAt: admin.firestore.Timestamp;
 }
 
-// 알림 타입별 메시지 생성
-function buildMessage(type: string, nickname: string, courseName?: string, commentText?: string, placeName?: string): { title: string; body: string } {
-  switch (type) {
-    case "free_trip_start":
-      return {
-        title: "나의 오늘 시작",
-        body: `${nickname}님이 오늘의 기록을 시작했어요!`,
-      };
-    case "free_trip_end":
-      return {
-        title: "나의 오늘 종료",
-        body: courseName
-          ? `${nickname}님이 오늘 ${courseName}을 완료했어요!`
-          : `${nickname}님이 오늘의 기록을 마쳤어요!`,
-      };
-    case "course_trip_start":
-      return {
-        title: "🚀 여행 시작",
-        body: courseName
-          ? `${nickname}님이 '${courseName}' 코스 여행을 시작했어요!`
-          : `${nickname}님이 코스 여행을 시작했어요!`,
-      };
-    case "video_recorded":
-      return {
-        title: "📹 영상 촬영",
-        body: placeName
-          ? `${nickname}님이 ${placeName}에서 영상을 남겼어요`
-          : `${nickname}님이 영상을 남겼어요`,
-      };
-    case "feed_comment":
-      return {
-        title: `${nickname}님이 답장을 남겼어요`,
-        body: "답장을 확인해주세요!",
-      };
-    default:
-      return {
-        title: "떠나",
-        body: `${nickname}님의 새로운 소식이 있어요!`,
-      };
-  }
+type PushLang = "ko" | "en" | "ja";
+const PUSH_LANGS: readonly string[] = ["ko", "en", "ja"];
+const asPushLang = (v: unknown): PushLang =>
+  (typeof v === "string" && PUSH_LANGS.includes(v) ? v : "ko") as PushLang;
+
+// 알림 타입별 메시지 생성 — 문구는 발신자가 아니라 "수신자"의 앱 언어로 쓴다.
+function buildMessage(
+  type: string,
+  lang: PushLang,
+  nickname: string,
+  courseName?: string,
+  commentText?: string,
+  placeName?: string
+): { title: string; body: string } {
+  const t: Record<string, Record<PushLang, { title: string; body: string }>> = {
+    free_trip_start: {
+      ko: { title: "나의 오늘 시작", body: `${nickname}님이 오늘의 기록을 시작했어요!` },
+      en: { title: "My Day started", body: `${nickname} started today's record!` },
+      ja: { title: "私の今日 スタート", body: `${nickname}さんが今日の記録を始めました！` },
+    },
+    free_trip_end: {
+      ko: { title: "나의 오늘 종료",
+        body: courseName ? `${nickname}님이 오늘 ${courseName}을 완료했어요!` : `${nickname}님이 오늘의 기록을 마쳤어요!` },
+      en: { title: "My Day finished",
+        body: courseName ? `${nickname} completed ${courseName} today!` : `${nickname} wrapped up today's record!` },
+      ja: { title: "私の今日 終了",
+        body: courseName ? `${nickname}さんが今日${courseName}を完了しました！` : `${nickname}さんが今日の記録を終えました！` },
+    },
+    course_trip_start: {
+      ko: { title: "🚀 여행 시작",
+        body: courseName ? `${nickname}님이 '${courseName}' 코스 여행을 시작했어요!` : `${nickname}님이 코스 여행을 시작했어요!` },
+      en: { title: "🚀 Trip started",
+        body: courseName ? `${nickname} started the '${courseName}' course!` : `${nickname} started a course trip!` },
+      ja: { title: "🚀 旅のスタート",
+        body: courseName ? `${nickname}さんが「${courseName}」コースの旅を始めました！` : `${nickname}さんがコースの旅を始めました！` },
+    },
+    video_recorded: {
+      ko: { title: "📹 영상 촬영",
+        body: placeName ? `${nickname}님이 ${placeName}에서 영상을 남겼어요` : `${nickname}님이 영상을 남겼어요` },
+      en: { title: "📹 New video",
+        body: placeName ? `${nickname} left a video at ${placeName}` : `${nickname} left a video` },
+      ja: { title: "📹 動画を撮影",
+        body: placeName ? `${nickname}さんが${placeName}で動画を残しました` : `${nickname}さんが動画を残しました` },
+    },
+    feed_comment: {
+      ko: { title: `${nickname}님이 답장을 남겼어요`, body: "답장을 확인해주세요!" },
+      en: { title: `${nickname} replied to you`, body: "Tap to see the reply!" },
+      ja: { title: `${nickname}さんが返信しました`, body: "返信を確認してみてください！" },
+    },
+  };
+
+  const fallback: Record<PushLang, { title: string; body: string }> = {
+    ko: { title: "떠나", body: `${nickname}님의 새로운 소식이 있어요!` },
+    en: { title: "tteona", body: `${nickname} has an update for you!` },
+    ja: { title: "tteona", body: `${nickname}さんの新しいお知らせがあります！` },
+  };
+
+  return (t[type] ?? fallback)[lang] ?? fallback[lang];
 }
 
 // MARK: - 카카오 Custom Token 발급
@@ -125,7 +143,6 @@ export const sendGroupNotification = onDocumentCreated(
     if (!data || data.processed) return;
 
     const { type, senderUserId, senderNickname, roomIds, courseName, commentText, placeName } = data;
-    const { title, body } = buildMessage(type, senderNickname, courseName, commentText, placeName);
 
     // 수신자 ID 수집
     const recipientUserIds = new Set<string>();
@@ -153,22 +170,26 @@ export const sendGroupNotification = onDocumentCreated(
       return;
     }
 
-    // 각 멤버의 FCM 토큰 조회 (userPrivate 컬렉션)
-    const tokens: string[] = [];
+    // 각 멤버의 FCM 토큰 + 앱 언어 조회 (userPrivate 컬렉션).
+    // 문구가 수신자별로 달라지므로 같은 언어끼리 묶어 멀티캐스트한다.
+    const tokensByLang = new Map<PushLang, string[]>();
     await Promise.all(
       Array.from(recipientUserIds).map(async (userId) => {
         const privateDoc = await db.collection("userPrivate").doc(userId).get();
         const token = privateDoc.data()?.fcmToken as string | undefined;
-        if (token) tokens.push(token);
+        if (!token) return;
+        const lang = asPushLang(privateDoc.data()?.lang);
+        const bucket = tokensByLang.get(lang);
+        if (bucket) bucket.push(token);
+        else tokensByLang.set(lang, [token]);
       })
     );
 
-    if (tokens.length === 0) {
+    if (tokensByLang.size === 0) {
       await event.data?.ref.update({ processed: true });
       return;
     }
 
-    // FCM 멀티캐스트 전송
     const firstRoomId = (roomIds && roomIds.length > 0) ? roomIds[0] : "";
     const fcmData: Record<string, string> = {
       type,
@@ -180,21 +201,22 @@ export const sendGroupNotification = onDocumentCreated(
       fcmData.targetUserId = data.targetUserId;
     }
 
-    const response = await messaging.sendEachForMulticast({
-      tokens,
-      notification: { title, body },
-      apns: {
-        payload: {
-          aps: {
-            sound: "default",
-          },
-        },
-      },
-      data: fcmData,
-    });
+    let success = 0;
+    let failure = 0;
+    for (const [lang, tokens] of tokensByLang) {
+      const { title, body } = buildMessage(type, lang, senderNickname, courseName, commentText, placeName);
+      const response = await messaging.sendEachForMulticast({
+        tokens,
+        notification: { title, body },
+        apns: { payload: { aps: { sound: "default" } } },
+        data: fcmData,
+      });
+      success += response.successCount;
+      failure += response.failureCount;
+    }
 
     console.log(
-      `[FCM] sent: ${response.successCount} success, ${response.failureCount} failure for requestId=${requestId}`
+      `[FCM] sent: ${success} success, ${failure} failure for requestId=${requestId} (langs=${[...tokensByLang.keys()].join(",")})`
     );
 
     // 처리 완료 표시

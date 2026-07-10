@@ -27,6 +27,11 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     }
 }
 
+extension Notification.Name {
+    /// 앱 언어가 바뀌었다 — 푸시 토큰의 lang 재등록 트리거
+    static let appLanguageChanged = Notification.Name("appLanguageChanged")
+}
+
 // MARK: - 언어 관리자
 /// 선택 언어를 UserDefaults에 저장하고, 해당 언어의 .lproj 번들에서 문자열을 찾는다.
 /// 언어 변경 시 루트 뷰가 `.id(language)`로 전체 재구성되어 앱 전역에 즉시 반영된다.
@@ -61,6 +66,9 @@ final class LanguageManager: ObservableObject {
         UserDefaults.standard.set(newLanguage.rawValue, forKey: Self.storageKey)
         Self.syncProcessLocale(newLanguage)
         language = newLanguage
+        // 푸시 문구는 서버가 기기에 등록된 언어로 만든다 — 바뀐 언어를 다시 등록해야
+        // 다음 알림부터 새 언어로 온다.
+        NotificationCenter.default.post(name: .appLanguageChanged, object: nil)
     }
 
     var locale: Locale { Locale(identifier: language.rawValue) }

@@ -52,23 +52,35 @@ struct TteonaApp: App {
                         return
                     }
                     ProManager.shared.logIn(userId: uid)
+                    let lang = LanguageManager.shared.language.rawValue
                     Task {
-                        await FCMService.shared.saveFCMToken(userId: uid)
-                        await PushService.shared.registerDeviceToken(userId: uid)
+                        await FCMService.shared.saveFCMToken(userId: uid, lang: lang)
+                        await PushService.shared.registerDeviceToken(userId: uid, lang: lang)
                     }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: Notification.Name("FCMTokenRefreshed"))) { _ in
                     guard let uid = authService.currentUser?.uid else { return }
+                    let lang = LanguageManager.shared.language.rawValue
                     Task {
-                        await FCMService.shared.saveFCMToken(userId: uid)
+                        await FCMService.shared.saveFCMToken(userId: uid, lang: lang)
                     }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .apnsTokenReceived)) { _ in
                     // 로그인 시점에 APNs 토큰이 아직 없어 등록을 건너뛴 경우를 보완 —
                     // 토큰 도착 즉시 WAS에 등록 (좋아요·Vlog 완성·채팅 푸시가 여기에 의존)
                     guard let uid = authService.currentUser?.uid else { return }
+                    let lang = LanguageManager.shared.language.rawValue
                     Task {
-                        await PushService.shared.registerDeviceToken(userId: uid)
+                        await PushService.shared.registerDeviceToken(userId: uid, lang: lang)
+                    }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .appLanguageChanged)) { _ in
+                    // 앱 언어를 바꾸면 서버에 등록된 lang도 갱신해야 다음 알림부터 새 언어로 온다.
+                    guard let uid = authService.currentUser?.uid else { return }
+                    let lang = LanguageManager.shared.language.rawValue
+                    Task {
+                        await PushService.shared.registerDeviceToken(userId: uid, lang: lang)
+                        await FCMService.shared.saveFCMToken(userId: uid, lang: lang)
                     }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
@@ -115,5 +127,11 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         let tokenString = deviceToken.map { String(format: "%02x", $0) }.joined()
         UserDefaults.standard.set(tokenString, forKey: "apnsDeviceToken")
         NotificationCenter.default.post(name: .apnsTokenReceived, object: nil)
+    }
+
+    /// 등록 실패는 그동안 조용히 삼켜졌다 — 토큰이 없으면 원격 푸시가 전부 사라지므로 남긴다.
+    func application(_ application: UIApplication,
+                     didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        print("[APNs] 원격 알림 등록 실패:", error.localizedDescription)
     }
 }

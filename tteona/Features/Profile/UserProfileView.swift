@@ -12,7 +12,6 @@ struct UserProfileView: View {
     @EnvironmentObject private var roomService: RoomService
 
     @State private var summary = FootprintSummary()
-    @State private var routes: [[FootprintPoint]] = []
     @State private var courses: [Course] = []
     @State private var thumbnails: [String: String] = [:]
     @State private var isLoaded = false
@@ -69,11 +68,9 @@ struct UserProfileView: View {
     private func load() async {
         guard !isLoaded else { return }
         async let summaryTask = FootprintService.shared.fetchSummary(userId: user.uid)
-        async let recordsTask = FootprintService.shared.fetchFootprints(userId: user.uid)
         async let coursesTask = FootprintService.shared.fetchCourses(authorId: user.uid)
         async let thumbsTask = CourseThumbnailService.shared.fetchAllThumbnails()
         summary = await summaryTask
-        routes = await recordsTask.map(\.points)
         courses = await coursesTask
         thumbnails = await thumbsTask
         isLoaded = true
@@ -174,7 +171,6 @@ struct UserProfileView: View {
 
             FootprintMapView(
                 summary: summary,
-                routes: routes,
                 interactive: true,
                 panZoom: false,   // 페이지 스크롤과 충돌 방지 — 탭만
                 initialFocus: initialFocus

@@ -644,7 +644,8 @@ struct ActiveSessionView: View {
                 await PushService.shared.notifyCourseFollowed(
                     courseOwnerId: course.authorId,
                     followerNickname: nickname,
-                    courseName: course.courseName
+                    courseName: course.courseName,
+                    courseId: course.courseId
                 )
             }
         }

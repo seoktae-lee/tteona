@@ -357,7 +357,11 @@ class AuthService: NSObject, ObservableObject {
     }
 
     // MARK: - 로그아웃
-    func signOut() {
+    func signOut() async {
+        // 기기 토큰 해제가 먼저다 — Firebase 세션이 끊기면 WAS 인증을 통과하지 못하고,
+        // 토큰이 남으면 이 기기에 로그인하는 다음 계정에게 내 알림이 배달된다.
+        await PushService.shared.unregisterDeviceToken()
+
         ActiveSessionStore.shared.clear()
         ImpromptuSessionStore.shared.clear()
         Task { @MainActor in FootprintService.shared.clear() }

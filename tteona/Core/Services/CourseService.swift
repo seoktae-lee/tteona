@@ -92,7 +92,8 @@ class CourseService: ObservableObject {
                     await PushService.shared.notifyCourseLiked(
                         courseOwnerId: course.authorId,
                         likerNickname: likerNickname,
-                        courseName: course.courseName
+                        courseName: course.courseName,
+                        courseId: course.courseId
                     )
                 }
             }

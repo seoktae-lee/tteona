@@ -10,7 +10,8 @@ class FCMService: NSObject {
     private let db = Firestore.firestore()
 
     // MARK: - FCM 토큰 저장
-    func saveFCMToken(userId: String) async {
+    /// `lang`은 Cloud Functions가 그룹 알림 문구를 어느 언어로 쓸지 정하는 값이다.
+    func saveFCMToken(userId: String, lang: String) async {
         Messaging.messaging().token { token, error in
             guard let token, error == nil else {
                 #if DEBUG
@@ -22,7 +23,7 @@ class FCMService: NSObject {
                 // 민감정보는 userPrivate로 분리 저장 (본인만 접근)
                 try? await Firestore.firestore()
                     .collection("userPrivate").document(userId)
-                    .setData(["fcmToken": token], merge: true)
+                    .setData(["fcmToken": token, "lang": lang], merge: true)
 
                 // 과거에 users 문서에 저장된 fcmToken이 남아있다면 제거
                 try? await Firestore.firestore()
