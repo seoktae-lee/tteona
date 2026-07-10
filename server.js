@@ -265,6 +265,31 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', server: 'tteona-api', time: new Date().toISOString() });
 });
 
+// 운영 모니터링 — nginx가 /api/만 WAS로 프록시하므로 외부에서 닿는 헬스체크는 이 경로.
+// 디스크 여유·Vlog 대기열 상태를 함께 반환해 "터지기 전에" 보이게 한다.
+app.get('/api/health', async (req, res) => {
+  const out = { status: 'ok', server: 'tteona-api', time: new Date().toISOString() };
+  try {
+    out.diskFreeMB = await diskFreeMB(VLOG_DIR);
+    if (out.diskFreeMB < 5120) out.status = 'warn';
+  } catch { out.diskFreeMB = null; }
+  try {
+    const q = await pgPool.query(`
+      SELECT
+        COUNT(*) FILTER (WHERE status = 'pending')::int    AS pending,
+        COUNT(*) FILTER (WHERE status = 'processing')::int AS processing,
+        COALESCE(EXTRACT(EPOCH FROM NOW() - MIN(created_at) FILTER (WHERE status = 'pending')), 0)::int AS oldest_pending_sec
+      FROM vlog_jobs`);
+    out.vlog = {
+      pending: q.rows[0].pending,
+      processing: q.rows[0].processing,
+      oldestPendingSec: q.rows[0].oldest_pending_sec,
+    };
+    if (out.vlog.pending >= 5 || out.vlog.oldestPendingSec > 1800) out.status = 'warn';
+  } catch { out.vlog = null; }
+  res.json(out);
+});
+
 app.get('/api', (req, res) => {
   res.json({ message: 'tteona API server v1.0' });
 });
@@ -1194,6 +1219,13 @@ app.post('/api/vlog/jobs', requireAuth, vlogJobLimiter, async (req, res) => {
     return res.status(400).json({ error: 'userId and places required' });
   }
   try {
+    // 디스크 가드 — 공간이 없으면 업로드·합성이 중간에 깨져 더 나쁜 실패가 된다.
+    // 503으로 정직하게 거절하면 클라이언트는 재시도 후 로컬 폴백으로라도 결과를 보장한다.
+    const free = await diskFreeMB(VLOG_DIR).catch(() => -1);
+    if (free >= 0 && free < 2048) {
+      console.error(`[Vlog] ⚠️ 디스크 여유 ${free}MB — 잡 생성 거절`);
+      return res.status(503).json({ error: '서버 저장 공간이 부족합니다. 잠시 후 다시 시도해주세요.' });
+    }
     const wanted = Array.isArray(formats)
       ? formats.filter(f => ['reels', 'youtube', 'insta'].includes(f)) : [];
     const r = await pgPool.query(
@@ -1229,8 +1261,19 @@ async function requireJobOwner(req, res, next) {
 }
 
 // 클립 업로드 — multipart 필드 "clip", 쿼리 ?order=N (장소 순번)
-app.post('/api/vlog/jobs/:jobId/clips', requireAuth, uploadLimiter, requireJobOwner, vlogUpload.single('clip'), (req, res) => {
+app.post('/api/vlog/jobs/:jobId/clips', requireAuth, uploadLimiter, requireJobOwner, vlogUpload.single('clip'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'clip file required' });
+  // 무결성 검증 — 전송 중 잘린 파일이 그대로 합성에 들어가면 잡 전체가 이상한 결과물로
+  // 완성돼 버린다(실패보다 나쁨). 저장 직후 ffprobe로 실제 재생 가능한 영상인지 확인하고,
+  // 깨졌으면 지우고 400 → 클라이언트 재시도(retrying)가 온전한 파일로 다시 올린다.
+  try {
+    await probeVideo(req.file.path);
+  } catch {
+    try { fs.unlinkSync(req.file.path); } catch {}
+    console.warn(`[Vlog] job ${req.params.jobId} 클립 ${req.query.order} 손상 업로드 거절`);
+    return res.status(400).json({ error: 'corrupt clip — retry upload' });
+  }
+  // size는 클라이언트가 로컬 원본과 대조해 바이트 단위 완전성까지 확인하는 용도
   res.json({ ok: true, size: req.file.size });
 });
 
@@ -1271,6 +1314,22 @@ app.get('/api/vlog/jobs/:jobId', requireAuth, requireJobOwner, async (req, res) 
 });
 
 // ── FFmpeg 실행 헬퍼 ──
+
+// 디스크 여유 공간(MB) — fs.statfs는 Node 버전을 타므로 POSIX df로 확인
+function diskFreeMB(dir) {
+  return new Promise((resolve, reject) => {
+    const p = spawn('df', ['-Pk', dir]);
+    let out = '';
+    p.stdout.on('data', d => out += d);
+    p.on('close', code => {
+      if (code !== 0) return reject(new Error('df failed'));
+      const cols = out.trim().split('\n').pop().split(/\s+/);
+      const availKB = parseInt(cols[3], 10);
+      if (isNaN(availKB)) return reject(new Error('df parse failed'));
+      resolve(Math.floor(availKB / 1024));
+    });
+  });
+}
 
 function runFF(args, timeoutMs = 10 * 60 * 1000) {
   return new Promise((resolve, reject) => {
@@ -1462,7 +1521,12 @@ async function composeVlog(job) {
 
       const args = ['-i', c.file];
       if (!info.hasAudio) {
-        args.push('-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100', '-shortest');
+        // 무음 클립(마이크 권한 거부 등)에 무음 트랙을 붙인다. 길이는 '-t'(입력 옵션)로
+        // 클립과 똑같이 잘라 둔다 — 예전엔 '-shortest'를 여기 뒀는데, 뒤에 워터마크 '-i'가
+        // 오면 ffmpeg가 이를 그 입력의 옵션으로 해석해("cannot be applied to input file")
+        // 잡 전체가 exit 234로 실패했다. 무한 길이인 anullsrc를 입력 단계에서 끊는 편이 안전하다.
+        args.push('-f', 'lavfi', '-t', Math.max(info.duration, 0.1).toFixed(3),
+                  '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100');
       }
       if (watermark) {
         // 우측 상단 tteona 로고 워터마크 — 페이드 전에 얹어 클립과 함께 페이드된다
@@ -1595,6 +1659,14 @@ app.get('/api/vlog/bgm/:mood/:file', (req, res) => {
 });
 
 // ── 워커: 5초마다 pending 잡 1개 처리 (동시 1개 — 8코어를 한 잡에 집중) ──
+
+// 재시작 복구 — 합성 도중 프로세스가 죽으면(배포 pm2 restart 포함) 잡이 processing에
+// 영구 고착되고 유저는 "이어받기"를 눌러도 영원히 완성을 못 받는다. 워커가 이 프로세스
+// 하나뿐이므로 부팅 시점의 processing은 전부 중단된 잡 → pending으로 되돌려 재합성한다.
+pgPool.query(`UPDATE vlog_jobs SET status = 'pending', progress = 0 WHERE status = 'processing'`)
+  .then(r => { if (r.rowCount > 0) console.log(`[Vlog] 재시작 복구: 중단된 잡 ${r.rowCount}건 → pending 재투입`); })
+  .catch(err => console.error('[Vlog] 재시작 복구 실패:', err.message));
+
 let vlogBusy = false;
 setInterval(async () => {
   if (vlogBusy) return;
@@ -1610,6 +1682,11 @@ setInterval(async () => {
   } catch { return; }
 
   vlogBusy = true;
+  // 대기열이 쌓이면 유저 체감 대기시간이 렌더링 시간의 배수로 늘어난다 — 임계 전에 로그로 감지
+  try {
+    const q = await pgPool.query(`SELECT COUNT(*)::int AS n FROM vlog_jobs WHERE status = 'pending'`);
+    if (q.rows[0].n >= 3) console.warn(`[Vlog] ⚠️ 대기열 ${q.rows[0].n}건 — 동시 1워커 한계 접근 중`);
+  } catch {}
   console.log(`[Vlog] job ${job.id} 합성 시작 (user=${job.user_id})`);
   try {
     const url = await composeVlog(job);
@@ -1626,14 +1703,68 @@ setInterval(async () => {
     }).catch(() => {});
   } catch (err) {
     console.error(`[Vlog] job ${job.id} 실패:`, err.message);
-    await pgPool.query(
-      `UPDATE vlog_jobs SET status = 'failed', error_msg = $2 WHERE id = $1`,
-      [job.id, String(err.message).slice(0, 500)]
-    ).catch(() => {});
+    // 일시 오류(디스크 순간 부족·프로세스 신호 등)로 유저가 곧장 열화본(로컬 폴백)을
+    // 받는 일이 없도록 한 번은 자동 재시도한다. 입력 자체가 없는 잡은 재시도 무의미.
+    const opts = typeof job.options === 'object' && job.options !== null
+      ? job.options : (() => { try { return JSON.parse(job.options || '{}'); } catch { return {}; } })();
+    const retriable = (opts.retryCount | 0) < 1 && !String(err.message).includes('클립이 없습니다');
+    if (retriable) {
+      console.log(`[Vlog] job ${job.id} 자동 재시도 1회 예약`);
+      await pgPool.query(
+        `UPDATE vlog_jobs SET status = 'pending', progress = 0, options = options || '{"retryCount":1}' WHERE id = $1`,
+        [job.id]
+      ).catch(() => {});
+    } else {
+      await pgPool.query(
+        `UPDATE vlog_jobs SET status = 'failed', error_msg = $2 WHERE id = $1`,
+        [job.id, String(err.message).slice(0, 500)]
+      ).catch(() => {});
+    }
   } finally {
     vlogBusy = false;
   }
 }, 5000);
+
+// ── Vlog 디스크 정리: 부팅 30초 후 + 6시간마다 ──
+// 원본 클립·완성본이 영구 누적되면 50GB 디스크가 차는 순간 모든 유저의 합성이 실패한다.
+// 보존 정책: 완성 7일(유저는 완성 직후 다운로드 — 서버 보관은 재다운로드 여유분),
+//           실패 3일(에러 조사 여유), 시작 안 된 잡(uploading) 24시간(클라 이어받기 TTL과 동일),
+//           스모크 테스트 잡 1시간. 파일만 지우고 DB 행은 남긴다(통계·에러 추적) — 스모크 행만 삭제.
+async function cleanupVlogs() {
+  try {
+    const r = await pgPool.query(`
+      SELECT id, status, user_id FROM vlog_jobs WHERE
+        (status = 'completed' AND completed_at < NOW() - INTERVAL '7 days')
+        OR (status = 'failed' AND created_at < NOW() - INTERVAL '3 days')
+        OR (status = 'uploading' AND created_at < NOW() - INTERVAL '24 hours')
+        OR (user_id = 'deploy-smoke' AND created_at < NOW() - INTERVAL '1 hour')`);
+    let removed = 0;
+    for (const row of r.rows) {
+      const dir = path.join(VLOG_DIR, String(row.id));
+      if (fs.existsSync(dir)) {
+        try { fs.rmSync(dir, { recursive: true, force: true }); removed++; } catch {}
+      }
+      if (row.user_id === 'deploy-smoke') {
+        await pgPool.query(`DELETE FROM vlog_jobs WHERE id = $1`, [row.id]).catch(() => {});
+      } else if (row.status === 'uploading') {
+        // 만료 처리 — 워커가 집어가거나 클라가 이어받는 일이 없도록 상태를 확정한다
+        await pgPool.query(
+          `UPDATE vlog_jobs SET status = 'failed', error_msg = '만료: 24시간 내 시작되지 않음' WHERE id = $1`,
+          [row.id]
+        ).catch(() => {});
+      }
+    }
+    const free = await diskFreeMB(VLOG_DIR).catch(() => -1);
+    if (removed > 0 || (free >= 0 && free < 5120)) {
+      console.log(`[Vlog] 정리: 잡 폴더 ${removed}개 삭제, 디스크 여유 ${free >= 0 ? free + 'MB' : '측정 실패'}`);
+    }
+    if (free >= 0 && free < 5120) console.warn(`[Vlog] ⚠️ 디스크 여유 ${free}MB — 5GB 미만, 정리 정책 점검 필요`);
+  } catch (err) {
+    console.error('[Vlog] 정리 크론 실패:', err.message);
+  }
+}
+setTimeout(cleanupVlogs, 30 * 1000);
+setInterval(cleanupVlogs, 6 * 60 * 60 * 1000);
 
 // ─── 그룹 방 참여/나가기 (서버 경유) ──────────────────────────────────────────
 // Firestore rules를 "멤버만 읽기"로 잠그기 위해 초대코드 조회·참여를 Admin SDK로 처리.

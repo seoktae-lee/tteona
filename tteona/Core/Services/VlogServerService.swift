@@ -381,6 +381,16 @@ actor VlogServerService {
             let msg = String(data: data, encoding: .utf8) ?? "upload failed"
             throw ServerVlogError.transient("clip \(order): \(msg.prefix(120))")
         }
+        // 서버가 저장한 바이트 수를 로컬 원본과 대조 — 다르면 전송 중 잘린 것이므로
+        // 성공으로 넘기지 않고 재시도(retrying)에 맡긴다. 잘린 클립이 합성에 들어가는 것을
+        // 서버 ffprobe 검증과 이중으로 차단한다.
+        let localSize = (try? FileManager.default.attributesOfItem(atPath: fileURL.path)[.size] as? Int) ?? nil
+        if let localSize,
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let savedSize = json["size"] as? Int,
+           savedSize != localSize {
+            throw ServerVlogError.transient("clip \(order): size mismatch \(savedSize)/\(localSize)")
+        }
     }
 
     private func startJob(jobId: Int) async throws {
