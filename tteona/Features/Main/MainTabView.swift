@@ -54,32 +54,45 @@ struct MainTabView: View {
     /// 타입체커가 감당하지 못해(unable to type-check in reasonable time) 분리해 둔다.
     private var routedTabContent: some View {
         tabContent
-            // 좋아요·코스 따라가기 알림 탭 → 딥링크와 같은 경로로 코스 상세를 연다
-            .onChange(of: notificationManager.pendingCourseId) { _, courseId in
-                guard let courseId else { return }
-                notificationManager.pendingCourseId = nil
-                deepLinkTask?.cancel()
-                deepLinkTask = Task {
-                    deepLinkedCourse = try? await courseService.fetchCourse(by: courseId)
-                }
+            // 좋아요·코스 따라가기(코스 상세), 주간 리포트(프로필), Vlog 완성(재생) 알림 탭.
+            // 앱이 실행 중일 때는 이 onChange들이, 콜드 스타트 때는 아래 onAppear가 소비한다.
+            .onChange(of: notificationManager.pendingCourseId) { _, id in
+                if id != nil { consumeNotificationRouting() }
             }
-            // 주간 리포트 알림 탭 → 프로필 탭(여행 통계)
             .onChange(of: notificationManager.shouldOpenProfile) { _, should in
-                guard should else { return }
-                notificationManager.shouldOpenProfile = false
-                selectedTab = 3
+                if should { consumeNotificationRouting() }
             }
-            // Vlog 완성 알림 탭 → 서버가 보내준 완성본을 바로 재생
             .onChange(of: notificationManager.pendingVlogURL) { _, url in
-                guard let url else { return }
-                notificationManager.pendingVlogURL = nil
-                notificationVlogURL = IdentifiedURL(url: url)
+                if url != nil { consumeNotificationRouting() }
             }
             .fullScreenCover(item: $notificationVlogURL) { item in
                 VlogPreviewView(vlogURL: item.url) {
                     notificationVlogURL = nil
                 }
             }
+            // 콜드 스타트: 앱이 꺼진 상태에서 알림을 탭하면 목적지가 뷰 생성 전에 정해져
+            // onChange가 "변화"를 못 보고 지나친다. 진입 시 한 번 직접 소비한다.
+            .onAppear { consumeNotificationRouting() }
+    }
+
+    /// 알림 탭으로 정해진 목적지를 소비한다. onChange(실행 중 탭)와 onAppear(콜드 스타트)가
+    /// 함께 호출하며, 어느 쪽이 먼저든 값이 있을 때 한 번만 처리된다.
+    private func consumeNotificationRouting() {
+        if let courseId = notificationManager.pendingCourseId {
+            notificationManager.pendingCourseId = nil
+            deepLinkTask?.cancel()
+            deepLinkTask = Task {
+                deepLinkedCourse = try? await courseService.fetchCourse(by: courseId)
+            }
+        }
+        if let url = notificationManager.pendingVlogURL {
+            notificationManager.pendingVlogURL = nil
+            notificationVlogURL = IdentifiedURL(url: url)
+        }
+        if notificationManager.shouldOpenProfile {
+            notificationManager.shouldOpenProfile = false
+            selectedTab = 3
+        }
     }
 
     private var tabContent: some View {
