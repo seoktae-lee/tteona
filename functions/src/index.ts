@@ -45,6 +45,21 @@ interface FCMRequest {
   createdAt: admin.firestore.Timestamp;
 }
 
+/// iOS 배지는 절대값만 실을 수 있어(APNs에 증분이 없다) 안 읽은 알림 수를
+/// userPrivate/{uid}.badgeCount에 누적한다. WAS(server.js)도 같은 문서를 올리므로
+/// 두 발송 경로의 알림이 하나의 숫자로 합쳐진다. 앱을 열면 클라이언트가 0으로 되돌린다.
+async function bumpBadge(userId: string): Promise<number> {
+  try {
+    const ref = db.collection("userPrivate").doc(userId);
+    await ref.set({ badgeCount: admin.firestore.FieldValue.increment(1) }, { merge: true });
+    const n = (await ref.get()).data()?.badgeCount;
+    return typeof n === "number" && n > 0 ? n : 1;
+  } catch (err) {
+    console.error("[FCM] badge bump error:", (err as Error).message);
+    return 1;
+  }
+}
+
 type PushLang = "ko" | "en" | "ja";
 const PUSH_LANGS: readonly string[] = ["ko", "en", "ja"];
 const asPushLang = (v: unknown): PushLang =>
@@ -171,21 +186,18 @@ export const sendGroupNotification = onDocumentCreated(
     }
 
     // 각 멤버의 FCM 토큰 + 앱 언어 조회 (userPrivate 컬렉션).
-    // 문구가 수신자별로 달라지므로 같은 언어끼리 묶어 멀티캐스트한다.
-    const tokensByLang = new Map<PushLang, string[]>();
+    // 문구도 배지 숫자도 수신자마다 다르므로 멀티캐스트 대신 한 명씩 보낸다.
+    const recipients: { userId: string; token: string; lang: PushLang }[] = [];
     await Promise.all(
       Array.from(recipientUserIds).map(async (userId) => {
         const privateDoc = await db.collection("userPrivate").doc(userId).get();
         const token = privateDoc.data()?.fcmToken as string | undefined;
         if (!token) return;
-        const lang = asPushLang(privateDoc.data()?.lang);
-        const bucket = tokensByLang.get(lang);
-        if (bucket) bucket.push(token);
-        else tokensByLang.set(lang, [token]);
+        recipients.push({ userId, token, lang: asPushLang(privateDoc.data()?.lang) });
       })
     );
 
-    if (tokensByLang.size === 0) {
+    if (recipients.length === 0) {
       await event.data?.ref.update({ processed: true });
       return;
     }
@@ -203,20 +215,27 @@ export const sendGroupNotification = onDocumentCreated(
 
     let success = 0;
     let failure = 0;
-    for (const [lang, tokens] of tokensByLang) {
-      const { title, body } = buildMessage(type, lang, senderNickname, courseName, commentText, placeName);
-      const response = await messaging.sendEachForMulticast({
-        tokens,
-        notification: { title, body },
-        apns: { payload: { aps: { sound: "default" } } },
-        data: fcmData,
-      });
-      success += response.successCount;
-      failure += response.failureCount;
-    }
+    await Promise.all(
+      recipients.map(async (r) => {
+        const { title, body } = buildMessage(type, r.lang, senderNickname, courseName, commentText, placeName);
+        const badge = await bumpBadge(r.userId);
+        try {
+          await messaging.send({
+            token: r.token,
+            notification: { title, body },
+            apns: { payload: { aps: { sound: "default", badge } } },
+            data: fcmData,
+          });
+          success++;
+        } catch (err) {
+          failure++;
+          console.error(`[FCM] send failed for ${r.userId}:`, (err as Error).message);
+        }
+      })
+    );
 
     console.log(
-      `[FCM] sent: ${success} success, ${failure} failure for requestId=${requestId} (langs=${[...tokensByLang.keys()].join(",")})`
+      `[FCM] sent: ${success} success, ${failure} failure for requestId=${requestId}`
     );
 
     // 처리 완료 표시

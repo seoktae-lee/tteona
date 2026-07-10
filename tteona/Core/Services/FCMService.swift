@@ -37,6 +37,15 @@ class FCMService: NSObject {
         }
     }
 
+    // MARK: - 배지 초기화
+    /// 앱이 포그라운드로 올라오면 안 읽은 알림 수를 0으로 되돌린다.
+    /// 서버(WAS·Cloud Functions)는 이 값을 올려 가며 배지 숫자를 만들므로,
+    /// 여기서 지우지 않으면 앱을 열어도 배지가 계속 남는다.
+    func clearBadge(userId: String) async {
+        try? await db.collection("userPrivate").document(userId)
+            .setData(["badgeCount": 0], merge: true)
+    }
+
     // MARK: - 그룹 멤버에게 알림 요청 작성
     func requestGroupNotification(
         type: GroupNotificationType,

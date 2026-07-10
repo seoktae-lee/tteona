@@ -85,6 +85,9 @@ struct TteonaApp: App {
                 }
                 .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
                     UNUserNotificationCenter.current().setBadgeCount(0)
+                    // 서버 쪽 카운터도 함께 비운다 — 안 그러면 다음 알림이 낡은 숫자를 이어받는다.
+                    guard let uid = authService.currentUser?.uid else { return }
+                    Task { await FCMService.shared.clearBadge(userId: uid) }
                 }
         }
     }

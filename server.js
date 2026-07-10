@@ -215,6 +215,23 @@ async function sendApns(token, note) {
   return { ok: false, dead, error: lastReason };
 }
 
+/// iOS 배지는 절대값만 실을 수 있다 — APNs에 증분 개념이 없다. 그래서 안 읽은 알림 수를
+/// userPrivate/{uid}.badgeCount에 누적해 두고 발송할 때 그 값을 싣는다.
+/// 앱이 포그라운드로 올라오면 클라이언트가 0으로 되돌린다.
+/// WAS와 Cloud Functions가 같은 문서를 증가시키므로 두 경로의 알림이 함께 세어진다.
+async function bumpBadge(userId) {
+  try {
+    const ref = db.collection('userPrivate').doc(userId);
+    await ref.set({ badgeCount: FieldValue.increment(1) }, { merge: true });
+    const n = (await ref.get()).data()?.badgeCount;
+    return Number.isInteger(n) && n > 0 ? n : 1;
+  } catch (err) {
+    // 배지는 부가 정보다 — 세는 데 실패했다고 알림 자체를 포기하지 않는다.
+    console.error('[Push] badge bump error:', err.message);
+    return 1;
+  }
+}
+
 /// message: (lang) => ({ title, body }) — 기기마다 등록된 언어로 문구를 만든다.
 /// 한 유저가 한국어 폰과 영어 폰을 함께 쓰면 각 기기가 제 언어로 받는다.
 async function sendPush({ userId, message, data = {} }) {
@@ -224,6 +241,10 @@ async function sendPush({ userId, message, data = {} }) {
       [userId]
     );
     if (result.rows.length === 0) return { skipped: true, reason: 'no token' };
+
+    // 배지는 iOS에만 의미가 있다 — 안드로이드 전용 유저의 카운터를 헛되이 올리지 않는다.
+    const hasIOS = result.rows.some(row => row.platform !== 'android');
+    const badge = hasIOS ? await bumpBadge(userId) : 0;
 
     let ok = false;
     let lastError = null;
@@ -256,7 +277,7 @@ async function sendPush({ userId, message, data = {} }) {
         // iOS — APNs
         const note = new apn.Notification();
         note.expiry = Math.floor(Date.now() / 1000) + 3600;
-        note.badge  = 1;
+        note.badge  = badge;   // 고정 1이 아니라 실제 안 읽은 알림 수
         note.sound  = 'default';
         note.alert  = { title, body };
         note.payload = data;
