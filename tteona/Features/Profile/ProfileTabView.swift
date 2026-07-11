@@ -470,8 +470,10 @@ struct ProfileTabView: View {
 
                 if let greeting = greetingText {
                     greetingBanner(greeting)
-                        .padding(.top, -14)
-                        .transition(.move(edge: .top).combined(with: .opacity))
+                        // 지도 상단에 어정쩡하게 걸치던 배너를 지도 한가운데로
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                        .padding(.horizontal, 16)
+                        .transition(.opacity.combined(with: .scale(scale: 0.95)))
                         .zIndex(1)
                 }
             }
