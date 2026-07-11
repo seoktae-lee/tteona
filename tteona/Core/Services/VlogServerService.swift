@@ -181,6 +181,9 @@ actor VlogServerService {
             alreadyStarted = p.started
         } else {
             let df = DateFormatter()
+            // 서버 자막용 날짜 — 그레고리력·POSIX 고정 (비그레고리력 연도 방지)
+            df.calendar = Calendar(identifier: .gregorian)
+            df.locale = Locale(identifier: "en_US_POSIX")
             df.dateFormat = "yyyy.MM.dd  HH:mm"
             let placesPayload: [[String: Any]] = clips.map { clip in
                 let shot = (try? FileManager.default.attributesOfItem(atPath: clip.file.path)[.creationDate] as? Date) ?? Date()

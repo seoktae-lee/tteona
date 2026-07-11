@@ -62,6 +62,21 @@ struct GroupChatView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 10) {
+                        // 이전 메시지 더보기 (페이지네이션) — 탭 방식이라 스크롤 위치가 튀지 않는다
+                        if chat.canLoadOlder {
+                            Button {
+                                Task { await chat.loadOlderMessages() }
+                            } label: {
+                                if chat.isLoadingOlder {
+                                    ProgressView().scaleEffect(0.8)
+                                } else {
+                                    Text(L("chat.loadOlder"))
+                                        .font(.tte(13, .medium))
+                                        .foregroundColor(.tteOrange)
+                                }
+                            }
+                            .padding(.vertical, 6)
+                        }
                         ForEach(entries) { entry in
                             switch entry {
                             case .message(let m):
@@ -73,7 +88,8 @@ struct GroupChatView: View {
                                     highlighted: highlightedId == m.id,
                                     onReply: { replyingTo = m; inputFocused = true },
                                     onReact: { emoji in chat.toggleReaction(messageId: m.id, emoji: emoji) },
-                                    onQuoteTap: { scrollToOriginal(of: m) }
+                                    onQuoteTap: { scrollToOriginal(of: m) },
+                                    onResend: { chat.resend(m) }
                                 )
                                 .id(entry.id)
                             case .system(let f):
@@ -242,6 +258,7 @@ private struct ChatBubble: View {
     var onReply: () -> Void = {}
     var onReact: (String) -> Void = { _ in }
     var onQuoteTap: () -> Void = {}
+    var onResend: () -> Void = {}
 
     var body: some View {
         HStack {
@@ -254,7 +271,19 @@ private struct ChatBubble: View {
                         .padding(.leading, 4)
                 }
                 HStack(alignment: .bottom, spacing: 5) {
-                    if isMine { timeLabel }
+                    if isMine {
+                        // 전송 실패 — 탭하면 재전송
+                        if message.failed {
+                            Button(action: onResend) {
+                                Image(systemName: "exclamationmark.circle.fill")
+                                    .font(.tte(15))
+                                    .foregroundColor(.red)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(L("chat.resend"))
+                        }
+                        timeLabel
+                    }
                     bubbleBody
                     if !isMine { timeLabel }
                 }

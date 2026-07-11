@@ -23,7 +23,13 @@ class UserService: ObservableObject {
     }
 
     func saveUser(_ user: AppUser) async throws {
-        try db.collection("users").document(user.uid).setData(from: user)
+        // merge: true — AppUser에 없는 필드(likedCourseIds·visitedSigCodes·
+        // footprintBackfillV1 등)와 nil 옵셔널(profileImageUrl·blockedUserIds)이
+        // 통째로 덮어써져 사라지는 것을 막는다. 온보딩을 다시 밟은 기존 유저의
+        // 좋아요·발자취·프로필 사진을 보존한다.
+        try db.collection("users").document(user.uid).setData(from: user, merge: true)
+        // 과거 버전이 공개 users 문서에 저장해 둔 email(PII)이 남아 있으면 제거한다.
+        try? await db.collection("users").document(user.uid).updateData(["email": FieldValue.delete()])
         currentUser = user
     }
 
@@ -49,6 +55,33 @@ class UserService: ObservableObject {
     // 여기서는 원격 쓰기 없이 로컬 상태만 갱신한다.
     func setProfileImageUrl(_ url: String) {
         currentUser?.profileImageUrl = url
+    }
+
+    /// 닉네임을 원자적으로 예약한다(중복 방지). 성공 true, 이미 남이 선점했으면 false.
+    /// nicknames/{닉네임} 문서를 create-only 규칙으로 만들어, 동시 가입 레이스에서도 선점이 원자적.
+    /// (기존 유저는 예약 문서가 없으므로 호출부에서 isNicknameTaken 검사도 함께 쓴다.)
+    func reserveNickname(_ nickname: String, uid: String) async -> Bool {
+        let key = nickname.trimmingCharacters(in: .whitespaces)
+        guard !key.isEmpty else { return false }
+        let ref = db.collection("nicknames").document(key)
+        do {
+            try await ref.setData(["uid": uid, "createdAt": FieldValue.serverTimestamp()])
+            return true
+        } catch {
+            // 이미 존재 — 내가 소유한 예약이면(재시도 등) 성공으로 간주
+            let doc = try? await ref.getDocument()
+            return (doc?.data()?["uid"] as? String) == uid
+        }
+    }
+
+    /// 내 닉네임 예약을 반납한다(닉네임 변경 시 옛 닉네임 해제).
+    func releaseNickname(_ nickname: String, uid: String) async {
+        let key = nickname.trimmingCharacters(in: .whitespaces)
+        guard !key.isEmpty else { return }
+        let ref = db.collection("nicknames").document(key)
+        if let doc = try? await ref.getDocument(), (doc.data()?["uid"] as? String) == uid {
+            try? await ref.delete()
+        }
     }
 
     func isNicknameTaken(_ nickname: String) async -> Bool {

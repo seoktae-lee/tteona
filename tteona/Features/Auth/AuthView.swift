@@ -296,15 +296,11 @@ struct AuthView: View {
                           let vc = windowScene.windows.first?.rootViewController else { return }
                     Task { await authService.signInWithGoogle(presenting: vc) }
                 } label: {
-                    Text("G")
-                        .font(.tte(22, .bold))
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [.blue, .red, .yellow, .green],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
+                    // 구글 공식 표준 색상 G 로고 (미변형) — 브랜드 가이드 준수
+                    Image("GoogleG")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 24, height: 24)
                 }
                 .disabled(authService.isLoading)
 
@@ -328,9 +324,18 @@ struct AuthView: View {
                 ) {
                     Task { await authService.signInWithKakao() }
                 } label: {
-                    Image(systemName: "message.fill")
-                        .font(.tte(20))
-                        .foregroundColor(Color(hex: "#3A1D1D"))
+                    // 카카오 공식 심볼(#FEE500 배경 위 검정 말풍선) — 가이드상 심볼은 변형·대체 불가.
+                    // "KakaoSymbol" 에셋(공식 심볼 PNG)을 넣으면 자동 사용, 없으면 임시 폴백.
+                    if UIImage(named: "KakaoSymbol") != nil {
+                        Image("KakaoSymbol")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 24, height: 24)
+                    } else {
+                        Image(systemName: "message.fill")
+                            .font(.tte(20))
+                            .foregroundColor(Color(hex: "#191919"))
+                    }
                 }
                 .disabled(authService.isLoading)
             }

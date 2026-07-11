@@ -10,12 +10,12 @@
 
 	<key>NSPrivacyCollectedDataTypes</key>
 	<array>
-		<!-- 위치 정보 -->
+		<!-- 위치 정보 (발자취·코스가 계정에 연결됨 → Linked=true) -->
 		<dict>
 			<key>NSPrivacyCollectedDataType</key>
 			<string>NSPrivacyCollectedDataTypePreciseLocation</string>
 			<key>NSPrivacyCollectedDataTypeLinked</key>
-			<false/>
+			<true/>
 			<key>NSPrivacyCollectedDataTypeTracking</key>
 			<false/>
 			<key>NSPrivacyCollectedDataTypePurposes</key>

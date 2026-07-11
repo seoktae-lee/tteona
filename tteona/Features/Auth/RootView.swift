@@ -5,8 +5,20 @@ struct RootView: View {
     @EnvironmentObject private var deepLinkHandler: DeepLinkHandler
     @EnvironmentObject private var notificationManager: AppNotificationManager
     @StateObject private var courseService = CourseService()
+    @StateObject private var network = NetworkMonitor.shared
 
     var body: some View {
+        content
+            .overlay(alignment: .top) {
+                if !network.isOnline {
+                    OfflineBanner()
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
+            .animation(.easeInOut(duration: 0.25), value: network.isOnline)
+    }
+
+    private var content: some View {
         Group {
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("-previewOnboarding") {
@@ -65,5 +77,31 @@ private struct SplashView: View {
         .onAppear {
             withAnimation(.easeOut(duration: 0.8)) { appeared = true }
         }
+    }
+}
+
+// MARK: - 오프라인 배너 (상단)
+private struct OfflineBanner: View {
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "wifi.slash")
+                .font(.tte(13, .semibold))
+            Text(L("network.offline"))
+                .font(.tte(13, .medium))
+        }
+        .foregroundColor(.white)
+        .frame(maxWidth: .infinity)
+        .padding(.top, safeTop + 6)
+        .padding(.bottom, 8)
+        .background(Color.tteDarkGray.opacity(0.92))
+        .ignoresSafeArea(edges: .top)
+    }
+
+    private var safeTop: CGFloat {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }
+            .first { $0.isKeyWindow }?
+            .safeAreaInsets.top ?? 0
     }
 }

@@ -15,32 +15,107 @@ struct WSMemberLocation: Identifiable {
     }
 }
 
+/// 동행 세션 실시간 위치 공유.
+/// 한 번의 나들이를 여러 그룹 방에 동시에 공유할 수 있도록, 방마다 독립 WebSocket 연결을
+/// 열고(RoomConnection) 위치를 모두에게 브로드캐스트한다. 여러 방의 멤버 위치는 userId
+/// 기준으로 합쳐(최신 우선) 지도에 한 번만 찍는다. (서버 프로토콜은 그대로 — 방당 join.)
 @MainActor
 class LocationSocketService: ObservableObject {
     static let shared = LocationSocketService()
 
     @Published var memberLocations: [WSMemberLocation] = []
 
-    private var wsTask: URLSessionWebSocketTask?
-    private var currentRoomId: String?
-    private var currentUserId: String?
-    private var currentNickname: String = ""
-    private var pingTimer: Timer?
-    private var reconnectTask: Task<Void, Never>?
+    private var connections: [String: RoomConnection] = [:]   // roomId → 연결
+    private var userId: String = ""
+    private var nickname: String = ""
 
     private let wsURL = URL(string: "wss://tteona.kr/ws/location")!
 
     // MARK: - 연결
 
-    func connect(roomId: String, userId: String, nickname: String) {
-        guard wsTask == nil || wsTask?.state != .running else { return }
-        currentRoomId  = roomId
-        currentUserId  = userId
-        currentNickname = nickname
-        openSocket()
+    /// 여러 방에 동시에 실시간 위치를 공유한다. 이미 연결된 방은 유지, 빠진 방은 정리한다.
+    func connect(roomIds: Set<String>, userId: String, nickname: String) {
+        self.userId = userId
+        self.nickname = nickname
+
+        // 더 이상 공유하지 않는 방 연결 정리
+        for (rid, conn) in connections where !roomIds.contains(rid) {
+            conn.close()
+            connections[rid] = nil
+        }
+        // 새로 공유할 방 연결
+        for rid in roomIds where connections[rid] == nil {
+            let conn = RoomConnection(roomId: rid, userId: userId, nickname: nickname, wsURL: wsURL) { [weak self] in
+                self?.rebuildMemberLocations()
+            }
+            connections[rid] = conn
+            conn.open()
+        }
+        rebuildMemberLocations()
     }
 
-    private func openSocket() {
+    /// 하위호환 단일 방 연결
+    func connect(roomId: String, userId: String, nickname: String) {
+        connect(roomIds: [roomId], userId: userId, nickname: nickname)
+    }
+
+    // MARK: - 위치 전송 (모든 공유 방에)
+
+    func sendLocation(latitude: Double, longitude: Double) {
+        for conn in connections.values {
+            conn.sendLocation(latitude: latitude, longitude: longitude)
+        }
+    }
+
+    // MARK: - 연결 해제
+
+    func disconnect() {
+        for conn in connections.values { conn.close() }
+        connections.removeAll()
+        memberLocations = []
+    }
+
+    /// 여러 방의 멤버 위치를 합친다 — 같은 유저가 여러 방에 있으면 최신 위치 하나만 남긴다.
+    private func rebuildMemberLocations() {
+        var merged: [String: WSMemberLocation] = [:]
+        for conn in connections.values {
+            for m in conn.members {
+                if let existing = merged[m.userId], existing.updatedAt >= m.updatedAt { continue }
+                merged[m.userId] = m
+            }
+        }
+        memberLocations = Array(merged.values)
+    }
+}
+
+// MARK: - 방 단위 WebSocket 연결
+
+@MainActor
+final class RoomConnection {
+    let roomId: String
+    private let userId: String
+    private let nickname: String
+    private let wsURL: URL
+    private let onUpdate: () -> Void
+
+    private(set) var members: [WSMemberLocation] = []
+
+    private var wsTask: URLSessionWebSocketTask?
+    private var pingTimer: Timer?
+    private var reconnectTask: Task<Void, Never>?
+    private var isClosed = false
+
+    init(roomId: String, userId: String, nickname: String, wsURL: URL,
+         onUpdate: @escaping () -> Void) {
+        self.roomId = roomId
+        self.userId = userId
+        self.nickname = nickname
+        self.wsURL = wsURL
+        self.onUpdate = onUpdate
+    }
+
+    func open() {
+        guard !isClosed else { return }
         let session = URLSession(configuration: .default)
         wsTask = session.webSocketTask(with: wsURL)
         wsTask?.resume()
@@ -51,41 +126,31 @@ class LocationSocketService: ObservableObject {
             guard let self else { return }
             let token = await APIAuth.bearerToken()
             self.send(["type": "join",
-                       "roomId":   self.currentRoomId ?? "",
-                       "userId":   self.currentUserId ?? "",
-                       "nickname": self.currentNickname,
-                       "idToken":  token ?? ""])
+                       "roomId": self.roomId,
+                       "userId": self.userId,
+                       "nickname": self.nickname,
+                       "idToken": token ?? ""])
         }
     }
-
-    // MARK: - 위치 전송
 
     func sendLocation(latitude: Double, longitude: Double) {
-        send(["type":      "location",
-              "latitude":  latitude,
-              "longitude": longitude])
+        send(["type": "location", "latitude": latitude, "longitude": longitude])
     }
 
-    // MARK: - 연결 해제
-
-    func disconnect() {
-        reconnectTask?.cancel()
-        reconnectTask = nil
-        if let roomId = currentRoomId, let userId = currentUserId {
-            send(["type": "leave", "roomId": roomId, "userId": userId])
-        }
+    func close() {
+        isClosed = true
+        reconnectTask?.cancel(); reconnectTask = nil
+        send(["type": "leave", "roomId": roomId, "userId": userId])
         cleanup()
+        members = []
+        onUpdate()
     }
 
     private func cleanup() {
-        pingTimer?.invalidate()
-        pingTimer = nil
+        pingTimer?.invalidate(); pingTimer = nil
         wsTask?.cancel(with: .goingAway, reason: nil)
         wsTask = nil
-        memberLocations = []
     }
-
-    // MARK: - 수신 루프
 
     private func listen() {
         wsTask?.receive { [weak self] result in
@@ -106,44 +171,39 @@ class LocationSocketService: ObservableObject {
 
     private func handle(_ json: [String: Any]) {
         guard let type = json["type"] as? String else { return }
-
         switch type {
         case "location":
-            guard let userId   = json["userId"]    as? String,
-                  let nickname = json["nickname"]  as? String,
-                  let lat      = json["latitude"]  as? Double,
-                  let lng      = json["longitude"] as? Double else { return }
-
-            let loc = WSMemberLocation(userId: userId, nickname: nickname,
+            guard let uid = json["userId"] as? String,
+                  let nick = json["nickname"] as? String,
+                  let lat = json["latitude"] as? Double,
+                  let lng = json["longitude"] as? Double else { return }
+            let loc = WSMemberLocation(userId: uid, nickname: nick,
                                        latitude: lat, longitude: lng, updatedAt: Date())
-            if let idx = memberLocations.firstIndex(where: { $0.userId == userId }) {
-                memberLocations[idx] = loc
+            if let idx = members.firstIndex(where: { $0.userId == uid }) {
+                members[idx] = loc
             } else {
-                memberLocations.append(loc)
+                members.append(loc)
             }
-
+            onUpdate()
         case "left":
-            if let userId = json["userId"] as? String {
-                memberLocations.removeAll { $0.userId == userId }
+            if let uid = json["userId"] as? String {
+                members.removeAll { $0.userId == uid }
+                onUpdate()
             }
-
-        default: break
+        default:
+            break
         }
     }
-
-    // MARK: - 자동 재연결 (3초 후)
 
     private func scheduleReconnect() {
-        guard currentRoomId != nil else { return }
+        guard !isClosed else { return }
         cleanup()
-        reconnectTask = Task {
+        reconnectTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(3))
-            guard !Task.isCancelled else { return }
-            await MainActor.run { self.openSocket() }
+            guard let self, !self.isClosed, !Task.isCancelled else { return }
+            await MainActor.run { self.open() }
         }
     }
-
-    // MARK: - Ping (25초)
 
     private func startPing() {
         pingTimer = Timer.scheduledTimer(withTimeInterval: 25, repeats: true) { [weak self] _ in
@@ -151,12 +211,10 @@ class LocationSocketService: ObservableObject {
         }
     }
 
-    // MARK: - 전송 헬퍼
-
     private func send(_ dict: [String: Any]) {
         guard let wsTask,
               let data = try? JSONSerialization.data(withJSONObject: dict),
-              let str  = String(data: data, encoding: .utf8) else { return }
+              let str = String(data: data, encoding: .utf8) else { return }
         wsTask.send(.string(str)) { _ in }
     }
 }

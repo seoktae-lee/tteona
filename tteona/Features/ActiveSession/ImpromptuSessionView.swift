@@ -230,18 +230,8 @@ struct ImpromptuSessionView: View {
                     .padding(.horizontal, 14).padding(.vertical, 8)
                     .background(Capsule().fill(Color.black.opacity(0.6)))
 
-                    if !activeRoomIds.isEmpty {
-                        HStack(spacing: 4) {
-                            Image(systemName: "location.fill")
-                                .font(.tte(10))
-                            Text(L("session.sharingLocation"))
-                                .font(.tte(11, .medium))
-                        }
-                        .foregroundColor(.white.opacity(0.9))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(Capsule().fill(Color.tteOrange.opacity(0.85)))
-                    }
+                    // '나의 오늘'은 실시간 위치공유(지도 위 실시간 점)를 연결하지 않는다 —
+                    // 그룹에는 시작/종료 활동만 공유하므로 "위치 공유 중" 배지는 표시하지 않는다.
                 }
                 Spacer()
                 Text(L("main.placesCount", capturedPlaces.count))
@@ -594,6 +584,9 @@ struct ImpromptuSessionView: View {
         recomputeRecordedSeconds()
         sessionStore.save(places: capturedPlaces, roomIds: Array(activeRoomIds))
         activityManager.update(placesCount: capturedPlaces.count, lastPlaceName: place.placeName)
+        // 장소별 활동은 그룹 피드(앱 내 타임라인)에만 남긴다. 장소를 여러 곳 들를 때
+        // 매번 푸시가 울리면 알림 폭탄이 되므로, '나의 오늘'은 시작/종료 푸시만 보낸다.
+        // (freeCapture 피드는 채팅방 노출에서 이미 제외되어 있다 — chatVisibleFeedTypes)
         for rid in activeRoomIds {
             roomService.postFeed(roomId: rid, type: .freeCapture,
                                  userId: uid, nickname: nickname,
@@ -601,15 +594,6 @@ struct ImpromptuSessionView: View {
                                  placeName: place.placeName,
                                  latitude: place.latitude,
                                  longitude: place.longitude)
-        }
-        if !activeRoomIds.isEmpty {
-            FCMService.shared.requestGroupNotification(
-                type: .videoRecorded,
-                senderUserId: uid,
-                senderNickname: nickname,
-                roomIds: Array(activeRoomIds),
-                placeName: place.placeName
-            )
         }
         pendingPlace = nil
     }
@@ -707,7 +691,7 @@ struct ImpromptuSessionView: View {
         recordedSeconds = 0
         activeRoomIds = selectedRoomIds
         let roomIds = Array(activeRoomIds)
-        print("[Feed] startNewSession uid=\(uid) nickname=\(nickname) roomIds=\(roomIds)")
+        dlog("[Feed] startNewSession uid=\(uid) nickname=\(nickname) roomIds=\(roomIds)")
         for rid in roomIds {
             roomService.postFeed(roomId: rid, type: .freeTripStart,
                                  userId: uid, nickname: nickname,

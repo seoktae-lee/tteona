@@ -149,6 +149,56 @@ export const createKakaoCustomToken = onCall(async (request) => {
   return { customToken };
 });
 
+// MARK: - Apple authorizationCode → refresh token 교환
+// Apple authorizationCode는 발급 후 약 5분 만료 + 1회용이라, 탈퇴 시점에 revoke하려고
+// 그대로 저장해 두면 거의 항상 만료돼 실패한다. 로그인 직후(코드가 살아 있을 때) 서버에서
+// refresh token으로 교환해 두면, 탈퇴 시 그 refresh token으로 안정적으로 revoke할 수 있다.
+export const exchangeAppleAuthCode = onCall(
+  { secrets: [appleTeamId, appleKeyId, applePrivateKey] },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) {
+      throw new HttpsError("unauthenticated", "Authentication required");
+    }
+    const code = request.data?.authorizationCode as string | undefined;
+    if (!code) {
+      throw new HttpsError("invalid-argument", "authorizationCode is required");
+    }
+
+    try {
+      const res = await fetch("https://appleid.apple.com/auth/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: APPLE_CLIENT_ID,
+          client_secret: await generateAppleClientSecret(),
+          grant_type: "authorization_code",
+          code: String(code),
+        }).toString(),
+      });
+
+      if (!res.ok) {
+        console.warn("[exchangeAppleAuthCode] token exchange failed:", await res.text());
+        // 실패해도 로그인 흐름은 막지 않는다 (revoke는 부가 기능)
+        return { ok: false };
+      }
+
+      const data = await res.json() as { refresh_token?: string };
+      if (data.refresh_token) {
+        await db.collection("userPrivate").doc(uid).set(
+          { appleRefreshToken: data.refresh_token },
+          { merge: true }
+        );
+        return { ok: true };
+      }
+      return { ok: false };
+    } catch (e) {
+      console.warn("[exchangeAppleAuthCode] error:", (e as Error).message);
+      return { ok: false };
+    }
+  }
+);
+
 // fcmRequests 컬렉션 트리거
 export const sendGroupNotification = onDocumentCreated(
   "fcmRequests/{requestId}",
@@ -193,6 +243,8 @@ export const sendGroupNotification = onDocumentCreated(
         const privateDoc = await db.collection("userPrivate").doc(userId).get();
         const token = privateDoc.data()?.fcmToken as string | undefined;
         if (!token) return;
+        // 그룹 활동 알림을 끈 유저는 제외 (명시적 false만 차단, 필드 없으면 기본 수신)
+        if (privateDoc.data()?.groupNotifEnabled === false) return;
         recipients.push({ userId, token, lang: asPushLang(privateDoc.data()?.lang) });
       })
     );
@@ -321,10 +373,34 @@ export const deleteMyAccount = onCall({ secrets: [appleTeamId, appleKeyId, apple
       await Promise.all(reviewsSnapshot.docs.map((d) => d.ref.delete().catch(() => undefined)));
     }
 
-    // 4) Apple Sign In credential revoke (저장된 authorizationCode가 있을 경우)
+    // 3-1) 내가 남긴 댓글 삭제 — 남의 피드에 단 것까지 collectionGroup으로 전부 수집.
+    //      (2단계는 '내가 작성한 피드'만 지우므로, 타인 피드의 내 댓글은 여기서 정리한다.)
+    const commentsSnapshot = await db.collectionGroup("comments")
+      .where("userId", "==", uid)
+      .get()
+      .catch(() => undefined);
+    if (commentsSnapshot) {
+      await Promise.all(commentsSnapshot.docs.map((d) => d.ref.delete().catch(() => undefined)));
+    }
+
+    // 3-2) 닉네임 예약 반납 — 다른 사람이 그 닉네임을 다시 쓸 수 있도록 정리.
+    const nicknameSnapshot = await db.collection("nicknames")
+      .where("uid", "==", uid)
+      .get()
+      .catch(() => undefined);
+    if (nicknameSnapshot) {
+      await Promise.all(nicknameSnapshot.docs.map((d) => d.ref.delete().catch(() => undefined)));
+    }
+
+    // 4) Apple Sign In credential revoke
+    //    refresh token(로그인 시 교환·저장)을 우선 사용한다 — authorizationCode는 5분 만료라
+    //    탈퇴 시점엔 거의 항상 죽어 있다. 레거시 계정 대비로 authorizationCode 폴백을 남긴다.
     const privateDoc = await db.collection("userPrivate").doc(uid).get().catch(() => undefined);
+    const appleRefreshToken = privateDoc?.data()?.appleRefreshToken as string | undefined;
     const appleAuthCode = privateDoc?.data()?.appleAuthCode as string | undefined;
-    if (appleAuthCode) {
+    const revokeToken = appleRefreshToken ?? appleAuthCode;
+    const revokeHint = appleRefreshToken ? "refresh_token" : "authorization_code";
+    if (revokeToken) {
       try {
         await admin.auth().revokeRefreshTokens(uid);
         // Apple REST API로 token revoke
@@ -334,8 +410,8 @@ export const deleteMyAccount = onCall({ secrets: [appleTeamId, appleKeyId, apple
           body: new URLSearchParams({
             client_id: APPLE_CLIENT_ID,
             client_secret: await generateAppleClientSecret(),
-            token: appleAuthCode,
-            token_type_hint: "authorization_code",
+            token: revokeToken,
+            token_type_hint: revokeHint,
           }).toString(),
         });
         if (!appleRevokeRes.ok) {

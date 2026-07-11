@@ -35,8 +35,36 @@ class CameraService: NSObject {
 
     // MARK: - Setup
     func configure() {
+        registerInterruptionObservers()
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             self?.setupSession()
+        }
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    // MARK: - 인터럽션(전화·알람·타 앱 카메라 선점) 대응
+    private func registerInterruptionObservers() {
+        let nc = NotificationCenter.default
+        nc.addObserver(self, selector: #selector(sessionWasInterrupted),
+                       name: .AVCaptureSessionWasInterrupted, object: captureSession)
+        nc.addObserver(self, selector: #selector(sessionInterruptionEnded),
+                       name: .AVCaptureSessionInterruptionEnded, object: captureSession)
+    }
+
+    @objc private func sessionWasInterrupted(_ note: Notification) {
+        // 녹화 중 세션이 끊기면 지금까지 찍힌 만큼 저장(finish)해 유실을 막는다.
+        // (finishRecording은 첫 프레임 전이면 자동으로 정리만 하고 nil을 통지한다.)
+        if isRecording { finishRecording() }
+    }
+
+    @objc private func sessionInterruptionEnded(_ note: Notification) {
+        // 인터럽션이 끝났는데 세션이 멈춰 있으면 프리뷰가 검게 굳으므로 재개한다.
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self, !self.captureSession.isRunning else { return }
+            self.captureSession.startRunning()
         }
     }
 
@@ -260,11 +288,33 @@ class CameraService: NSObject {
         writingQueue.async { [weak self] in
             guard let self, let writer = self.assetWriter, self.isRecording else { return }
             self.isRecording = false
+
+            // 첫 비디오 프레임 도착 전(startWriting 미호출, writer.status == .unknown)에
+            // 종료되면 markAsFinished/finishWriting이 예외를 던진다. 이 경우엔 저장할 프레임이
+            // 아예 없으므로 아무것도 마무리하지 않고 정리만 한 뒤 nil을 통지한다.
+            guard self.isWritingSessionStarted else {
+                let url = self.outputURL
+                self.assetWriter = nil
+                self.videoWriterInput = nil
+                self.audioWriterInput = nil
+                self.outputURL = nil
+                if let url { try? FileManager.default.removeItem(at: url) }
+                DispatchQueue.main.async { self.onRecordingFinished?(nil) }
+                return
+            }
+
             self.videoWriterInput?.markAsFinished()
             self.audioWriterInput?.markAsFinished()
             writer.finishWriting {
                 DispatchQueue.main.async {
-                    let url = self.outputURL
+                    // writer가 실제로 완료(.completed)됐을 때만 유효한 파일로 통지한다.
+                    // 디스크 부족·인코딩 오류 등으로 실패하면 URL이 있어도 파일이 깨졌으므로
+                    // nil로 통지해 '방문 완료'로 잘못 처리되는 것을 막는다.
+                    let succeeded = writer.status == .completed
+                    let url = succeeded ? self.outputURL : nil
+                    if !succeeded, let broken = self.outputURL {
+                        try? FileManager.default.removeItem(at: broken)
+                    }
                     self.assetWriter = nil
                     self.videoWriterInput = nil
                     self.audioWriterInput = nil
@@ -281,9 +331,13 @@ class CameraService: NSObject {
         writingQueue.async { [weak self] in
             guard let self, let writer = self.assetWriter, self.isRecording else { return }
             self.isRecording = false
-            self.videoWriterInput?.markAsFinished()
-            self.audioWriterInput?.markAsFinished()
-            writer.cancelWriting()
+            // 세션이 실제 시작된 경우에만 마무리 호출 — 미시작 writer(.unknown)에 대한
+            // markAsFinished/cancelWriting은 예외를 던지므로 파일 정리만 한다.
+            if self.isWritingSessionStarted {
+                self.videoWriterInput?.markAsFinished()
+                self.audioWriterInput?.markAsFinished()
+                writer.cancelWriting()
+            }
 
             let url = self.outputURL
             self.assetWriter = nil

@@ -57,7 +57,7 @@ final class FootprintAtlas: @unchecked Sendable {
         countryBBox = boxes
 
         loaded = true
-        print("[FootprintAtlas] loaded korea=\(koreaRegions.count) provinces=\(worldProvinces.count) countries=\(countryBBox.count)")
+        dlog("[FootprintAtlas] loaded korea=\(koreaRegions.count) provinces=\(worldProvinces.count) countries=\(countryBBox.count)")
     }
 
     private static func load(resource: String, codeKey: String, nameKey: String,
@@ -66,7 +66,7 @@ final class FootprintAtlas: @unchecked Sendable {
               let data = try? Data(contentsOf: url),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let features = json["features"] as? [[String: Any]] else {
-            print("[FootprintAtlas] failed to load \(resource).geojson")
+            dlog("[FootprintAtlas] failed to load \(resource).geojson")
             return []
         }
 

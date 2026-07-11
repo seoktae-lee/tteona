@@ -135,6 +135,6 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     /// 등록 실패는 그동안 조용히 삼켜졌다 — 토큰이 없으면 원격 푸시가 전부 사라지므로 남긴다.
     func application(_ application: UIApplication,
                      didFailToRegisterForRemoteNotificationsWithError error: Error) {
-        print("[APNs] 원격 알림 등록 실패:", error.localizedDescription)
+        dlog("[APNs] 원격 알림 등록 실패:", error.localizedDescription)
     }
 }

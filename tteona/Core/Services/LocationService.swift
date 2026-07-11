@@ -3,6 +3,11 @@ import Combine
 import CoreLocation
 import UserNotifications
 
+/// 위치 서비스 오류 — superseded는 새 1회성 요청이 이전 요청을 대체했을 때.
+enum LocationError: Error {
+    case superseded
+}
+
 @MainActor
 class LocationService: NSObject, ObservableObject {
     @Published var currentLocation: CLLocation?
@@ -63,6 +68,13 @@ class LocationService: NSObject, ObservableObject {
         // 최근 60초 이내 위치가 있으면 즉시 반환 (연속 업데이트 중일 때 빠름)
         if let loc = currentLocation, Date().timeIntervalSince(loc.timestamp) < 60 {
             return loc
+        }
+        // 이미 대기 중인 요청이 있으면, 그 continuation을 잃어버리지 않도록 먼저 안전하게
+        // 종료(supersede)한다. 그냥 덮어쓰면 이전 continuation이 영원히 resume되지 않아
+        // 그 태스크가 무한 대기(스피너 멈춤)에 빠진다.
+        if let pending = oneTimeLocationContinuation {
+            oneTimeLocationContinuation = nil
+            pending.resume(throwing: LocationError.superseded)
         }
         return try await withCheckedThrowingContinuation { continuation in
             oneTimeLocationContinuation = continuation

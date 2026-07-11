@@ -492,7 +492,7 @@
 				DEVELOPMENT_TEAM = M576JMA5A7;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = tteona_WidgetExtension/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = tteona_WidgetExtension;
+				INFOPLIST_KEY_CFBundleDisplayName = "떠나";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -522,7 +522,7 @@
 				DEVELOPMENT_TEAM = M576JMA5A7;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = tteona_WidgetExtension/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = tteona_WidgetExtension;
+				INFOPLIST_KEY_CFBundleDisplayName = "떠나";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

@@ -76,7 +76,7 @@ actor ExploreInfoService {
                   let code = current["weather_code"] as? Int else { return nil }
             return WeatherInfo(tempC: temp, code: code)
         } catch {
-            print("[ExploreInfoService] weather error:", error)
+            dlog("[ExploreInfoService] weather error:", error)
             return nil
         }
     }

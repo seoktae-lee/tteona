@@ -12,7 +12,7 @@ final class TodaySessionActivityManager: @unchecked Sendable {
 
         let initialState = TodaySessionAttributes.ContentState(
             placesCount: 0,
-            lastPlaceName: "기록 시작",
+            lastPlaceName: L("impromptu.startRecord"),
             startedAt: Date()
         )
         let content = ActivityContent(state: initialState, staleDate: nil)
@@ -24,7 +24,7 @@ final class TodaySessionActivityManager: @unchecked Sendable {
                 pushType: nil
             )
         } catch {
-            print("[LiveActivity] start failed: \(error)")
+            dlog("[LiveActivity] start failed: \(error)")
         }
     }
 

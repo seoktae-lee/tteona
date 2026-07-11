@@ -11,6 +11,7 @@ struct ChatMessage: Identifiable, Equatable {
     var replyToText: String? = nil       // 답장 인용 — 원본 내용
     var reactions: [String: Set<String>] = [:]  // 이모지 → 반응한 userId 집합
     var pending: Bool = false   // 서버 확정 전 낙관적 표시
+    var failed: Bool = false    // 전송 실패(타임아웃) — 재전송 가능
 
     var hasReply: Bool { replyToNickname != nil }
 
@@ -23,7 +24,7 @@ struct ChatMessage: Identifiable, Equatable {
     }
 
     static func == (l: ChatMessage, r: ChatMessage) -> Bool {
-        l.id == r.id && l.pending == r.pending && l.reactions == r.reactions
+        l.id == r.id && l.pending == r.pending && l.failed == r.failed && l.reactions == r.reactions
     }
 }
 
@@ -33,6 +34,9 @@ class ChatSocketService: ObservableObject {
     @Published var isConnected = false
     /// 금칙어로 서버가 메시지를 차단했을 때 true — 뷰에서 안내 알림 표시 후 리셋
     @Published var moderationBlocked = false
+    /// 더 이전 메시지가 남아 있는가 (페이지네이션)
+    @Published var canLoadOlder = false
+    @Published var isLoadingOlder = false
 
     private var wsTask: URLSessionWebSocketTask?
     private var roomId: String?
@@ -40,6 +44,15 @@ class ChatSocketService: ObservableObject {
     private var nickname: String = ""
     private var pingTimer: Timer?
     private var reconnectTask: Task<Void, Never>?
+
+    /// 서버의 join 확정(ack)을 받았는가 — 이게 true여야 실제 전송이 나간다.
+    private var joined = false
+    /// 아직 서버가 확정하지 않은 내 채팅 페이로드 (clientMsgId → payload).
+    /// 미연결/재연결 구간에 보낸 메시지를 잃지 않고, join 확정 시 한꺼번에 재전송한다.
+    private var outbox: [String: [String: Any]] = [:]
+    /// clientMsgId별 전송 타임아웃 태스크 — 확정되면 취소, 만료되면 실패 표시.
+    private var timeoutTasks: [String: Task<Void, Never>] = [:]
+    private let sendTimeout: Duration = .seconds(12)
 
     private let wsURL = URL(string: "wss://tteona.kr/ws/location")!
     private let apiBase = "https://tteona.kr/api"
@@ -56,13 +69,8 @@ class ChatSocketService: ObservableObject {
         }
     }
 
-    private func loadHistory(roomId: String) async {
-        guard let url = URL(string: "\(apiBase)/rooms/\(roomId)/messages?limit=50") else { return }
-        guard let (data, _) = try? await APIAuth.get(url),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let rows = json["messages"] as? [[String: Any]] else { return }
-
-        let history: [ChatMessage] = rows.compactMap { row in
+    private func parseRows(_ rows: [[String: Any]]) -> [ChatMessage] {
+        rows.compactMap { row in
             guard let uid = row["user_id"] as? String,
                   let nick = row["nickname"] as? String,
                   let text = row["text"] as? String else { return nil }
@@ -85,7 +93,38 @@ class ChatSocketService: ObservableObject {
                                replyToText: row["reply_to_text"] as? String,
                                reactions: reactions)
         }
-        messages = history
+    }
+
+    private func loadHistory(roomId: String) async {
+        guard let url = URL(string: "\(apiBase)/rooms/\(roomId)/messages?limit=50") else { return }
+        guard let (data, _) = try? await APIAuth.get(url),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let rows = json["messages"] as? [[String: Any]] else { return }
+        messages = parseRows(rows)
+        canLoadOlder = rows.count >= 50   // 50개 꽉 찼으면 더 있을 수 있음
+    }
+
+    /// 위로 스크롤해 더 이전 메시지를 불러온다(서버 before 커서 페이지네이션).
+    func loadOlderMessages() async {
+        guard let roomId, !isLoadingOlder, canLoadOlder,
+              let oldest = messages.first(where: { !$0.pending && !$0.failed })?.createdAt else { return }
+        isLoadingOlder = true
+        defer { isLoadingOlder = false }
+
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let beforeStr = f.string(from: oldest)
+        guard let enc = beforeStr.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let url = URL(string: "\(apiBase)/rooms/\(roomId)/messages?limit=30&before=\(enc)"),
+              let (data, _) = try? await APIAuth.get(url),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let rows = json["messages"] as? [[String: Any]] else { return }
+
+        let older = parseRows(rows)
+        let existingIds = Set(messages.map(\.id))
+        let newOnes = older.filter { !existingIds.contains($0.id) }
+        if newOnes.isEmpty || rows.count < 30 { canLoadOlder = false }
+        messages.insert(contentsOf: newOnes, at: 0)
     }
 
     private func openSocket() {
@@ -94,7 +133,9 @@ class ChatSocketService: ObservableObject {
         wsTask?.resume()
         listen()
         startPing()
-        // 서버가 join 시 Firebase ID 토큰으로 본인·방 멤버십을 검증한다
+        // 서버가 join 시 Firebase ID 토큰으로 본인·방 멤버십을 검증한다.
+        // isConnected는 낙관적으로 true로 두지 않는다 — 서버의 "joined" 확정을 받아야
+        // 진짜 연결된 것이므로 그때 true로 만들고 밀린 메시지를 flush한다.
         Task { [weak self] in
             guard let self else { return }
             let token = await APIAuth.bearerToken()
@@ -103,7 +144,6 @@ class ChatSocketService: ObservableObject {
                        "userId": self.userId ?? "",
                        "nickname": self.nickname,
                        "idToken": token ?? ""])
-            self.isConnected = true
         }
     }
 
@@ -123,7 +163,63 @@ class ChatSocketService: ObservableObject {
             payload["replyToNickname"] = replyTo.nickname
             payload["replyToText"] = replyTo.text
         }
-        send(payload)
+        outbox[clientMsgId] = payload
+        deliver(clientMsgId)
+    }
+
+    /// 실패 표시된 메시지를 사용자가 다시 보낸다.
+    func resend(_ message: ChatMessage) {
+        guard message.failed, outbox[message.id] != nil else { return }
+        if let idx = messages.firstIndex(where: { $0.id == message.id }) {
+            messages[idx].failed = false
+            messages[idx].pending = true
+        }
+        deliver(message.id)
+    }
+
+    /// 조인 확정 상태면 즉시 전송, 아니면 outbox에 남겨 join 시 flush에 맡긴다.
+    /// 어느 경우든 타임아웃을 걸어 무한 pending을 막는다.
+    private func deliver(_ clientMsgId: String) {
+        guard let payload = outbox[clientMsgId] else { return }
+        if joined, wsTask?.state == .running {
+            send(payload)
+        }
+        scheduleTimeout(clientMsgId)
+    }
+
+    private func scheduleTimeout(_ clientMsgId: String) {
+        timeoutTasks[clientMsgId]?.cancel()
+        timeoutTasks[clientMsgId] = Task { [weak self] in
+            try? await Task.sleep(for: self?.sendTimeout ?? .seconds(12))
+            guard !Task.isCancelled else { return }
+            await MainActor.run { self?.markFailed(clientMsgId) }
+        }
+    }
+
+    private func markFailed(_ clientMsgId: String) {
+        // 아직 outbox에 남아 있으면(= 서버 확정 못 받음) 실패로 표시. 확정됐으면 무시.
+        guard outbox[clientMsgId] != nil,
+              let idx = messages.firstIndex(where: { $0.id == clientMsgId }) else { return }
+        messages[idx].pending = false
+        messages[idx].failed = true
+    }
+
+    private func confirmSent(_ clientMsgId: String) {
+        outbox[clientMsgId] = nil
+        timeoutTasks[clientMsgId]?.cancel()
+        timeoutTasks[clientMsgId] = nil
+    }
+
+    /// join 확정 시 아직 확정 못 받은 메시지를 모두 재전송한다.
+    private func flushOutbox() {
+        for (clientMsgId, payload) in outbox {
+            send(payload)
+            if let idx = messages.firstIndex(where: { $0.id == clientMsgId }) {
+                messages[idx].failed = false
+                messages[idx].pending = true
+            }
+            scheduleTimeout(clientMsgId)
+        }
     }
 
     // MARK: - 해제
@@ -135,6 +231,10 @@ class ChatSocketService: ObservableObject {
         }
         cleanup()
         isConnected = false
+        joined = false
+        // 화면을 떠나므로 대기 중인 전송 타임아웃도 정리
+        for (_, task) in timeoutTasks { task.cancel() }
+        timeoutTasks.removeAll()
     }
 
     private func cleanup() {
@@ -165,10 +265,26 @@ class ChatSocketService: ObservableObject {
     private func handle(_ json: [String: Any]) {
         guard let type = json["type"] as? String else { return }
 
+        // 서버 join 확정 — 이제부터 진짜 연결. 미연결 구간에 쌓인 메시지를 flush.
+        if type == "joined" {
+            joined = true
+            isConnected = true
+            flushOutbox()
+            return
+        }
+
+        // 서버가 인증/멤버십 검증에 실패해 연결을 끊음 — 연결 끊김으로 처리
+        if type == "auth_error" {
+            joined = false
+            isConnected = false
+            return
+        }
+
         // 금칙어 차단 — 낙관적으로 띄웠던 내 메시지를 제거하고 안내
         if type == "chat_blocked" {
             if let clientMsgId = json["clientMsgId"] as? String {
                 messages.removeAll { $0.id == clientMsgId }
+                confirmSent(clientMsgId)   // outbox·타임아웃 정리 (재전송 방지)
             }
             moderationBlocked = true
             return
@@ -202,7 +318,13 @@ class ChatSocketService: ObservableObject {
            let idx = messages.firstIndex(where: { $0.id == clientMsgId }) {
             messages[idx].id = messageId
             messages[idx].pending = false
+            messages[idx].failed = false
+            confirmSent(clientMsgId)   // outbox·타임아웃 정리
             return
+        }
+        // 내 메시지 에코인데 이미 messages에 없더라도(재연결 등) outbox는 확정 처리
+        if let clientMsgId, uid == userId {
+            confirmSent(clientMsgId)
         }
         // 중복 방지 (재연결 시 서버 에코 등)
         guard !messages.contains(where: { $0.id == messageId }) else { return }
@@ -239,6 +361,7 @@ class ChatSocketService: ObservableObject {
         guard roomId != nil else { return }
         cleanup()
         isConnected = false
+        joined = false   // 재연결 후 "joined" ack를 다시 받아야 전송 재개(+outbox flush)
         reconnectTask = Task {
             try? await Task.sleep(for: .seconds(3))
             guard !Task.isCancelled else { return }

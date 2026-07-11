@@ -15,7 +15,7 @@ class FCMService: NSObject {
         Messaging.messaging().token { token, error in
             guard let token, error == nil else {
                 #if DEBUG
-                print("[FCM] token fetch failed: \(error?.localizedDescription ?? "")")
+                dlog("[FCM] token fetch failed: \(error?.localizedDescription ?? "")")
                 #endif
                 return
             }
@@ -31,7 +31,7 @@ class FCMService: NSObject {
                     .updateData(["fcmToken": FieldValue.delete()])
 
                 #if DEBUG
-                print("[FCM] token saved: \(token.prefix(20))...")
+                dlog("[FCM] token saved: \(token.prefix(20))...")
                 #endif
             }
         }
@@ -68,7 +68,7 @@ class FCMService: NSObject {
         ]
         db.collection("fcmRequests").document(UUID().uuidString).setData(data)
         #if DEBUG
-        print("[FCM] notification request written: \(type.rawValue)")
+        dlog("[FCM] notification request written: \(type.rawValue)")
         #endif
     }
 
@@ -92,7 +92,7 @@ class FCMService: NSObject {
         ]
         db.collection("fcmRequests").document(UUID().uuidString).setData(data)
         #if DEBUG
-        print("[FCM] comment notification request written")
+        dlog("[FCM] comment notification request written")
         #endif
     }
 }
@@ -102,7 +102,7 @@ extension FCMService: MessagingDelegate {
     nonisolated func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
         guard let token = fcmToken else { return }
         #if DEBUG
-        print("[FCM] token refreshed")
+        dlog("[FCM] token refreshed")
         #endif
         NotificationCenter.default.post(
             name: Notification.Name("FCMTokenRefreshed"),

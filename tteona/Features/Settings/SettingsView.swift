@@ -1,5 +1,6 @@
 import SwiftUI
 import UserNotifications
+import FirebaseFirestore
 
 struct SettingsView: View {
     @EnvironmentObject private var authService: AuthService
@@ -10,6 +11,7 @@ struct SettingsView: View {
     @State private var showDeleteFailedAlert = false
     @State private var deleteFailedMessage = L("settings.deleteFailed.message")
     @State private var notificationGranted: Bool? = nil
+    @State private var groupNotifEnabled = true
     @ObservedObject private var pro = ProManager.shared
     @State private var showPaywall = false
 
@@ -56,6 +58,7 @@ struct SettingsView: View {
         }
         .task {
             await checkNotificationStatus()
+            await loadNotifPref()
         }
         .sheet(isPresented: $showPaywall) { ProPaywallView() }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
@@ -200,6 +203,19 @@ struct SettingsView: View {
                         .foregroundColor(Color(UIColor.tertiaryLabel))
                 }
             }
+            // 그룹 활동 알림(여행 시작/종료·영상·댓글) 받기 — 시스템 알림 권한과 별개로 앱 차원에서 끌 수 있다.
+            Toggle(isOn: $groupNotifEnabled) {
+                Label(L("settings.groupNotif"), systemImage: "bell.badge")
+                    .foregroundColor(.tteDarkGray)
+            }
+            .tint(.tteOrange)
+            .onChange(of: groupNotifEnabled) { _, enabled in
+                guard let uid = authService.currentUser?.uid else { return }
+                Task {
+                    try? await Firestore.firestore().collection("userPrivate").document(uid)
+                        .setData(["groupNotifEnabled": enabled], merge: true)
+                }
+            }
             NavigationLink {
                 LanguageSettingsView()
             } label: {
@@ -237,6 +253,13 @@ struct SettingsView: View {
     private func checkNotificationStatus() async {
         let settings = await UNUserNotificationCenter.current().notificationSettings()
         notificationGranted = settings.authorizationStatus == .authorized
+    }
+
+    private func loadNotifPref() async {
+        guard let uid = authService.currentUser?.uid else { return }
+        let doc = try? await Firestore.firestore().collection("userPrivate").document(uid).getDocument()
+        // 기본값 true — 필드가 없으면(기존 유저) 알림을 계속 받는다
+        groupNotifEnabled = (doc?.data()?["groupNotifEnabled"] as? Bool) ?? true
     }
 
     private var accountSection: some View {

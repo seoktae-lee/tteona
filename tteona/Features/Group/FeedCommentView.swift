@@ -206,7 +206,7 @@ struct MemberChatView: View {
                 replyToText: reply?.text
             )
         } catch {
-            print("[Comment] error: \(error)")
+            dlog("[Comment] error: \(error)")
         }
         await rebuildEntries(feeds: feedItems)
         isPosting = false

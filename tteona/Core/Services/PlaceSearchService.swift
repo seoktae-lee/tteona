@@ -69,11 +69,11 @@ class PlaceSearchService: ObservableObject {
                 )
             }
 #if DEBUG
-            print("[Kakao] keyword search status=\(statusCode) results=\(results.count)")
+            dlog("[Kakao] keyword search status=\(statusCode) results=\(results.count)")
 #endif
         } catch {
 #if DEBUG
-            print("[Kakao] keyword search error: \(error)")
+            dlog("[Kakao] keyword search error: \(error)")
 #endif
             results = []
         }

@@ -98,6 +98,7 @@ struct ActiveSessionView: View {
                     skippedPlaces = Set(saved.skippedPlaceOrders)
                     currentPlaceIndex = saved.currentPlaceIndex
                     locationService.startTracking(places: orderedPlaces)
+                    connectLocationSharing()   // 이어하기 시에도 위치공유 재연결
                     if isCorrupted { showIntegrityAlert = true }
                 } else {
                     // 저장된 세션 → 시트로 물어보기
@@ -141,8 +142,10 @@ struct ActiveSessionView: View {
         }
         .onChange(of: notificationManager.pendingPlaceName) { _, placeName in
             guard let placeName else { return }
-            // 알림 탭 시 해당 장소로 currentPlaceIndex 맞추고 카메라 열기
-            if let idx = course.places.firstIndex(where: { $0.placeName == placeName }) {
+            // 알림 탭 시 해당 장소로 currentPlaceIndex 맞추고 카메라 열기.
+            // 순서 편집(재정렬)이 있었으면 원본 course.places 인덱스는 orderedPlaces와
+            // 어긋나므로, 실제 표시 배열인 orderedPlaces에서 장소명으로 찾아야 한다.
+            if let idx = orderedPlaces.firstIndex(where: { $0.placeName == placeName }) {
                 currentPlaceIndex = idx
             }
             showCamera = true
@@ -168,9 +171,12 @@ struct ActiveSessionView: View {
             }
         }
         .fullScreenCover(isPresented: $showVlog, onDismiss: {
-            sessionStore.clear()
-            // Vlog 완료 후에는 세션 화면까지 함께 닫는다
-            if vlogCompleted { dismiss() }
+            // 세션 기록은 Vlog가 실제로 완성됐을 때만 정리한다. 완료 없이 닫으면(뒤로/취소)
+            // 진행 중이던 방문 기록·클립이 그대로 남아 나중에 이어서 Vlog를 만들 수 있어야 한다.
+            if vlogCompleted {
+                sessionStore.clear()
+                dismiss()   // Vlog 완료 후에는 세션 화면까지 함께 닫는다
+            }
         }) {
             // orderedPlaces(재정렬 반영)로 course를 재구성해서 Vlog 순서 보장
             let reorderedCourse = Course(
@@ -590,6 +596,7 @@ struct ActiveSessionView: View {
                 Button {
                     showResumeSheet = false
                     locationService.startTracking(places: orderedPlaces)
+                    connectLocationSharing()   // 이어하기 시 위치공유 재연결
                 } label: {
                     HStack(spacing: 10) {
                         Image(systemName: "play.fill").font(.tte(15))
@@ -650,15 +657,22 @@ struct ActiveSessionView: View {
             }
         }
         if !roomIds.isEmpty {
-            if let rid = roomIds.first {
-                LocationSocketService.shared.connect(roomId: rid, userId: uid, nickname: nickname)
-            }
+            connectLocationSharing()
             for rid in roomIds {
                 roomService.postFeed(roomId: rid, type: .tripStart, userId: uid,
                                      nickname: nickname, courseId: course.courseId,
                                      courseName: course.courseName)
             }
         }
+    }
+
+    /// 선택한 모든 동행 방에 실시간 위치 공유를 연결한다.
+    /// (예전엔 roomIds.first 한 방에만 연결돼, 여러 방을 골라도 나머지 방 멤버는 내 위치를
+    ///  실시간으로 볼 수 없었다. 이어하기 경로에서도 아예 연결이 빠져 있었다.)
+    private func connectLocationSharing() {
+        guard !roomIds.isEmpty, let uid = authService.currentUser?.uid else { return }
+        let nickname = userService.currentUser?.nickname ?? L("session.member")
+        LocationSocketService.shared.connect(roomIds: roomIds, userId: uid, nickname: nickname)
     }
 
     private func postTripEnd() {

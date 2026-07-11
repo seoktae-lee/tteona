@@ -32,7 +32,7 @@ private func fetchKakaoCustomToken(kakaoAccessToken: String) async throws -> Str
           let token = result["customToken"] as? String, !token.isEmpty else {
         #if DEBUG
         let rawBody = String(data: data, encoding: .utf8) ?? "(empty)"
-        print("[Kakao] 응답 파싱 실패: \(rawBody)")
+        dlog("[Kakao] 응답 파싱 실패: \(rawBody)")
         #endif
         throw NSError(domain: "tteona.kakao", code: -2,
                       userInfo: [NSLocalizedDescriptionKey: L("auth.error.invalidResponse")])
@@ -73,7 +73,7 @@ class AuthService: NSObject, ObservableObject {
                         && providerIDs.allSatisfy { $0 == "password" }
                     let needsVerification = isEmailPassword && !user.isEmailVerified
                     #if DEBUG
-                    print("[Auth] uid=\(user.uid) isEmailVerified=\(user.isEmailVerified) needsVerification=\(needsVerification) verificationEmailSent=\(self?.verificationEmailSent ?? false)")
+                    dlog("[Auth] uid=\(user.uid) isEmailVerified=\(user.isEmailVerified) needsVerification=\(needsVerification) verificationEmailSent=\(self?.verificationEmailSent ?? false)")
                     #endif
                     if needsVerification {
                         // 미인증 이메일 계정 → currentUser 설정하지 않음
@@ -197,12 +197,14 @@ class AuthService: NSObject, ObservableObject {
             verificationEmailSent = false
             currentUser = AppUser(uid: result.user.uid, email: result.user.email ?? "")
             await refreshOnboardingStatus(uid: result.user.uid)
-            // Apple revoke에 필요한 authorizationCode 저장
+            // Apple revoke 대비: authorizationCode를 서버에서 refresh token으로 교환해 둔다.
+            // authorizationCode는 발급 후 약 5분 만료·1회용이라, 로그인 직후(지금) 교환하지 않으면
+            // 탈퇴 시점엔 죽어 있어 revoke가 실패한다. 교환 결과(refresh token)는 함수가 저장한다.
             if let authCodeData = credential.authorizationCode,
                let authCode = String(data: authCodeData, encoding: .utf8) {
-                try? await Firestore.firestore()
-                    .collection("userPrivate").document(result.user.uid)
-                    .setData(["appleAuthCode": authCode], merge: true)
+                let functions = Functions.functions(region: "us-central1")
+                _ = try? await functions.httpsCallable("exchangeAppleAuthCode")
+                    .call(["authorizationCode": authCode])
             }
         } catch {
             errorMessage = firebaseErrorMessage(error)
@@ -299,11 +301,11 @@ class AuthService: NSObject, ObservableObject {
 
             // Custom Token으로 Firebase 로그인
             #if DEBUG
-            print("[Kakao] signIn with customToken start")
+            dlog("[Kakao] signIn with customToken start")
             #endif
             let result = try await Auth.auth().signIn(withCustomToken: customToken)
             #if DEBUG
-            print("[Kakao] signIn success uid=\(result.user.uid)")
+            dlog("[Kakao] signIn success uid=\(result.user.uid)")
             #endif
             // authStateListener가 호출 안 될 경우를 대비해 직접 설정
             verificationEmailSent = false
@@ -311,7 +313,7 @@ class AuthService: NSObject, ObservableObject {
             await refreshOnboardingStatus(uid: result.user.uid)
         } catch {
             #if DEBUG
-            print("[Kakao] error domain=\((error as NSError).domain) code=\((error as NSError).code) msg=\(error.localizedDescription)")
+            dlog("[Kakao] error domain=\((error as NSError).domain) code=\((error as NSError).code) msg=\(error.localizedDescription)")
             #endif
             errorMessage = kakaoLoginFailureMessage(for: error)
         }
@@ -400,9 +402,21 @@ class AuthService: NSObject, ObservableObject {
 
     // MARK: - Helpers
     func refreshOnboardingStatus(uid: String) async {
-        // 기존 가입 유저는 Firestore users 문서가 이미 존재하므로 온보딩을 다시 하지 않도록 처리
-        let doc = try? await db.collection("users").document(uid).getDocument()
-        onboardingComplete = doc?.exists ?? false
+        // 기존 가입 유저는 Firestore users 문서가 이미 존재하므로 온보딩을 다시 하지 않도록 처리.
+        // ⚠️ 네트워크 오류로 조회가 실패했을 때 onboardingComplete=false로 떨어뜨리면,
+        //    기존 유저가 온보딩 화면으로 밀려나고 거기서 저장 시 프로필이 덮어써질 위험이 있다.
+        //    따라서 "문서 없음"(정상 조회 후 exists=false)과 "조회 실패"(throw)를 반드시 구분한다.
+        do {
+            let doc = try await db.collection("users").document(uid).getDocument()
+            onboardingComplete = doc.exists
+        } catch {
+            // 조회 실패 — 문서 존재 여부를 확신할 수 없으므로 상태를 함부로 바꾸지 않는다.
+            // (기존 유저를 온보딩으로 되돌리지 않는다. 실제 신규 유저면 users 문서가 없어
+            //  이후 온라인 복구 시 재조회로 자연히 온보딩이 이어진다.)
+            #if DEBUG
+            dlog("[Auth] refreshOnboardingStatus 조회 실패 — 상태 유지: \(error.localizedDescription)")
+            #endif
+        }
     }
 
     private func isValidEmail(_ email: String) -> Bool {
@@ -424,7 +438,7 @@ class AuthService: NSObject, ObservableObject {
     }
 
     private func randomNonceString(length: Int = 32) -> String {
-        let charset = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
+        let charset = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-._")
         var result = ""
         var remainingLength = length
         while remainingLength > 0 {

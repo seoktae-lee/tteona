@@ -18,8 +18,13 @@ class CourseService: ObservableObject {
         defer { isLoading = false }
 
         do {
+            // 지도/탐색은 인기순 상위 300개만 로드한다. 코스가 수천 개로 늘어도 진입이
+            // 느려지거나 읽기 비용이 폭증하지 않게 상한을 둔다. 지도 특성상 수백 개 이상
+            // 핀은 사람이 구분하지 못하므로 UX 손실이 거의 없다.
+            // (특정 지역의 비인기 코스는 지역 검색 별도 쿼리 fetchCoursesInRegion로 보완)
             let snapshot = try await db.collection("courses")
                 .order(by: "likeCount", descending: true)
+                .limit(to: 300)
                 .getDocuments()
             let fetched = snapshot.documents.compactMap { doc in
                 try? doc.data(as: Course.self)
@@ -30,10 +35,40 @@ class CourseService: ObservableObject {
         }
     }
 
+    /// 지역 검색 보완 — 인기 상위 300에 들지 못한 그 지역 코스를 별도로 불러와 병합한다.
+    /// (기본 로드는 인기순 상한이라, 특정 지역을 검색하면 그 지역 코스가 누락될 수 있다.)
+    /// region 필드 prefix 매칭(단일 필드 인덱스는 자동 생성됨).
+    func fetchCoursesInRegion(_ query: String, blockedUserIds: [String] = []) async {
+        let q = query.trimmingCharacters(in: .whitespaces)
+        guard !q.isEmpty else { return }
+        let snapshot = try? await db.collection("courses")
+            .whereField("region", isGreaterThanOrEqualTo: q)
+            .whereField("region", isLessThan: q + "\u{f8ff}")
+            .limit(to: 100)
+            .getDocuments()
+        let fetched = snapshot?.documents.compactMap { try? $0.data(as: Course.self) } ?? []
+        let existingIds = Set(courses.map(\.courseId))
+        let merged = fetched.filter { !existingIds.contains($0.courseId) && !blockedUserIds.contains($0.authorId) }
+        guard !merged.isEmpty else { return }
+        courses.append(contentsOf: merged)
+    }
+
     func saveCourse(_ course: Course) async throws {
         try db.collection("courses").document(course.courseId).setData(from: course)
         courses.insert(course, at: 0)
         Task { await StatsService.shared.postEvent(.courseCreated, userId: course.authorId) }
+    }
+
+    /// 코스 이름·태그 수정 (작성자만 — Firestore 규칙이 작성자 전체수정 허용).
+    func updateCourseInfo(courseId: String, name: String, tag: CourseTag) async throws {
+        try await db.collection("courses").document(courseId).updateData([
+            "courseName": name,
+            "tag": tag.rawValue
+        ])
+        if let idx = courses.firstIndex(where: { $0.courseId == courseId }) {
+            courses[idx].courseName = name
+            courses[idx].tag = tag
+        }
     }
 
     func deleteCourse(_ course: Course) async throws {

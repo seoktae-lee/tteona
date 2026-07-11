@@ -13,11 +13,11 @@ class VlogService {
         for place in places {
             let url = Self.clipURL(place: place, sessionId: sessionId)
             guard FileManager.default.fileExists(atPath: url.path) else {
-                print("[Vlog] skip \(place.placeName) — file not found")
+                dlog("[Vlog] skip \(place.placeName) — file not found")
                 continue
             }
             segments.append((AVURLAsset(url: url), place.placeName, creationDate(of: url)))
-            print("[Vlog] found clip: \(url.lastPathComponent)")
+            dlog("[Vlog] found clip: \(url.lastPathComponent)")
         }
         guard !segments.isEmpty else { throw VlogError.noClips }
 
@@ -26,7 +26,7 @@ class VlogService {
         let outURL = try await buildComposition(segments: segments, onProgress: onProgress)
 
         await MainActor.run { onProgress(1.0) }
-        print("[Vlog] done: \(outURL.lastPathComponent)")
+        dlog("[Vlog] done: \(outURL.lastPathComponent)")
         return outURL
     }
 
@@ -62,7 +62,9 @@ class VlogService {
             let date: Date
             let startTime: CMTime
             let duration: CMTime
-            let size: CGSize
+            let size: CGSize            // 회전 반영된 표시 크기 (렌더 크기 결정용)
+            let naturalSize: CGSize     // 원본 버퍼 크기 (회전 전)
+            let transform: CGAffineTransform  // 클립의 회전 메타 (세로/가로 판별)
         }
         var segInfos: [SegInfo] = []
 
@@ -79,7 +81,7 @@ class VlogService {
 
             let videoTracks = try await seg.asset.loadTracks(withMediaType: .video)
             guard let vTrack = videoTracks.first else {
-                print("[Vlog] skip \(seg.placeName) — no video track")
+                dlog("[Vlog] skip \(seg.placeName) — no video track")
                 continue
             }
 
@@ -102,7 +104,9 @@ class VlogService {
                 date: seg.date,
                 startTime: cursor,
                 duration: duration,
-                size: displaySize
+                size: displaySize,
+                naturalSize: naturalSize,
+                transform: transform
             ))
             cursor = CMTimeAdd(cursor, duration)
 
@@ -138,6 +142,17 @@ class VlogService {
             instruction.timeRange = CMTimeRange(start: clipStart, duration: clipDuration)
 
             let layerInstr = AVMutableVideoCompositionLayerInstruction(assetTrack: compVideoTrack)
+
+            // 클립의 회전 메타(세로/가로)를 렌더 프레임에 맞춰 적용한다.
+            // 이게 없으면 세로 촬영본이 90° 누운 채로 합성된다(로컬 폴백 세로영상 회전 버그).
+            // 합성 트랙(compVideoTrack)은 preferredTransform이 항등이라, 원본 클립의
+            // 회전 메타를 여기서 직접 걸어줘야 세로·가로 모두 바로 선다.
+            let renderTransform = Self.renderTransform(
+                preferredTransform: info.transform,
+                naturalSize: info.naturalSize,
+                renderSize: outputSize
+            )
+            layerInstr.setTransform(renderTransform, at: clipStart)
 
             // 페이드 인: 클립 시작 ~ 시작+fadeDuration
             let fadeInEnd = CMTimeAdd(clipStart, fadeDuration)
@@ -212,7 +227,7 @@ class VlogService {
         await MainActor.run { onProgress(0.65) }
         await exp.export()
 
-        print("[Vlog] export status=\(exp.status.rawValue) error=\(exp.error?.localizedDescription ?? "none")")
+        dlog("[Vlog] export status=\(exp.status.rawValue) error=\(exp.error?.localizedDescription ?? "none")")
         guard exp.status == .completed else { throw exp.error ?? VlogError.writeFailed }
         return outURL
     }
@@ -263,6 +278,7 @@ class VlogService {
     private static func localizedDateString(_ date: Date) -> String {
         // Vlog 오버레이 날짜 — 선택 언어 로케일의 롱 포맷(예: 2026년 7월 7일 / July 7, 2026)
         let f = DateFormatter()
+        f.calendar = Calendar(identifier: .gregorian)   // 비그레고리력 연도 방지
         f.locale = LanguageManager.shared.locale
         f.dateStyle = .long
         f.timeStyle = .none
@@ -336,9 +352,42 @@ class VlogService {
         return container
     }
 
+    // MARK: - 회전 보정 트랜스폼
+    /// 클립의 회전 메타(preferredTransform)를 렌더 프레임(renderSize)에 맞게 변환한다.
+    /// 카메라는 1920×1080 landscape 버퍼에 순수 회전 메타만 기록하므로(변위 없음),
+    /// 회전 후 콘텐츠가 음수 좌표로 갈 수 있다 → 바운딩 박스를 원점으로 되돌린 뒤
+    /// aspect-fit 스케일 + 중앙 정렬을 적용해 세로·가로 모두 바로 서고 프레임에 꽉 차게 한다.
+    private static func renderTransform(preferredTransform: CGAffineTransform,
+                                        naturalSize: CGSize,
+                                        renderSize: CGSize) -> CGAffineTransform {
+        // 회전 적용 후의 실제 바운딩 박스 (음수 origin 가능)
+        let box = CGRect(origin: .zero, size: naturalSize).applying(preferredTransform)
+        let displaySize = CGSize(width: abs(box.width), height: abs(box.height))
+        guard displaySize.width > 0, displaySize.height > 0,
+              renderSize.width > 0, renderSize.height > 0 else { return preferredTransform }
+
+        // 1) 회전된 콘텐츠를 원점(0,0)으로 이동
+        let originShift = CGAffineTransform(translationX: -box.minX, y: -box.minY)
+        // 2) 렌더 프레임에 aspect-fit
+        let scale = min(renderSize.width / displaySize.width,
+                        renderSize.height / displaySize.height)
+        // 3) 중앙 정렬
+        let tx = (renderSize.width - displaySize.width * scale) / 2
+        let ty = (renderSize.height - displaySize.height * scale) / 2
+
+        return preferredTransform
+            .concatenating(originShift)
+            .concatenating(CGAffineTransform(scaleX: scale, y: scale))
+            .concatenating(CGAffineTransform(translationX: tx, y: ty))
+    }
+
     // MARK: - Helpers
     private static func fmt(_ date: Date) -> String {
         let f = DateFormatter()
+        // 숫자 포맷은 그레고리력·POSIX 로케일로 고정한다. 기기 달력이 불교력/일본력이면
+        // "2569.07.11"처럼 엉뚱한 연도가 자막에 박힌다.
+        f.calendar = Calendar(identifier: .gregorian)
+        f.locale = Locale(identifier: "en_US_POSIX")
         f.dateFormat = "yyyy.MM.dd  HH:mm"
         return f.string(from: date)
     }

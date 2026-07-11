@@ -40,7 +40,8 @@ class ImpromptuSessionStore: ObservableObject {
 
     func loadTodaySession() -> SavedImpromptuSession? {
         guard let session = load() else { return nil }
-        return Calendar.current.isDateInToday(session.date) ? session : nil
+        // 자정을 넘겨도 밤샘 나들이를 잃지 않도록, 마지막 활동으로부터 18시간 이내면 이어한다.
+        return Date().timeIntervalSince(session.date) < 18 * 3600 ? session : nil
     }
 
     func clear() {
@@ -65,8 +66,8 @@ class ImpromptuSessionStore: ObservableObject {
         guard fireDate > now else { return }
 
         let content = UNMutableNotificationContent()
-        content.title = "오늘 기록, Vlog로 남겨볼까요? 🎬"
-        content.body = "오늘 방문한 \(placesCount)곳으로 추억 영상을 만들어보세요"
+        content.title = L("impromptu.reminder.title")
+        content.body = L("impromptu.reminder.body", placesCount)
         content.sound = .default
         content.userInfo = ["action": "openTodaySession"]
 

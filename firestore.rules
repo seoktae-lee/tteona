@@ -75,8 +75,16 @@ service cloud.firestore {
         request.resource.data.creatorId == request.auth.uid &&
         request.resource.data.memberIds.hasAll([request.auth.uid]);
 
-      // 방 수정: 방 멤버만 (초대 참여는 서버 Admin SDK가 처리)
-      allow update: if isSignedIn() && resource.data.memberIds.hasAny([request.auth.uid]);
+      // 방 수정: 방 멤버만. 단, 클라이언트가 방 구조를 임의로 조작하지 못하게 잠근다 —
+      //   · creatorId / inviteCode / roomId 변경 금지 (방 탈취 방지)
+      //   · memberIds는 기존 집합의 부분집합만 허용 (임의 추가 차단; 나가기 폴백의 자기 제거는 허용)
+      //   초대 참여 등 멤버 추가는 서버 Admin SDK(규칙 우회)가 처리한다.
+      allow update: if isSignedIn()
+        && resource.data.memberIds.hasAny([request.auth.uid])
+        && request.resource.data.creatorId == resource.data.creatorId
+        && request.resource.data.inviteCode == resource.data.inviteCode
+        && request.resource.data.roomId == resource.data.roomId
+        && request.resource.data.memberIds.hasOnly(resource.data.memberIds);
 
       // 방 삭제: creatorId 기준으로 방장만 허용 (마지막 멤버 정리는 서버가 처리)
       allow delete: if isSignedIn() && resource.data.creatorId == request.auth.uid;
@@ -99,10 +107,20 @@ service cloud.firestore {
         allow read: if isSignedIn() && isRoomMember(roomId);
         allow create: if isSignedIn() && isRoomMember(roomId) && request.resource.data.userId == request.auth.uid;
         // 작성자: 모든 필드 수정/삭제 가능
-        // 방 멤버: commentCount 필드만 수정 가능 (댓글 작성 시)
+        // 방 멤버: commentCount 필드만, 정확히 ±1 범위에서만 수정 가능 (댓글 작성/삭제 시)
+        //   → 임의 값 주입 차단 (likeCount 규칙과 동일한 방식)
         allow update: if isSignedIn() && (
           resource.data.userId == request.auth.uid ||
-          (isRoomMember(roomId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['commentCount']))
+          (
+            isRoomMember(roomId) &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['commentCount']) &&
+            request.resource.data.commentCount is int &&
+            request.resource.data.commentCount >= 0 &&
+            (
+              request.resource.data.commentCount == resource.data.commentCount + 1 ||
+              request.resource.data.commentCount == resource.data.commentCount - 1
+            )
+          )
         );
         allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
 
@@ -143,6 +161,17 @@ service cloud.firestore {
     match /reports/{reportId} {
       allow create: if isSignedIn() && request.resource.data.reporterId == request.auth.uid;
       allow read, update, delete: if false;
+    }
+
+    // nicknames 컬렉션 (닉네임 유니크 예약) — 문서ID = 닉네임.
+    //   create만 허용하고 update는 막아, 이미 존재하는 닉네임에 대한 setData가 거부되게 한다
+    //   → 동시 가입 시에도 닉네임 선점이 원자적으로 처리된다(중복 방지).
+    //   삭제는 본인 예약만(닉네임 변경 시 옛 예약 반납).
+    match /nicknames/{nickname} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.uid == request.auth.uid;
+      allow update: if false;
     }
 
   }

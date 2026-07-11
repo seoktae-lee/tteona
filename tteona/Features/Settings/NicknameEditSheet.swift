@@ -158,11 +158,20 @@ struct NicknameEditSheet: View {
         guard let uid = authService.currentUser?.uid, state == .available else { return }
         isSaving = true
         defer { isSaving = false }
+        let oldNickname = currentNickname
+        // 새 닉네임 원자적 예약 — 실패하면 그 사이 남이 선점한 것
+        guard await userService.reserveNickname(trimmed, uid: uid) else {
+            state = .taken
+            return
+        }
         do {
             try await userService.updateNickname(uid: uid, nickname: trimmed)
+            // 옛 닉네임 예약 반납 (있으면)
+            if !oldNickname.isEmpty { await userService.releaseNickname(oldNickname, uid: uid) }
             Haptics.success()
             dismiss()
         } catch {
+            await userService.releaseNickname(trimmed, uid: uid)   // 실패 시 새 예약 반납
             saveFailed = true
         }
     }

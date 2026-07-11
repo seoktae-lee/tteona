@@ -23,8 +23,11 @@ struct AppUser: Codable, Equatable {
         self.preferredTag = preferredTag
     }
 
+    // email은 공개 users 문서에 저장/조회하지 않는다 (PII 유출 방지) —
+    // 내 이메일은 Firebase Auth(currentUser)에서 직접 읽고, 타인 이메일은 취급하지 않는다.
+    // 따라서 CodingKeys에서 제외해 Firestore 인코딩/디코딩 대상에서 뺀다.
     enum CodingKeys: String, CodingKey {
-        case uid, email, nickname, createdAt, isVerified, creatorLabel, blockedUserIds, profileImageUrl, preferredTag
+        case uid, nickname, createdAt, isVerified, creatorLabel, blockedUserIds, profileImageUrl, preferredTag
     }
 
     // 누락 필드(예: 오래된 계정의 isVerified)가 있어도 디코딩이 실패하지 않도록 관대하게 처리.
@@ -32,7 +35,7 @@ struct AppUser: Codable, Equatable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         uid            = (try? c.decode(String.self, forKey: .uid)) ?? ""
-        email          = (try? c.decode(String.self, forKey: .email)) ?? ""
+        email          = ""   // Firestore에서 읽지 않음 (Auth가 소유)
         nickname       = (try? c.decode(String.self, forKey: .nickname)) ?? ""
         createdAt      = (try? c.decode(Date.self, forKey: .createdAt)) ?? Date()
         isVerified     = (try? c.decode(Bool.self, forKey: .isVerified)) ?? false
@@ -40,5 +43,20 @@ struct AppUser: Codable, Equatable {
         blockedUserIds = try? c.decode([String].self, forKey: .blockedUserIds)
         profileImageUrl = try? c.decode(String.self, forKey: .profileImageUrl)
         preferredTag   = try? c.decode(String.self, forKey: .preferredTag)
+    }
+
+    // 클라이언트는 admin/Auth 소유 필드를 절대 쓰지 않는다:
+    //   · isVerified / creatorLabel — Firebase 콘솔(관리자)만 설정 (Firestore 규칙도 이 둘의 변경을 차단)
+    //   · email — Auth가 소유 (공개 users 문서에 PII 미저장)
+    // 이걸 빼지 않으면 saveUser(merge)가 isVerified=false를 써서 인증 크리에이터를 강등하고
+    // 규칙에도 막힌다. blockedUserIds 등 nil 옵셔널도 merge를 덮어쓰지 않도록 encodeIfPresent.
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(uid, forKey: .uid)
+        try c.encode(nickname, forKey: .nickname)
+        try c.encode(createdAt, forKey: .createdAt)
+        try c.encodeIfPresent(blockedUserIds, forKey: .blockedUserIds)
+        try c.encodeIfPresent(profileImageUrl, forKey: .profileImageUrl)
+        try c.encodeIfPresent(preferredTag, forKey: .preferredTag)
     }
 }

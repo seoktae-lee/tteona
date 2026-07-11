@@ -176,6 +176,8 @@ struct MainView: View {
             RegionSearchView { name, coord in
                 searchedRegionName = name
                 cameraCommand = gmsCamera(center: coord, latDelta: 0.05)
+                // 선택한 지역의 코스도 별도로 불러와 병합
+                Task { await courseService.fetchCoursesInRegion(name, blockedUserIds: userService.currentUser?.blockedUserIds ?? []) }
             }
         }
         .sheet(isPresented: $showCourseResumeSheet, onDismiss: {
@@ -510,11 +512,18 @@ struct MainView: View {
                     .background(RoundedRectangle(cornerRadius: 16).fill(Color.tteOrange))
                 }
 
-                // 새로 시작하기 — 세션 삭제 후 홈으로
+                // 새로 시작하기 — 기존 세션 삭제 후, 방금 탭한 코스가 있으면 그 프리뷰로 이어간다.
+                // (예전엔 pendingNewCourse를 그냥 버려서 핀을 탭하고 새로시작하면 아무 일도 안 났다.)
                 Button {
                     showCourseResumeSheet = false
-                    pendingNewCourse = nil
                     ActiveSessionStore.shared.clear()
+                    let tapped = pendingNewCourse
+                    pendingNewCourse = nil
+                    if let tapped {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                            previewCourse = tapped
+                        }
+                    }
                 } label: {
                     HStack(spacing: 10) {
                         Image(systemName: "arrow.counterclockwise").font(.tte(15))
@@ -751,6 +760,9 @@ extension MainView {
         guard !q.isEmpty else { return }
 
         // 카카오 우선(한국 지명 정확) → 없으면 MapKit 폴백 (PlaceSearchService 내부 처리)
+        // 검색한 지역의 코스를 별도로 불러와 병합 — 인기 상위 300에 못 든 지역 코스 보완
+        await courseService.fetchCoursesInRegion(q, blockedUserIds: userService.currentUser?.blockedUserIds ?? [])
+
         let svc = PlaceSearchService()
         await svc.search(q)
         if let first = svc.results.first {

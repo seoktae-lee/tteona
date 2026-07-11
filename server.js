@@ -1998,6 +1998,44 @@ app.post('/api/rooms/:roomId/leave', requireAuth, async (req, res) => {
   }
 });
 
+// ─── 안읽음 방 계산 (서버 집계) ───────────────────────────────────────────────
+// 클라이언트가 방×멤버 수만큼 Firestore를 팬아웃하던 것을 서버 1회 호출로 대체한다.
+// 각 방의 최신 피드 시각과 내 lastReadAt을 비교해 안읽음 방 roomId 집합을 돌려준다.
+app.get('/api/rooms/unread', requireAuth, async (req, res) => {
+  const uid = req.uid;
+  if (!uid) return res.status(401).json({ error: 'auth required' });
+  try {
+    const roomsSnap = await db.collection('rooms')
+      .where('memberIds', 'array-contains', uid).get();
+
+    const unread = [];
+    await Promise.all(roomsSnap.docs.map(async (roomDoc) => {
+      try {
+        // 방 전체에서 가장 최신 피드 1개 (createdAt desc)
+        const latestSnap = await roomDoc.ref.collection('feed')
+          .orderBy('createdAt', 'desc').limit(1).get();
+        if (latestSnap.empty) return;
+        const latest = latestSnap.docs[0].data().createdAt; // Firestore Timestamp
+        if (!latest || typeof latest.toMillis !== 'function') return;
+
+        const memberDoc = await roomDoc.ref.collection('members').doc(uid).get();
+        const lastReadAt = memberDoc.data()?.lastReadAt;
+
+        if (!lastReadAt || typeof lastReadAt.toMillis !== 'function') {
+          unread.push(roomDoc.id); // 읽은 기록이 없는데 피드가 있으면 안읽음
+        } else if (latest.toMillis() > lastReadAt.toMillis()) {
+          unread.push(roomDoc.id);
+        }
+      } catch { /* 개별 방 실패는 무시하고 나머지 계속 */ }
+    }));
+
+    res.json({ unreadRoomIds: unread });
+  } catch (err) {
+    console.error('[Rooms] unread error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // ─── 회원탈퇴: WAS 측 개인정보 삭제 ───────────────────────────────────────────
 // iOS deleteAccount가 Cloud Function(deleteMyAccount) 호출 전에 부른다.
 // (Auth 계정이 지워지기 전, 토큰이 유효할 때 실행되어야 함)
@@ -2747,6 +2785,15 @@ app.get('/api/admin/users', adminAuth, async (req, res) => {
     let query = db.collection('users').orderBy('createdAt', 'desc').limit(30);
     const snap = await query.get();
     let users = snap.docs.map(d => ({ uid: d.id, ...d.data(), createdAt: d.data().createdAt?.toDate() }));
+
+    // email은 공개 users 문서에서 제거됐으므로(PII), 표시·검색용으로 Auth에서 보강한다.
+    if (users.length > 0) {
+      const authRes = await getAuth().getUsers(users.map(u => ({ uid: u.uid }))).catch(() => ({ users: [] }));
+      const emailByUid = {};
+      (authRes.users || []).forEach(u => { emailByUid[u.uid] = u.email || ''; });
+      users.forEach(u => { u.email = emailByUid[u.uid] || u.email || ''; });
+    }
+
     if (search) {
       const q = search.toLowerCase();
       users = users.filter(u =>
@@ -2756,6 +2803,34 @@ app.get('/api/admin/users', adminAuth, async (req, res) => {
     }
     res.json(users);
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── [일회성] 기존 users 문서의 email 필드 일괄 삭제 (PII 정리) ─────────────────
+// 앱은 더 이상 email을 users에 쓰지 않지만, 과거 문서엔 남아 있어 아무 로그인 유저나
+// 읽을 수 있었다. 관리자 인증으로 한 번 실행해 전량 정리한다.
+app.post('/api/admin/migrate/purge-emails', adminAuth, async (req, res) => {
+  try {
+    let purged = 0, scanned = 0, last = null;
+    for (;;) {
+      let q = db.collection('users').orderBy('__name__').limit(300);
+      if (last) q = q.startAfter(last);
+      const snap = await q.get();
+      if (snap.empty) break;
+      const batch = db.batch();
+      let n = 0;
+      for (const doc of snap.docs) {
+        scanned++;
+        if (doc.data().email !== undefined) { batch.update(doc.ref, { email: FieldValue.delete() }); n++; }
+      }
+      if (n > 0) { await batch.commit(); purged += n; }
+      last = snap.docs[snap.docs.length - 1];
+      if (snap.size < 300) break;
+    }
+    res.json({ ok: true, scanned, purged });
+  } catch (err) {
+    console.error('[Migrate purge-emails] error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -2889,6 +2964,15 @@ const wss = new WebSocket.Server({ server: httpServer, path: '/ws/location' });
 // roomId → Set<WebSocket>
 const wsRooms = new Map();
 
+// 채팅 재전송 중복 제거: clientMsgId → { messageId, ts }.
+// 폰이 서버 에코를 놓쳐 12초 뒤 재전송하면 같은 clientMsgId가 다시 온다. 그때 DB에 또
+// 넣지 않고 발신자에게 확정 에코만 다시 보내, 방에 같은 메시지가 두 번 저장되는 것을 막는다.
+const recentChatMsgIds = new Map();
+setInterval(() => {
+  const cutoff = Date.now() - 120000; // 2분(클라 타임아웃 12s + 재연결 여유)보다 넉넉히
+  for (const [k, v] of recentChatMsgIds) if (v.ts < cutoff) recentChatMsgIds.delete(k);
+}, 60000).unref?.();
+
 wss.on('connection', (ws) => {
   ws.isAlive = true;
   ws.on('pong', () => { ws.isAlive = true; });
@@ -2958,6 +3042,24 @@ wss.on('connection', (ws) => {
       if (!text) return;
       const clientMsgId = msg.clientMsgId || null;  // 발신자 중복 제거용
 
+      // 재전송 중복: 같은 clientMsgId가 최근에 처리됐으면 DB에 다시 넣지 않고
+      // 발신자에게 확정 에코만 다시 보낸다(놓친 에코 복구, 방 중복 저장 방지).
+      if (clientMsgId) {
+        const seen = recentChatMsgIds.get(clientMsgId);
+        if (seen) {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+              type: 'chat', messageId: seen.messageId, roomId: ws.roomId,
+              userId: ws.userId, nickname: ws.nickname, text,
+              replyToNickname: msg.replyToNickname ? String(msg.replyToNickname).slice(0, 200) : null,
+              replyToText: msg.replyToText ? String(msg.replyToText).slice(0, 200) : null,
+              clientMsgId, ts: seen.ts,
+            }));
+          }
+          return;
+        }
+      }
+
       // 금칙어 검사 — 댓글/코스명과 동일 기준. 차단 시 발신자에게만 알리고 전파하지 않음
       if (findBannedWord(text)) {
         if (ws.readyState === WebSocket.OPEN) {
@@ -2966,6 +3068,7 @@ wss.on('connection', (ws) => {
         return;
       }
       const messageId = randomUUID();  // 반응·답장 기준이 되는 안정적 고유 ID
+      if (clientMsgId) recentChatMsgIds.set(clientMsgId, { messageId, ts: Date.now() });
       // 답장(인용) 정보 — 상대 메시지 꾹 눌러 답장 시
       const replyToNickname = msg.replyToNickname ? String(msg.replyToNickname).slice(0, 60) : null;
       const replyToText     = msg.replyToText ? String(msg.replyToText).slice(0, 200) : null;

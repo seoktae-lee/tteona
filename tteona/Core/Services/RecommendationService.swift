@@ -28,7 +28,7 @@ actor RecommendationService {
             let (data, _) = try await APIAuth.get(url)
             return try JSONDecoder().decode(RecommendResponse.self, from: data).courseIds
         } catch {
-            print("[RecommendationService] error:", error)
+            dlog("[RecommendationService] error:", error)
             return []
         }
     }

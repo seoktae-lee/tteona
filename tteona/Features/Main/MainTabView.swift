@@ -173,7 +173,6 @@ struct MainTabView: View {
             // 로그인/로그아웃 전환 시 실시간 리스너가 남지 않도록 정리
             guard let uid else {
                 roomService.stopListeningMyRooms()
-                roomService.stopListeningLocations()
                 roomService.stopListeningFeed()
                 roomService.stopListeningMemberFeed()
                 return

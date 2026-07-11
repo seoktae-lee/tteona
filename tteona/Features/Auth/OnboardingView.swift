@@ -22,6 +22,8 @@ struct OnboardingView: View {
     @State private var cameraGranted = false
     @State private var photoLibraryGranted = false
     @State private var selectedStyle: CourseTag? = nil
+    @State private var isSaving = false
+    @State private var showSaveError = false
 
     private let totalSteps = 6
 
@@ -62,6 +64,12 @@ struct OnboardingView: View {
                 ))
                 .animation(.easeInOut(duration: 0.3), value: step)
             }
+        }
+        .alert(L("onboarding.saveError.title"), isPresented: $showSaveError) {
+            Button(L("common.retry")) { Task { await finishOnboarding() } }
+            Button(L("common.cancel"), role: .cancel) {}
+        } message: {
+            Text(L("onboarding.saveError.message"))
         }
     }
 
@@ -387,7 +395,7 @@ struct OnboardingView: View {
             nextButton(title: L("onboarding.letsGo")) {
                 Task { await finishOnboarding() }
             }
-            .disabled(!allAgreed)
+            .disabled(!allAgreed || isSaving)
             .opacity(allAgreed ? 1 : 0.4)
             .scaleEffect(allAgreed ? 1 : 0.95)
             .animation(.spring(response: 0.4, dampingFraction: 0.6), value: allAgreed)
@@ -441,15 +449,35 @@ struct OnboardingView: View {
 
     private func finishOnboarding() async {
         guard let uid = authService.currentUser?.uid else { return }
+        guard !isSaving else { return }
+        isSaving = true
+        defer { isSaving = false }
+        let trimmed = nickname.trimmingCharacters(in: .whitespaces)
+
+        // 닉네임 원자적 예약 — 두 사람이 동시에 같은 닉네임으로 가입하는 레이스를 막는다.
+        // 실패하면(그 사이 남이 선점) 닉네임 단계로 되돌려 다시 고르게 한다.
+        let reserved = await userService.reserveNickname(trimmed, uid: uid)
+        guard reserved else {
+            nicknameState = .taken
+            withAnimation { step = 2 }
+            return
+        }
+
         let user = AppUser(
             uid: uid,
             email: authService.currentUser?.email ?? "",
-            nickname: nickname.trimmingCharacters(in: .whitespaces),
+            nickname: trimmed,
             preferredTag: selectedStyle?.rawValue
         )
-        try? await userService.saveUser(user)
-        // Firestore users 문서가 있으면 기존 유저로 간주되어 RootView가 메인으로 전환
-        authService.onboardingComplete = true
+        do {
+            try await userService.saveUser(user)
+            // 저장 성공 시에만 완료 처리 — 저장이 실패했는데 완료로 넘기면 닉네임 없는
+            // 반쪽 계정으로 메인에 진입하고, 다음 실행 때 온보딩이 다시 뜬다.
+            authService.onboardingComplete = true
+        } catch {
+            await userService.releaseNickname(trimmed, uid: uid)   // 저장 실패 시 예약 반납
+            showSaveError = true
+        }
     }
 
     // MARK: - Permission Requests

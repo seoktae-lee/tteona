@@ -25,6 +25,11 @@ struct CourseDetailView: View {
     @State private var showReportSuccessAlert = false
     @State private var showBlockSuccessAlert = false
     @State private var actionErrorMessage: String?
+    // 코스 이름/태그 편집 (작성자)
+    @State private var showEditSheet = false
+    @State private var editName = ""
+    @State private var editTag: CourseTag = .friends
+    @State private var localName: String?   // 편집 후 로컬 반영
 
     private let sessionStore = ActiveSessionStore.shared
 
@@ -44,7 +49,7 @@ struct CourseDetailView: View {
                     .padding(.bottom, 36)
                     .background(Color.tteBackground)
             }
-            .navigationTitle(translatedTitle ?? course.courseName)
+            .navigationTitle(localName ?? translatedTitle ?? course.courseName)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -64,6 +69,13 @@ struct CourseDetailView: View {
                         likeButton
                         if course.authorId == authService.currentUser?.uid {
                             Menu {
+                                Button {
+                                    editName = localName ?? course.courseName
+                                    editTag = course.tag
+                                    showEditSheet = true
+                                } label: {
+                                    Label(L("coursedetail.edit"), systemImage: "pencil")
+                                }
                                 Button(role: .destructive) {
                                     Task {
                                         try? await courseService.deleteCourse(course)
@@ -113,6 +125,19 @@ struct CourseDetailView: View {
                 onStartSession?(selectedRoomIds)
             }
             .environmentObject(roomService)
+        }
+        .sheet(isPresented: $showEditSheet) {
+            CourseEditSheet(name: $editName, tag: $editTag) {
+                let newName = editName.trimmingCharacters(in: .whitespaces)
+                guard !newName.isEmpty else { return }
+                showEditSheet = false
+                Task {
+                    try? await courseService.updateCourseInfo(courseId: course.courseId, name: newName, tag: editTag)
+                    localName = newName
+                    // 새 이름 다시 번역
+                    translatedTitle = await TranslationService.shared.translate(newName, to: LanguageManager.shared.language)
+                }
+            }
         }
         .confirmationDialog(L("detail.otherCourse.title"), isPresented: $showOtherCourseAlert, titleVisibility: .visible) {
             Button(L("detail.otherCourse.resume")) {
@@ -620,6 +645,84 @@ struct PlaceRow: View {
                 .aspectRatio(contentMode: .fit)
                 .padding(4)
         }
+    }
+}
+
+// MARK: - 코스 이름/태그 편집 시트 (작성자)
+struct CourseEditSheet: View {
+    @Binding var name: String
+    @Binding var tag: CourseTag
+    let onSave: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var checking = false
+    @State private var blocked = false
+
+    private var valid: Bool {
+        let t = name.trimmingCharacters(in: .whitespaces)
+        return t.count >= 1 && t.count <= 20
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 20) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(L("impromptu.courseName"))
+                        .font(.tte(14, .medium)).foregroundColor(.tteMediumGray)
+                    TteTextField(placeholder: L("impromptu.courseName.placeholder"), text: $name)
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(L("impromptu.tag"))
+                        .font(.tte(14, .medium)).foregroundColor(.tteMediumGray)
+                    HStack(spacing: 10) {
+                        ForEach(CourseTag.allCases, id: \.self) { t in
+                            Button { tag = t } label: {
+                                Text(t.displayName)
+                                    .font(.tte(14, .medium))
+                                    .foregroundColor(tag == t ? .white : .tteDarkGray)
+                                    .padding(.horizontal, 14).padding(.vertical, 8)
+                                    .background(Capsule().fill(tag == t ? Color.tteOrange : Color(UIColor.secondarySystemBackground)))
+                            }
+                        }
+                    }
+                }
+                if blocked {
+                    Text(L("onboarding.nickname.inappropriate"))
+                        .font(.tte(12)).foregroundColor(.red)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                Spacer()
+                Button {
+                    Task { await validateAndSave() }
+                } label: {
+                    ZStack {
+                        if checking { ProgressView().tint(.white) }
+                        else { Text(L("common.save")).font(.tte(17, .semibold)) }
+                    }
+                    .foregroundColor(.white).frame(maxWidth: .infinity).frame(height: 54)
+                    .background(RoundedRectangle(cornerRadius: 14).fill(valid ? Color.tteOrange : Color.gray.opacity(0.4)))
+                }
+                .disabled(!valid || checking)
+                .padding(.bottom, 24)
+            }
+            .padding(.horizontal, 20).padding(.top, 16)
+            .navigationTitle(L("coursedetail.edit"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(L("common.cancel")) { dismiss() }.foregroundColor(.tteMediumGray)
+                }
+            }
+        }
+        .presentationDetents([.height(360)])
+    }
+
+    private func validateAndSave() async {
+        checking = true; blocked = false
+        defer { checking = false }
+        let t = name.trimmingCharacters(in: .whitespaces)
+        // 코스명도 UGC라 부적절 표현 검사 (서버 실패 시 통과)
+        guard await StatsService.shared.isTextAllowed(t) else { blocked = true; return }
+        onSave()
     }
 }
 

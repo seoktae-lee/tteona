@@ -33,7 +33,7 @@ actor ProfileImageService {
             let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
             return json?["url"] as? String
         } catch {
-            print("[ProfileImageService] upload error:", error)
+            dlog("[ProfileImageService] upload error:", error)
             return nil
         }
     }

@@ -80,7 +80,7 @@ final class FootprintService: ObservableObject {
     /// 코스의 장소들을 지역으로 판정해 발자취를 적재한다. 실패해도 앱 흐름을 막지 않는다(fire-and-forget).
     func record(course: Course, sessionId: String, userId: String) async {
         guard let agg = await aggregate(course: course) else {
-            print("[Footprint] no region resolved — skip")
+            dlog("[Footprint] no region resolved — skip")
             return
         }
 
@@ -119,9 +119,9 @@ final class FootprintService: ObservableObject {
                 // 대표 신규 지역 = 체류순 정렬(시군구 우선)에서 처음으로 등장하는 새 지역
                 lastPrimaryNewCode = (agg.sigCodes + agg.provinceCodes).first { newCodes.contains($0) }
             }
-            print("[Footprint] recorded sig=\(agg.sigCodes) prov=\(agg.provinceCodes) country=\(agg.countryCodes)")
+            dlog("[Footprint] recorded sig=\(agg.sigCodes) prov=\(agg.provinceCodes) country=\(agg.countryCodes)")
         } catch {
-            print("[Footprint] record failed:", error.localizedDescription)
+            dlog("[Footprint] record failed:", error.localizedDescription)
         }
     }
 
@@ -169,7 +169,7 @@ final class FootprintService: ObservableObject {
                 wroteAny = true
             } catch {
                 allSucceeded = false
-                print("[Footprint] backfill doc failed:", error.localizedDescription)
+                dlog("[Footprint] backfill doc failed:", error.localizedDescription)
             }
         }
 
@@ -189,7 +189,7 @@ final class FootprintService: ObservableObject {
             mySummary.provinceCodes.formUnion(allProv)
             mySummary.countryCodes.formUnion(allCountry)
         }
-        print("[Footprint] backfilled courses=\(courses.count) wrote=\(wroteAny) complete=\(allSucceeded)")
+        dlog("[Footprint] backfilled courses=\(courses.count) wrote=\(wroteAny) complete=\(allSucceeded)")
     }
 
     // MARK: 조회

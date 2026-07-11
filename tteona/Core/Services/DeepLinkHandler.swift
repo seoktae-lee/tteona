@@ -43,6 +43,10 @@ class DeepLinkHandler: ObservableObject {
         if path == "/course" || path.hasPrefix("/course/") {
             if let courseId = components.queryItems?.first(where: { $0.name == "id" })?.value {
                 pendingCourseId = courseId
+            } else if path.hasPrefix("/course/") {
+                // 경로형 /course/{UUID} (서버 OG canonical) — 쿼리 id가 없으므로 경로에서 추출
+                let id = String(path.dropFirst("/course/".count))
+                if !id.isEmpty { pendingCourseId = id }
             }
         } else if path == "/room" {
             if let code = components.queryItems?.first(where: { $0.name == "code" })?.value {

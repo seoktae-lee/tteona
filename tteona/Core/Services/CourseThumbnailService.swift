@@ -33,7 +33,7 @@ actor CourseThumbnailService {
             let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
             return json?["url"] as? String
         } catch {
-            print("[CourseThumbnailService] upload error:", error)
+            dlog("[CourseThumbnailService] upload error:", error)
             return nil
         }
     }
@@ -46,7 +46,7 @@ actor CourseThumbnailService {
             let (data, _) = try await APIAuth.get(url)
             return (try? JSONDecoder().decode([String: String].self, from: data)) ?? [:]
         } catch {
-            print("[CourseThumbnailService] fetch error:", error)
+            dlog("[CourseThumbnailService] fetch error:", error)
             return [:]
         }
     }

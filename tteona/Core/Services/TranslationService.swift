@@ -88,7 +88,7 @@ actor TranslationService {
             guard decoded.translated, decoded.translations.count == texts.count else { return nil }
             return Dictionary(uniqueKeysWithValues: zip(texts, decoded.translations))
         } catch {
-            print("[TranslationService] translate error:", error)
+            dlog("[TranslationService] translate error:", error)
             return nil
         }
     }

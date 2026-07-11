@@ -1,28 +1,19 @@
 import Foundation
 import Combine
 import FirebaseFirestore
-import CoreLocation
 
 @MainActor
 class RoomService: ObservableObject {
     @Published var myRooms: [Room] = []
     @Published var unreadRoomIds: Set<String> = []
     @Published var currentRoomMembers: [RoomMember] = []
-    @Published var memberLocations: [MemberLocation] = []
     @Published var feedItems: [FeedItem] = []
     @Published var isLoading = false
 
     private let db = Firestore.firestore()
     private var roomsListener: ListenerRegistration?
-    private var locationsListener: ListenerRegistration?
     private var feedListener: ListenerRegistration?
     private var memberFeedListener: ListenerRegistration?
-
-    private struct LocationUploadState {
-        var lastSentAt: Date
-        var lastSentLocation: CLLocation
-    }
-    private var locationUploadStates: [String: LocationUploadState] = [:]
 
     /// 차단한 유저의 피드·댓글을 숨기기 위한 목록 — MainTabView가 유저 로드/차단 변경 시 갱신
     var blockedUserIds: Set<String> = []
@@ -123,71 +114,9 @@ class RoomService: ObservableObject {
         currentRoomMembers = snapshot?.documents.compactMap { try? $0.data(as: RoomMember.self) } ?? []
     }
 
-    // MARK: - 동행 세션: 위치 업데이트
-    func updateMyLocation(roomId: String, userId: String, nickname: String, coordinate: CLLocationCoordinate2D) {
-        let data: [String: Any] = [
-            "userId": userId,
-            "nickname": nickname,
-            "latitude": coordinate.latitude,
-            "longitude": coordinate.longitude,
-            "updatedAt": FieldValue.serverTimestamp()
-        ]
-        db.collection("rooms").document(roomId)
-            .collection("locations").document(userId).setData(data, merge: true)
-    }
-
-    // MARK: - 동행 세션: 위치 업데이트 (throttled)
-    func updateMyLocationThrottled(roomId: String, userId: String, nickname: String, location: CLLocation) {
-        let key = "\(roomId)|\(userId)"
-        let now = Date()
-
-        // speed: m/s (음수는 invalid)
-        let speed = max(0, location.speed)
-        let policy: (minInterval: TimeInterval, minDistance: CLLocationDistance) = {
-            // 걷기/정지
-            if speed < 1.5 { return (10, 50) }
-            // 느린 이동(자전거/도심 이동)
-            if speed < 6 { return (15, 100) }
-            // 차량/빠른 이동
-            return (25, 200)
-        }()
-
-        if let state = locationUploadStates[key] {
-            let elapsed = now.timeIntervalSince(state.lastSentAt)
-            let moved = location.distance(from: state.lastSentLocation)
-
-            // 60초에 1번은 무조건 보내서 "너무 오래 멈춘 것처럼" 보이지 않게 한다.
-            if elapsed < policy.minInterval || moved < policy.minDistance {
-                if elapsed < 60 { return }
-            }
-        }
-
-        locationUploadStates[key] = LocationUploadState(lastSentAt: now, lastSentLocation: location)
-        updateMyLocation(roomId: roomId, userId: userId, nickname: nickname, coordinate: location.coordinate)
-    }
-
-    func stopSharingLocation(roomId: String, userId: String) {
-        db.collection("rooms").document(roomId)
-            .collection("locations").document(userId).delete()
-    }
-
-    // MARK: - 동행 세션: 멤버 위치 실시간 구독
-    func startListeningLocations(roomId: String, myUserId: String) {
-        locationsListener?.remove()
-        locationsListener = db.collection("rooms").document(roomId)
-            .collection("locations")
-            .addSnapshotListener { [weak self] snapshot, _ in
-                guard let self, let docs = snapshot?.documents else { return }
-                self.memberLocations = docs
-                    .compactMap { try? $0.data(as: MemberLocation.self) }
-                    .filter { $0.userId != myUserId }
-            }
-    }
-
-    func stopListeningLocations() {
-        locationsListener?.remove()
-        locationsListener = nil
-    }
+    // 참고: 실시간 위치 공유는 LocationSocketService(WebSocket)가 담당한다.
+    // 과거 Firestore 기반 위치 공유 경로(updateMyLocation/startListeningLocations 등)는
+    // 어디서도 호출되지 않아 제거했다.
 
     // MARK: - 방 나가기 및 자동 파기 (서버 경유)
     // 마지막 멤버의 방 정리는 다른 멤버가 남긴 피드/문서 삭제 권한이 클라이언트에
@@ -390,12 +319,12 @@ class RoomService: ObservableObject {
     func addCommentToLatestFeed(roomId: String, userId: String, commenterId: String, commenterNickname: String,
                                 text: String, replyToNickname: String? = nil, replyToText: String? = nil) async throws {
         let feeds = await fetchMemberFeedItems(roomId: roomId, userId: userId)
-        print("[Comment] feeds count: \(feeds.count), userId: \(userId), roomId: \(roomId)")
+        dlog("[Comment] feeds count: \(feeds.count), userId: \(userId), roomId: \(roomId)")
         guard let latest = feeds.last else {
-            print("[Comment] no feeds found")
+            dlog("[Comment] no feeds found")
             return
         }
-        print("[Comment] posting to feedId: \(latest.feedId)")
+        dlog("[Comment] posting to feedId: \(latest.feedId)")
         try await addComment(roomId: roomId, feedId: latest.feedId,
                              userId: commenterId, nickname: commenterNickname, text: text,
                              replyToNickname: replyToNickname, replyToText: replyToText)
@@ -409,8 +338,22 @@ class RoomService: ObservableObject {
             .setData(["lastReadAt": FieldValue.serverTimestamp()], merge: true)
     }
 
-    // 방별 마지막 읽음 시각과 최신 피드 시각을 비교해 안읽음 방 집합 갱신 (채팅 탭 배지·피드 목록 공용)
+    // 안읽음 방 집합 갱신 — 서버가 한 번에 집계해 돌려준다(방×멤버 팬아웃 제거).
+    // 서버 실패 시에만 기존 클라이언트 계산으로 폴백해 기능 연속성을 지킨다.
     func refreshUnreadStatus(userId: String) async {
+        if let url = URL(string: "https://tteona.kr/api/rooms/unread"),
+           let (data, resp) = try? await APIAuth.get(url),
+           (resp as? HTTPURLResponse)?.statusCode == 200,
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let ids = json["unreadRoomIds"] as? [String] {
+            self.unreadRoomIds = Set(ids)
+            return
+        }
+        await refreshUnreadStatusLocal(userId: userId)
+    }
+
+    // 폴백: 클라이언트에서 방별로 직접 계산 (서버 미배포/오류 대비)
+    private func refreshUnreadStatusLocal(userId: String) async {
         let rooms = myRooms
         var unread: Set<String> = []
         await withTaskGroup(of: (String, Bool).self) { group in

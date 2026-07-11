@@ -453,7 +453,7 @@ struct VlogGenerationView: View {
                     )
                     mainURL = result.main
                     extraURLs = result.extras.map(\.url)
-                    print("[VlogGeneration] 서버 합성 성공 (추가 포맷: \(result.extras.map(\.format)))")
+                    dlog("[VlogGeneration] 서버 합성 성공 (추가 포맷: \(result.extras.map(\.format)))")
                 } catch {
                     if Task.isCancelled || error is CancellationError { return }
 
@@ -463,7 +463,7 @@ struct VlogGenerationView: View {
                     let definitive = (error as? VlogServerService.ServerVlogError)?.isDefinitive ?? false
                     let pending = await VlogServerService.shared.hasPendingJob(sessionId: sessionId)
                     if !definitive, pending {
-                        print("[VlogGeneration] 서버 렌더링 진행 중 — 이어받기 안내: \(error.localizedDescription)")
+                        dlog("[VlogGeneration] 서버 렌더링 진행 중 — 이어받기 안내: \(error.localizedDescription)")
                         canResume = true
                         errorMessage = L("vlog.error.serverBusy")
                         phase = .error
@@ -471,7 +471,7 @@ struct VlogGenerationView: View {
                     }
 
                     // 서버가 확정 실패했거나 애초에 잡이 만들어지지 않았다 → 로컬 합성으로 결과는 보장
-                    print("[VlogGeneration] 서버 합성 실패 → 로컬 폴백: \(error.localizedDescription)")
+                    dlog("[VlogGeneration] 서버 합성 실패 → 로컬 폴백: \(error.localizedDescription)")
                     didFallback = true
                     stageText = L("vlog.creating")
                     progress = 0.05
@@ -488,7 +488,7 @@ struct VlogGenerationView: View {
                 )
             }
 
-            print("[VlogGeneration] url=\(mainURL.path) exists=\(FileManager.default.fileExists(atPath: mainURL.path))")
+            dlog("[VlogGeneration] url=\(mainURL.path) exists=\(FileManager.default.fileExists(atPath: mainURL.path))")
             // 앨범 저장 권한 확인
             let status = PHPhotoLibrary.authorizationStatus(for: .addOnly)
             let isAuthorized = status == .authorized || status == .limited

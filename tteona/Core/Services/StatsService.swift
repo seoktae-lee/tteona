@@ -39,7 +39,7 @@ actor StatsService {
             let (data, _) = try await APIAuth.get(url)
             return try JSONDecoder().decode(TravelStats.self, from: data)
         } catch {
-            print("[StatsService] fetch error:", error)
+            dlog("[StatsService] fetch error:", error)
             return nil
         }
     }
@@ -64,7 +64,7 @@ actor StatsService {
             struct Response: Decodable { let ranking: [CreatorRank] }
             return try JSONDecoder().decode(Response.self, from: data).ranking
         } catch {
-            print("[StatsService] ranking error:", error)
+            dlog("[StatsService] ranking error:", error)
             return nil
         }
     }

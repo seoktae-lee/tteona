@@ -4,6 +4,7 @@ import RevenueCat
 
 /// tteona PRO 구독 상태 관리 — RevenueCat "pro" 엔타이틀먼트 기준.
 /// 앱 시작 시 configure(), 로그인 시 logIn()으로 Firebase uid와 동기화한다.
+@MainActor
 final class ProManager: ObservableObject {
     static let shared = ProManager()
 
@@ -31,20 +32,33 @@ final class ProManager: ObservableObject {
     }
 
     private var isConfigured: Bool { Purchases.isConfigured }
+    private var streamTask: Task<Void, Never>?
 
     private init() {}
 
     func configure(userId: String?) {
         let key = Self.apiKey
         guard !key.isEmpty, key.hasPrefix("appl_") else {
-            print("[Pro] RevenueCat API 키 미설정 — 무료 모드로 동작 (Info.plist REVENUECAT_API_KEY 확인)")
+            dlog("[Pro] RevenueCat API 키 미설정 — 무료 모드로 동작 (Info.plist REVENUECAT_API_KEY 확인)")
             return
         }
         Purchases.logLevel = .warn
         Purchases.configure(withAPIKey: key, appUserID: userId)
+        observeCustomerInfo()
         Task {
             await refresh()
             await loadOfferings()
+        }
+    }
+
+    /// RevenueCat이 구독 상태 변화(구매·만료·갱신·복원)를 밀어줄 때마다 isPro를 갱신한다.
+    /// 이게 없으면 앱을 재시작하기 전까지 만료/갱신이 반영되지 않는다.
+    private func observeCustomerInfo() {
+        streamTask?.cancel()
+        streamTask = Task { [weak self] in
+            for await info in Purchases.shared.customerInfoStream {
+                self?.apply(info)   // @MainActor 클래스라 메인에서 안전하게 반영
+            }
         }
     }
 
