@@ -72,18 +72,9 @@ struct MainView: View {
             return GoogleMapMarker(
                 id: course.courseId,
                 coordinate: main.coordinate,
-                pinImageName: Self.pinImageName(for: course.tag),
+                pinImageName: course.tag.pinImageName,
                 label: course.courseName
             )
-        }
-    }
-
-    private static func pinImageName(for tag: CourseTag) -> String {
-        switch tag {
-        case .couple:  return "pin_couple"
-        case .family:  return "pin_family"
-        case .solo:    return "pin_solo"
-        case .friends: return "pin_friends"
         }
     }
 

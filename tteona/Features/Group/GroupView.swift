@@ -26,15 +26,28 @@ struct RoomCard: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            // 그라데이션 아바타 + 방 이름 첫 글자
+            // 대표 이미지 (설정 시) / 그라데이션 아바타 + 방 이름 첫 글자
             ZStack {
-                RoundedRectangle(cornerRadius: 18)
-                    .fill(LinearGradient(colors: gradient,
-                                         startPoint: .topLeading, endPoint: .bottomTrailing))
+                if let urlString = room.imageUrl, let url = URL(string: urlString) {
+                    AsyncImage(url: url) { phase in
+                        if let image = phase.image {
+                            image.resizable().scaledToFill()
+                        } else {
+                            LinearGradient(colors: gradient,
+                                           startPoint: .topLeading, endPoint: .bottomTrailing)
+                        }
+                    }
                     .frame(width: 54, height: 54)
-                Text(initial)
-                    .font(.tte(22, .bold))
-                    .foregroundColor(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 18))
+                } else {
+                    RoundedRectangle(cornerRadius: 18)
+                        .fill(LinearGradient(colors: gradient,
+                                             startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .frame(width: 54, height: 54)
+                    Text(initial)
+                        .font(.tte(22, .bold))
+                        .foregroundColor(.white)
+                }
             }
             .overlay(alignment: .topTrailing) {
                 if hasNewFeed {

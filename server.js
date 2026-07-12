@@ -321,8 +321,10 @@ app.use(express.json());
 
 const THUMB_DIR = path.join(__dirname, 'uploads', 'thumbnails');
 const AVATAR_DIR = path.join(__dirname, 'uploads', 'avatars');
+const ROOM_IMG_DIR = path.join(__dirname, 'uploads', 'rooms');
 fs.mkdirSync(THUMB_DIR, { recursive: true });
 fs.mkdirSync(AVATAR_DIR, { recursive: true });
+fs.mkdirSync(ROOM_IMG_DIR, { recursive: true });
 
 // Vlog 완성본은 본인만 다운로드 가능 — jobId가 순번이라 추측 가능하므로 소유자 검증
 // (썸네일·아바타는 공개 프로필/공유 페이지에서 쓰이므로 그대로 공개)
@@ -618,6 +620,45 @@ app.post('/api/users/:uid/avatar', requireAuth, uploadLimiter, upload.single('im
     res.json({ ok: true, url });
   } catch (err) {
     console.error('[Avatar] upload error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── 방 대표 이미지 (WAS 로컬 저장 + Firestore rooms.imageUrl) ─────────────────
+
+// 방 대표 이미지 업로드 — multipart/form-data, 필드명 "image" (방 멤버만 가능).
+// 전 멤버 공통으로 보이는 이미지라 Firestore rooms 문서에 저장하며,
+// 클라이언트의 rooms 스냅샷 리스너가 즉시 반영한다.
+app.post('/api/rooms/:roomId/image', requireAuth, uploadLimiter, upload.single('image'), async (req, res) => {
+  const { roomId } = req.params;
+  if (!req.file) return res.status(400).json({ error: 'image file required' });
+
+  try {
+    const roomRef = db.collection('rooms').doc(roomId);
+    const snap = await roomRef.get();
+    if (!snap.exists) return res.status(404).json({ error: 'room not found' });
+    const memberIds = snap.data().memberIds || [];
+    if (req.uid && !memberIds.includes(req.uid)) {
+      return res.status(403).json({ error: 'not a member of this room' });
+    }
+
+    const filename = `${roomId}.jpg`;
+    const filepath = path.join(ROOM_IMG_DIR, filename);
+
+    // 정사각형 크롭 + 최대 512px, JPEG 품질 82 (아바타와 동일 정책)
+    await sharp(req.file.buffer)
+      .rotate()
+      .resize(512, 512, { fit: 'cover', position: 'centre' })
+      .jpeg({ quality: 82 })
+      .toFile(filepath);
+
+    // 파일명이 roomId 고정이라 캐시 무효화용 버전 쿼리 추가
+    const url = `https://tteona.kr/uploads/rooms/${filename}?v=${Date.now()}`;
+    await roomRef.set({ imageUrl: url }, { merge: true });
+
+    res.json({ ok: true, url });
+  } catch (err) {
+    console.error('[RoomImage] upload error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -1549,6 +1590,24 @@ function writeTextFile(dir, name, text) {
 const VLOG_LOGO = path.join(__dirname, 'assets', 'tteona-logo.png');
 const FORMAT_SPECS = { reels: [1080, 1920], youtube: [1920, 1080], insta: [1080, 1080] };
 
+// 동시 실행 제한 map — 클립 인코딩을 여러 코어에서 병렬 처리해 합성 시간을 단축한다.
+async function mapLimit(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    for (;;) {
+      const i = next++;
+      if (i >= items.length) return;
+      results[i] = await fn(items[i], i);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, worker));
+  return results;
+}
+// 클립 인코딩 동시 개수 — 8코어 서버에서 ffmpeg들이 파이프라인 갭(spawn·필터 초기화·I/O)을
+// 서로 메우며 순차 대비 크게 빨라진다. 과도한 오버서브스크립션은 피해 3으로 고정.
+const CLIP_CONCURRENCY = 3;
+
 async function composeVlog(job) {
   const jobDir = path.join(VLOG_DIR, String(job.id));
   const clipsDir = path.join(jobDir, 'clips');
@@ -1635,8 +1694,7 @@ async function composeVlog(job) {
     // 2) 클립별 정규화 + 자막(장소명·촬영시각, 화면 중앙, 2.5초 표시 후 사라짐) + 페이드
     //    맞춤 방식: 1:1이거나 클립 방향 == 포맷 방향 → 꽉 차게 크롭 (여백 없음)
     //              반대 방향(세로 클립 → 가로 포맷 등)  → 블러 배경 패딩 (내용 보존)
-    for (let i = 0; i < clips.length; i++) {
-      const c = clips[i];
+    const clipSegs = await mapLimit(clips, CLIP_CONCURRENCY, async (c, i) => {
       const info = c.info;
       const segOut = path.join(fmtDir, `seg_${String(i + 1).padStart(3, '0')}.mp4`);
       const subTxt = writeTextFile(workDir, `sub_${i}.txt`, c.placeName || '');
@@ -1705,9 +1763,10 @@ async function composeVlog(job) {
       }
       args.push('-af', af, ...enc, segOut);
       await runFF(args, 15 * 60 * 1000);
-      segments.push(segOut);
       await tick();
-    }
+      return segOut;
+    });
+    segments.push(...clipSegs);
 
     // 3) concat — 세그먼트가 전부 동일 인코딩이라 재인코딩 없이 이어붙임
     const listFile = writeTextFile(fmtDir, 'list.txt', segments.map(s => `file '${s}'`).join('\n'));

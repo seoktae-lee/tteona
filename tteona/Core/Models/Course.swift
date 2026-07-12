@@ -90,6 +90,16 @@ enum CourseTag: String, Codable, CaseIterable {
         }
     }
 
+    /// 홈 지도에 찍히는 태그별 커스텀 핀 에셋 — 취향 선택 UI도 같은 핀으로 보여준다
+    var pinImageName: String {
+        switch self {
+        case .couple:  return "pin_couple"
+        case .friends: return "pin_friends"
+        case .family:  return "pin_family"
+        case .solo:    return "pin_solo"
+        }
+    }
+
     // rawValue는 Firestore 저장값(한글)이므로 화면 표시는 항상 displayName을 사용할 것
     var displayName: String {
         switch self {

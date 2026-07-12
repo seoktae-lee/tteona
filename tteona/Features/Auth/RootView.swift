@@ -21,7 +21,9 @@ struct RootView: View {
     private var content: some View {
         Group {
             #if DEBUG
-            if ProcessInfo.processInfo.arguments.contains("-previewOnboarding") {
+            if ProcessInfo.processInfo.arguments.contains("-previewPaywall") {
+                ProPaywallView()
+            } else if ProcessInfo.processInfo.arguments.contains("-previewOnboarding") {
                 OnboardingView()
             } else if ProcessInfo.processInfo.arguments.contains("-previewNavGuide")
                         || ProcessInfo.processInfo.arguments.contains("-previewProfileTab") {

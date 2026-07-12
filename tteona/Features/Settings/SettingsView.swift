@@ -88,17 +88,21 @@ struct SettingsView: View {
         }
     }
 
-    // 여행 취향 — 온보딩에서 건너뛴 유저·기존 유저도 여기서 설정, 탐색 추천에 즉시 반영
+    // 여행 취향 — 온보딩에서 건너뛴 유저·기존 유저도 여기서 설정, 탐색 추천에 즉시 반영.
+    // 아이콘은 홈 지도에 찍히는 태그별 커스텀 핀과 동일 (이모지 대신 핀으로 통일)
     private var travelStyleRow: some View {
         Menu {
             ForEach(CourseTag.allCases, id: \.self) { tag in
-                Button {
-                    updatePreferredTag(tag)
-                } label: {
-                    if userService.currentUser?.preferredTag == tag.rawValue {
-                        Label("\(tag.emoji) \(tag.displayName)", systemImage: "checkmark")
-                    } else {
-                        Text("\(tag.emoji) \(tag.displayName)")
+                Toggle(isOn: Binding(
+                    get: { userService.currentUser?.preferredTag == tag.rawValue },
+                    set: { _ in updatePreferredTag(tag) }
+                )) {
+                    Label {
+                        Text(tag.displayName)
+                    } icon: {
+                        if let pin = Self.menuPinImage(tag) {
+                            Image(uiImage: pin)
+                        }
                     }
                 }
             }
@@ -113,7 +117,10 @@ struct SettingsView: View {
                 Label(L("settings.travelStyle"), systemImage: "heart.text.square")
                     .foregroundColor(.tteDarkGray)
                 Spacer()
-                Text(currentStyleLabel)
+                if let tag = currentStyleTag, let pin = Self.menuPinImage(tag, side: 20) {
+                    Image(uiImage: pin)
+                }
+                Text(currentStyleTag?.displayName ?? L("settings.travelStyle.none"))
                     .font(.tte(14))
                     .foregroundColor(.tteMediumGray)
                 Image(systemName: "chevron.up.chevron.down")
@@ -123,10 +130,17 @@ struct SettingsView: View {
         }
     }
 
-    private var currentStyleLabel: String {
-        guard let raw = userService.currentUser?.preferredTag,
-              let tag = CourseTag(rawValue: raw) else { return L("settings.travelStyle.none") }
-        return "\(tag.emoji) \(tag.displayName)"
+    private var currentStyleTag: CourseTag? {
+        userService.currentUser?.preferredTag.flatMap(CourseTag.init(rawValue:))
+    }
+
+    // 1024px 핀 원본을 메뉴 아이콘 크기로 축소 — UIMenu는 비트맵을 원본 크기로 그리므로 필수
+    private static func menuPinImage(_ tag: CourseTag, side: CGFloat = 28) -> UIImage? {
+        guard let image = UIImage(named: tag.pinImageName) else { return nil }
+        let size = CGSize(width: side, height: side)
+        return UIGraphicsImageRenderer(size: size).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: size))
+        }
     }
 
     private func updatePreferredTag(_ tag: CourseTag?) {

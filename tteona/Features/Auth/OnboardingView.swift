@@ -254,8 +254,11 @@ struct OnboardingView: View {
             }
         } label: {
             VStack(spacing: 10) {
-                Text(tag.emoji)
-                    .font(.system(size: 40))
+                // 홈 지도 태그 핀과 동일한 에셋 — 취향 선택과 지도 핀의 시각 연결
+                Image(tag.pinImageName)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 48, height: 48)
                 Text(tag.displayName)
                     .font(.tte(15, .semibold))
                     .foregroundColor(isOn ? .tteOrange : .tteDarkGray)

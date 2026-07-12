@@ -334,7 +334,7 @@ private struct ChatBubble: View {
         )
         .contextMenu {
             ForEach(quickEmojis, id: \.self) { emoji in
-                Button { onReact(emoji) } label: { Text("\(emoji)  \(L("chat.react"))") }
+                Button { onReact(emoji) } label: { Text(emoji) }
             }
             Divider()
             Button { onReply() } label: { Label(L("chat.reply"), systemImage: "arrowshape.turn.up.left") }

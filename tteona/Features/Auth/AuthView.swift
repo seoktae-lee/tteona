@@ -24,6 +24,19 @@ struct AuthView: View {
         ZStack {
             TteonaSplashBackground()
 
+            // 언어 선택 — 외국인 사용자가 가입 전부터 앱을 이해할 수 있게 첫 화면에서 고른다.
+            // 언어 변경은 루트 .id(language) 재구성으로 즉시 전체 반영된다.
+            VStack {
+                HStack {
+                    Spacer()
+                    languagePicker
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 8)
+            .zIndex(1)
+
             if authService.verificationEmailSent {
                 verificationSentView
             } else {
@@ -265,6 +278,42 @@ struct AuthView: View {
                 guard !Task.isCancelled else { break }
                 await MainActor.run { resendCooldown -= 1 }
             }
+        }
+    }
+
+    // MARK: - Language Picker (가입 전 언어 선택)
+    private var languagePicker: some View {
+        Menu {
+            ForEach(AppLanguage.allCases) { language in
+                Button {
+                    guard language != LanguageManager.shared.language else { return }
+                    Haptics.light()
+                    LanguageManager.shared.setLanguage(language)
+                } label: {
+                    if language == LanguageManager.shared.language {
+                        Label("\(language.flag) \(language.nativeName)", systemImage: "checkmark")
+                    } else {
+                        Text("\(language.flag) \(language.nativeName)")
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "globe")
+                    .font(.tte(13, .medium))
+                Text(LanguageManager.shared.language.nativeName)
+                    .font(.tte(13, .medium))
+                Image(systemName: "chevron.down")
+                    .font(.tte(10, .semibold))
+            }
+            .foregroundColor(.tteMediumGray)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(
+                Capsule()
+                    .fill(Color(UIColor.systemBackground).opacity(0.7))
+                    .overlay(Capsule().stroke(Color(UIColor.separator).opacity(0.5), lineWidth: 1))
+            )
         }
     }
 

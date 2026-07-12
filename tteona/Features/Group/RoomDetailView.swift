@@ -1,5 +1,7 @@
 import SwiftUI
 import MapKit
+import PhotosUI
+import FirebaseFirestore
 
 struct RoomDetailView: View {
     let room: Room
@@ -9,6 +11,11 @@ struct RoomDetailView: View {
     @EnvironmentObject private var roomService: RoomService
     @State private var showLeaveAlert = false
     @State private var showShareSheet = false
+    @State private var showMembersSheet = false
+    @State private var showPhotoPicker = false
+    @State private var photoPickerItem: PhotosPickerItem?
+    @State private var isUploadingImage = false
+    @State private var imageUploadFailed = false
 
     private var uid: String { authService.currentUser?.uid ?? "" }
 
@@ -47,16 +54,46 @@ struct RoomDetailView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
+                    Button {
+                        showMembersSheet = true
+                    } label: {
+                        Label(L("room.membersTitle"), systemImage: "person.2")
+                    }
+                    Button {
+                        showPhotoPicker = true
+                    } label: {
+                        Label(L("room.changeImage"), systemImage: "photo")
+                    }
+                    Divider()
                     Button(role: .destructive) {
                         showLeaveAlert = true
                     } label: {
                         Label(L("room.leave"), systemImage: "rectangle.portrait.and.arrow.right")
                     }
                 } label: {
-                    Image(systemName: "ellipsis")
-                        .foregroundColor(.tteDarkGray)
+                    if isUploadingImage {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "ellipsis")
+                            .foregroundColor(.tteDarkGray)
+                    }
                 }
             }
+        }
+        .photosPicker(isPresented: $showPhotoPicker, selection: $photoPickerItem, matching: .images)
+        .onChange(of: photoPickerItem) { _, item in
+            guard let item else { return }
+            photoPickerItem = nil
+            Task { await uploadRoomImage(item) }
+        }
+        .sheet(isPresented: $showMembersSheet) {
+            RoomMembersSheet(room: room, members: roomService.currentRoomMembers, myUserId: uid)
+                .presentationDetents([.medium, .large])
+        }
+        .alert(L("common.notice"), isPresented: $imageUploadFailed) {
+            Button(L("common.ok"), role: .cancel) {}
+        } message: {
+            Text(L("room.imageUploadFailed"))
         }
         .alert(L("room.leave"), isPresented: $showLeaveAlert) {
             Button(L("room.leaveButton"), role: .destructive) {
@@ -100,18 +137,134 @@ struct RoomDetailView: View {
                     .frame(width: 36, height: 36)
                     .background(RoundedRectangle(cornerRadius: 8).fill(Color.tteOrange))
             }
-            HStack(spacing: 3) {
-                Image(systemName: "person.fill")
-                    .font(.tte(11))
-                    .foregroundColor(.tteMediumGray)
-                Text(L("room.membersCount", room.memberIds.count))
-                    .font(.tte(12))
-                    .foregroundColor(.tteMediumGray)
+            // 인원 칩 — 탭하면 참여 멤버 목록 시트
+            Button {
+                showMembersSheet = true
+            } label: {
+                HStack(spacing: 3) {
+                    Image(systemName: "person.fill")
+                        .font(.tte(11))
+                    Text(L("room.membersCount", room.memberIds.count))
+                        .font(.tte(12))
+                    Image(systemName: "chevron.right")
+                        .font(.tte(9, .semibold))
+                        .foregroundColor(.tteMediumGray.opacity(0.6))
+                }
+                .foregroundColor(.tteMediumGray)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(Capsule().fill(Color(UIColor.tertiarySystemBackground)))
             }
             .padding(.leading, 4)
         }
         .padding(12)
         .background(RoundedRectangle(cornerRadius: 12).fill(Color(UIColor.secondarySystemBackground)))
+    }
+
+    // MARK: - 대표 이미지 업로드
+    private func uploadRoomImage(_ item: PhotosPickerItem) async {
+        isUploadingImage = true
+        defer { isUploadingImage = false }
+        guard let data = try? await item.loadTransferable(type: Data.self),
+              let image = UIImage(data: data),
+              await RoomImageService.shared.upload(roomId: room.roomId, image: image) != nil else {
+            imageUploadFailed = true
+            return
+        }
+        Haptics.success()
+    }
+}
+
+// MARK: - 참여 멤버 목록 시트
+struct RoomMembersSheet: View {
+    let room: Room
+    let members: [RoomMember]
+    let myUserId: String
+    @Environment(\.dismiss) private var dismiss
+    @State private var avatarUrls: [String: String] = [:]   // userId → profileImageUrl
+
+    // 방장 먼저, 나머지는 참여 순
+    private var sortedMembers: [RoomMember] {
+        members.sorted {
+            if $0.userId == room.creatorId { return true }
+            if $1.userId == room.creatorId { return false }
+            return $0.joinedAt < $1.joinedAt
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            List(sortedMembers) { member in
+                HStack(spacing: 14) {
+                    ZStack {
+                        Circle()
+                            .fill(Color.tteOrange.opacity(0.1))
+                            .frame(width: 44, height: 44)
+                        if let urlString = avatarUrls[member.userId], let url = URL(string: urlString) {
+                            AsyncImage(url: url) { phase in
+                                if let image = phase.image {
+                                    image.resizable().scaledToFill()
+                                } else {
+                                    initialText(member)
+                                }
+                            }
+                            .frame(width: 44, height: 44)
+                            .clipShape(Circle())
+                        } else {
+                            initialText(member)
+                        }
+                    }
+
+                    HStack(spacing: 6) {
+                        Text(member.userId == myUserId ? L("member.me", member.nickname) : member.nickname)
+                            .font(.tte(16, .medium))
+                            .foregroundColor(.tteDarkGray)
+                        if member.userId == room.creatorId {
+                            Text(L("room.creator"))
+                                .font(.tte(10, .bold))
+                                .foregroundColor(.tteOrange)
+                                .padding(.horizontal, 7).padding(.vertical, 3)
+                                .background(Capsule().fill(Color.tteOrange.opacity(0.14)))
+                        }
+                    }
+
+                    Spacer()
+                }
+                .padding(.vertical, 4)
+                .listRowSeparator(.hidden)
+            }
+            .listStyle(.plain)
+            .navigationTitle(L("room.membersTitle"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.tte(13, .semibold))
+                            .foregroundColor(.tteMediumGray)
+                    }
+                }
+            }
+            .task { await loadAvatars() }
+        }
+    }
+
+    private func initialText(_ member: RoomMember) -> some View {
+        Text(String(member.nickname.prefix(1)))
+            .font(.tte(17, .semibold))
+            .foregroundColor(.tteOrange)
+    }
+
+    // 멤버 문서에는 아바타가 없어 users 컬렉션에서 프로필 이미지를 개별 조회
+    private func loadAvatars() async {
+        let db = Firestore.firestore()
+        for member in members where avatarUrls[member.userId] == nil {
+            guard let doc = try? await db.collection("users").document(member.userId).getDocument(),
+                  let url = doc.data()?["profileImageUrl"] as? String, !url.isEmpty else { continue }
+            avatarUrls[member.userId] = url
+        }
     }
 }
 

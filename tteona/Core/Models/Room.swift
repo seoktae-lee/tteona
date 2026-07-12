@@ -9,9 +9,10 @@ struct Room: Identifiable, Codable, Hashable {
     var creatorId: String
     var memberIds: [String]
     var createdAt: Date
+    var imageUrl: String?   // 방 대표 이미지 (전 멤버 공통) — WAS 업로드 후 서버가 세팅
 
     enum CodingKeys: String, CodingKey {
-        case id, roomId, name, inviteCode, creatorId, memberIds, createdAt
+        case id, roomId, name, inviteCode, creatorId, memberIds, createdAt, imageUrl
     }
 }
 
