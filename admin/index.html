@@ -380,6 +380,10 @@ async function login() {
 }
 
 function logout() {
+  // 서버 세션도 무효화 (실패해도 로컬 로그아웃은 진행)
+  if (TOKEN) {
+    fetch(`${API}/logout`, { method:'POST', headers:{'Authorization':`Bearer ${TOKEN}`} }).catch(()=>{});
+  }
   localStorage.removeItem('admin_token');
   clearInterval(refreshTimer);
   clearInterval(countdownTimer);

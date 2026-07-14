@@ -1096,10 +1096,10 @@ pm2 save</div>
           </div>
         </div>
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
-            <div class="task-title">나의 오늘 → 코스 저장 시 썸네일 선택 + 기존 코스 썸네일 변경</div>
-            <div class="task-desc">① Vlog 완성 화면(VlogPreviewView)에 "탐색탭에 보여질 썸네일 고르기" 버튼 — 구현 확인(코드 완료). ② 나의 코스 탭에서 길게 눌러 "탐색탭 썸네일 변경" — 아직 미구현(ExploreGridView·CourseThumbnailService에 길게 누르기/contextMenu 진입점 없음). ①만 완료.</div>
+            <div class="task-title">나의 오늘 → 코스 저장 시 썸네일 선택 + 기존 코스 썸네일 변경 (완료)</div>
+            <div class="task-desc">① Vlog 완성 화면(VlogPreviewView)에 "탐색탭에 보여질 썸네일 고르기" 버튼 — 구현 확인(코드 완료). ② 기존 코스 썸네일 변경 — 당초 계획(탐색탭 길게 누르기) 대신 <strong>프로필 탭 "내 코스" 카드의 우상단 카메라 버튼</strong>으로 구현 완료(ProfileTabView, 커밋 "프로필 탭에서 내 코스 썸네일 직접 꾸미기"). 2026-07-14 감사에서 확인.</div>
           </div>
         </div>
         <div class="task">
@@ -1353,15 +1353,15 @@ pm2 save</div>
         <div class="task">
           <div class="task-check"></div>
           <div class="task-content">
-            <div class="task-title">Android 앱 지원 (진행 중 — 생각보다 많이 진척됨)</div>
-            <div class="task-desc">~/Documents/tteona-android, Kotlin+Compose, 커밋 9개. 완료: 부트스트랩(3탭+테마), Firebase Auth+카카오 로그인, 탐색 그리드, 홈 지도(코스 핀+미니 동선맵), 코스 상세(날씨·경로·장소카드), 그룹 방(실시간 채팅+피드), 동행 세션(실시간 위치공유, Socket 기반), FCM 푸시+딥링크, 설정/내 통계 화면. 미구현: Vlog 생성(카메라·서버합성 업로드 플로우), PRO 구독/페이월, 관리자 기능. 공통 WAS API 서버 그대로 재사용 중이라 iOS와 백엔드 이원화 없음.</div>
+            <div class="task-title">Android 앱 지원 (진행 중 — 출시 직전 단계까지 진척)</div>
+            <div class="task-desc">~/Documents/tteona-android, Kotlin+Compose. 완료: 부트스트랩(3탭+테마), Firebase Auth+카카오 로그인, 탐색 그리드, 홈 지도(코스 핀+미니 동선맵), 코스 상세(날씨·경로·장소카드), 그룹 방(실시간 채팅+피드), 동행 세션(실시간 위치공유, Socket 기반), FCM 푸시+딥링크, 설정/내 통계, 방 대표 이미지+멤버 목록. <strong>2026-07 전면 감사로 심각5·높음8·중간6건 수정 완료</strong>(서버 API 전환, 소켓 재작성+idToken 인증, 온보딩 안전화, 오프라인 배너). 출시 콘솔 준비도 서명키·Firebase·Kakao까지 완료(남은 것: Play Console·RevenueCat). 미구현: Vlog 생성(카메라·서버합성 업로드 플로우), 나의 오늘, PRO 페이월. 공통 WAS API 서버 재사용이라 iOS와 백엔드 이원화 없음.</div>
           </div>
         </div>
         <div class="task">
-          <div class="task-check"></div>
+          <div class="task-check done"></div>
           <div class="task-content">
-            <div class="task-title">웹앱 (PWA)</div>
-            <div class="task-desc">확인 결과 미착수 — tteona/web, tteona-web 어디에도 manifest.json·서비스워커 없음. tteona.kr은 현재 정적 랜딩페이지 + 코스 공유 OG 페이지(Phase 4)까지만 존재, 앱 설치 없는 탐색·공유 UX는 별도 구축 필요.</div>
+            <div class="task-title">미니 웹앱 — tteona.kr/explore (PWA) · 배포 완료·라이브</div>
+            <div class="task-desc">2026-07-14 구현·배포 완료: ① 서버 공개 탐색 API GET /api/public/explore(로그인 불필요, 추천/최신/인기 정렬 — 앱 추천 엔진과 동일 가중치, 5분 캐시 + IP 레이트리밋, 화이트리스트 필드만 노출) ② tteona-web/explore/ 미니 웹앱(코스 그리드 + 검색 + 정렬 칩 + 내 주변 위치 추천 + 썸네일 3단 폴백 + 앱 설치 CTA, 카드 탭 → 기존 /course/{id} 상세) ③ PWA 셸(manifest.json + 서비스워커 오프라인 캐시 + 아이콘, 스코프 /explore/ 한정이라 랜딩·공유 페이지에 무영향 — .webmanifest는 nginx가 octet-stream으로 서빙해 .json으로 변경) ④ 랜딩 네비 "코스 탐색" 링크. 랜딩 마케팅 구성 유지 — 랜딩(간판)→미니 웹앱(쇼윈도)→앱(매장) 깔때기. deploy-explore.sh로 배포, 전 URL 200 + API 실데이터 + WS 101 검증 통과.</div>
           </div>
         </div>
         <div class="task">
@@ -1418,15 +1418,15 @@ pm2 save</div>
         <div class="task">
           <div class="task-check"></div>
           <div class="task-content">
-            <div class="task-title">RevenueCat 콘솔 수동 작업 (미완)</div>
-            <div class="task-desc">App Store Connect 구독상품 2개(연/월) 생성 → RevenueCat 앱 등록+API키 발급 → Entitlement "pro" 생성+상품 attach → Offering "default" 구성 → ProManager.apiKey 교체. 가격안: 월 ₩4,900 / 연 ₩29,000(7일 무료체험).</div>
+            <div class="task-title">RevenueCat 콘솔 수동 작업 (대부분 진행됨 — 상품 구성만 콘솔 확인 필요)</div>
+            <div class="task-desc">2026-07-14 감사: <strong>실제 SDK 키(appl_…)가 Info.plist REVENUECAT_API_KEY에 설정 완료</strong> — RevenueCat 앱 등록+키 발급+키 교체는 끝난 상태. 남은 확인: App Store Connect 구독상품 2개(연/월) 생성 + Entitlement "pro" 상품 attach + Offering "default" 구성이 콘솔에 실제로 되어 있는지(코드로 검증 불가). 가격안: 월 ₩4,900 / 연 ₩29,000(7일 무료체험).</div>
           </div>
         </div>
         <div class="task">
           <div class="task-check"></div>
           <div class="task-content">
             <div class="task-title">콘솔 작업 + 심사 완료 전까지 전 기능 무료로 동작</div>
-            <div class="task-desc">apiKey 미설정 시 무료 모드 폴백 — 유저 입장에서는 워터마크만 항상 붙고 나머지는 사실상 전부 무료로 보임. 위 콘솔 작업이 끝나야 실제 과금 시작.</div>
+            <div class="task-desc">apiKey 미설정 시 무료 모드 폴백 구조. <strong>현재는 키가 설정되어 있어</strong> 콘솔 Offering이 구성돼 있다면 실기기에서 페이월·과금이 실제 동작함 — 심사 제출 전 실기기에서 구매 플로우(샌드박스) 확인 필요.</div>
           </div>
         </div>
       </div>
@@ -1532,10 +1532,256 @@ pm2 save</div>
     </div>
   </div>
 
+  <!-- ───────────────── 로드맵 외 완료 작업 ───────────────── -->
+  <div class="section-title">로드맵 외 완료 작업 (2026-07-14 감사 추가)</div>
+
+  <div class="notice">
+    <strong>이 섹션은 로드맵에 기록되지 않은 채 이미 완료·배포된 작업들입니다.</strong> 2026-07-14 코드 교차검증(iOS Swift 소스 · server.js · tteona-android)으로 확인 후 추가했습니다.
+  </div>
+
+  <!-- E. 사용자 기능 -->
+  <div class="phase p3">
+    <div class="phase-header">
+      <div class="phase-num" style="font-size:13px;">E</div>
+      <div class="phase-meta">
+        <h3>사용자 기능 (미기록 완료분)</h3>
+        <div class="phase-tags">
+          <span class="tag server">iOS + WAS</span>
+          <span class="tag hot">🔥 전부 완료</span>
+        </div>
+      </div>
+    </div>
+    <div class="phase-body">
+      <div class="tasks">
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">다국어 지원 (한국어/영어/일본어)</div>
+            <div class="task-desc">iOS Localizable.xcstrings + InfoPlist.xcstrings 확인. Android는 strings.xml 병행. 원본은 xcstrings·strings.xml 양쪽 직접 편집 방식.</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">온보딩 리디자인 — 히어로 슬라이드 + 나루 코치마크</div>
+            <div class="task-desc">OnboardingHero.swift·OnboardingView.swift 확인. 프리뷰 런치 아규먼트 지원.</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">촬영 예산 UX 전면 개편</div>
+            <div class="task-desc">무료 5초 강제 촬영 + 분절 링(30초÷5초=6칸, ProManager.vlogSegmentCount), 예산 토스트, 지도 진행바, 손떨림 보정·핀치 줌·탭 초점, iOS 가상렌즈 줌, 첫 클립 잘림 수정. CameraView·CameraService 확인. (나루 필터는 도입 후 제거됨)</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">프로필 탭 + 발자취 지도 (설정 탭 대체)</div>
+            <div class="task-desc">ProfileTabView·FootprintMapView·FootprintFullMapView·FootprintAtlas·UserSearchView 확인. 전세계 주/도(admin-1) 단위 색칠, 최다 체류지 기준, 과거 코스 백필, 전체화면 지도, 내 코스 썸네일 직접 꾸미기 포함.</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">방 대표 이미지 + 멤버 목록</div>
+            <div class="task-desc">RoomImageService 확인. iOS·Android·서버 3플랫폼 배포 완료, E2E 검증 통과.</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">"나의 오늘" Live Activity + 카메라 줌 + 계정 삭제</div>
+            <div class="task-desc">tteona_WidgetExtension(TodaySessionLiveActivity) 잠금화면 실시간 세션 표시, 카메라 줌 컨트롤, 데이터 정리 포함 계정 삭제(AuthService·SettingsView) 확인.</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">Vlog BGM 직접 선택 + 포맷별 독립 합성 (2026-07-05 개편)</div>
+            <div class="task-desc">server.js bgm 옵션: 'auto'(태그별 랜덤) / 'none'(무음) / 'mood/파일명'(특정 곡) 확인. 포맷별 독립 합성 + RotationCoordinator 회전 처리.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- F. 품질·보안 하드닝 -->
+  <div class="phase p6">
+    <div class="phase-header">
+      <div class="phase-num" style="font-size:13px;">F</div>
+      <div class="phase-meta">
+        <h3>품질·보안 하드닝 (미기록 완료분)</h3>
+        <div class="phase-tags">
+          <span class="tag server">iOS + WAS + DB</span>
+          <span class="tag hot">🔥 출시 준비 감사</span>
+        </div>
+      </div>
+    </div>
+    <div class="phase-body">
+      <div class="analogy">
+        🛡️ <strong>2026-07 전면 감사 · 하드닝 (3세션)</strong><br>
+        출시 전 코드·백엔드·보안·법률 문서를 전부 점검하고 배포까지 완료. 남은 것은 실기기 QA + App Store 빌드 제출뿐.
+      </div>
+      <div class="tasks">
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">iOS 전면 감사 수정 (배포 완료)</div>
+            <div class="task-desc">프로필 소실 체인(merge), 세로영상 회전, 위치 continuation·카메라 크래시·인터럽션, 채팅 신뢰성(outbox/dedup/페이지네이션), 닉네임 유니크 예약(nicknames 컬렉션), 이메일 PII 제거(공개 users 문서에서 삭제·마이그레이션), 코스 편집, 그룹알림 토글, fetchCourses limit 300, 안읽음 서버화(/api/rooms/unread), 구글/카카오 공식 로고 버튼.</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">서버 보안 하드닝 (WAS 배포 완료)</div>
+            <div class="task-desc">trust proxy + 엔드포인트별 rate limiting(Vlog 잡·업로드 등, uid/IP 기준) 확인(server.js). firestore.rules 강화: nicknames create-only, feed commentCount ±1 제한, rooms 핵심 필드 잠금+memberIds 부분집합 검증.</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">Vlog 서버 합성 병렬화</div>
+            <div class="task-desc">composeVlog 클립 인코딩 순차 → 동시 3개(CLIP_CONCURRENCY, mapLimit) 확인. 합성 시간 단축, 스모크 테스트 통과.</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">푸시 신뢰성 수리 + 네트워크 모니터링</div>
+            <div class="task-desc">콜드 스타트에서 알림 타겟 열기, 앱 배지 실제 안읽음 수 표시(고정 "1" 버그 수정), iOS 푸시 배달 수리(APNs sandbox 폴백 포함), UGC 한국어 문구. 오프라인 감지 배너(네트워크 모니터링 유틸) 추가.</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check done"></div>
+          <div class="task-content">
+            <div class="task-title">관리자 대시보드 private 저장소 분리 + 문서 스위트</div>
+            <div class="task-desc">admin을 private 저장소로 편입. docs/ 폴더 8종(아키텍처·발표·마케팅·보안감사 등) + 약관 개정(7/7) 완비.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────────────── 추후 업데이트 ───────────────── -->
+  <div class="section-title">추후 업데이트</div>
+
+  <div class="notice">
+    <strong>2026-07-14 인프라 검토에서 정리된 다음 단계입니다.</strong> 서버 스펙(12vCore/24GB/150GB)은 지원사업 최대치를 이미 전부 사용 중 — 하드웨어 증설은 불가하며, 수용량은 아래 소프트웨어 최적화로 늘립니다. 방화벽 정책 신청서는 Redis 내부 포트(WAS→DB 6379) 정도만 미리 회신해두면 됩니다.
+  </div>
+
+  <div class="phase p4">
+    <div class="phase-header">
+      <div class="phase-num" style="font-size:13px;">G</div>
+      <div class="phase-meta">
+        <h3>따라떠나 v2 "길동무" (최우선)</h3>
+        <div class="phase-tags">
+          <span class="tag hot">🔥 리텐션 핵심</span>
+          <span class="tag server">iOS + Functions</span>
+        </div>
+      </div>
+    </div>
+    <div class="phase-body">
+      <div class="analogy">
+        💌 <strong>설계 완료 · 개발 착수 대기</strong><br>
+        단순 팔로우 이식이 아닌 떠나만의 소셜 루프. 설계 문서: docs/DESIGN_TTARADDEONA.md(v1 기술 뼈대) + docs/DESIGN_TTARADDEONA_CONCEPTS.md(v2 컨셉, 우선).
+      </div>
+      <div class="tasks">
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">MVP — 나루 엽서 + 발자취 겹쳐보기 + 궁합 배지</div>
+            <div class="task-desc">길동무가 코스 완료 시 나루 엽서 배달 + 엽서함, 발자취 지도 오버레이로 겹쳐보기, 여행 궁합 배지. 데이터: follows/{followerId}_{authorId} 복합키 + Functions 소유 followerCount 카운터, 새 코스 알림은 FCM 팬아웃(30분 디바운스).</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">Phase 2 — 떠났어요 라이브 + 길목 알림</div>
+            <div class="task-desc">즉석 세션 opt-in 공개("지금 떠났어요") + 지오펜스 기반 길목 알림. MVP 검증 후 진행.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="phase p2">
+    <div class="phase-header">
+      <div class="phase-num" style="font-size:13px;">H</div>
+      <div class="phase-meta">
+        <h3>수용량 최적화 패키지 (동시접속 3~5배)</h3>
+        <div class="phase-tags">
+          <span class="tag server">전체 서버</span>
+          <span class="tag money">💰 전부 무료</span>
+        </div>
+      </div>
+    </div>
+    <div class="phase-body">
+      <div class="analogy">
+        📈 <strong>목표: DAU 2,000 → 8,000~10,000 / 동시접속 1,000 → 3,000~5,000</strong><br>
+        하드웨어는 그대로 두고 소프트웨어만으로 수용량을 끌어올리는 작업. 전부 무료 도구.
+      </div>
+      <div class="tasks">
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">Cloudflare 무료 CDN을 tteona.kr 앞에</div>
+            <div class="task-desc">썸네일·아바타·정적 파일·OG 이미지를 CDN에서 서빙 → WEB/WAS 부하 절반 가까이 제거. 효과 대비 비용이 가장 좋음.</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">PM2 클러스터 모드 + pgbouncer</div>
+            <div class="task-desc">WAS 8코어인데 단일 프로세스면 1코어만 사용 — pm2 -i max로 멀티 프로세스화. DB 커넥션이 프로세스 수만큼 늘어나므로 pgbouncer 커넥션 풀링과 세트로 진행. (주의: WebSocket 방 상태가 프로세스 메모리에 있으면 sticky 세션 또는 Redis pub/sub 필요)</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">Redis 캐시 도입 (DB 서버에 설치)</div>
+            <div class="task-desc">인기 코스·장소 캐시·추천 결과 등 반복 조회를 Redis로 → 가장 약한 고리인 PostgreSQL(2코어) 부하 감소. 방화벽 정책 신청서로 WAS→DB 6379 내부 오픈 필요. Phase 8 잔여(TOP10·검색·협업필터링) 고도화와 묶어서 진행하면 효율적.</div>
+          </div>
+        </div>
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">FFmpeg 작업 큐 격리</div>
+            <div class="task-desc">Vlog 합성이 CPU를 점유해 API가 느려지는 것 방지 — 동시 작업 수 제한 유지 + nice 우선순위 하향으로 API 응답성 보장.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="phase p5">
+    <div class="phase-header">
+      <div class="phase-num" style="font-size:13px;">I</div>
+      <div class="phase-meta">
+        <h3>여행 리포트 공유 (연말결산형)</h3>
+        <div class="phase-tags">
+          <span class="tag server">iOS + WAS</span>
+          <span class="tag money">💰 PRO 소재</span>
+        </div>
+      </div>
+    </div>
+    <div class="phase-body">
+      <div class="tasks">
+        <div class="task">
+          <div class="task-check"></div>
+          <div class="task-content">
+            <div class="task-title">내 여행 통계 → 월간/연간 결산 공유 카드로 확장</div>
+            <div class="task-desc">이미 완료된 "개인 여행 통계"(user_stats) 데이터를 활용해 스포티파이 연말결산처럼 공유용 이미지 카드 생성(방문 장소·이동거리·발자취 지도 스냅샷 + 나루). 공유 욕구 자극 → 따라떠나·OG 링크와 시너지. PRO 게이팅 후보.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <footer>
-  tteona · KISA 2026 위치정보 클라우드 지원사업 · 작성일 2026-07-01
+  tteona · KISA 2026 위치정보 클라우드 지원사업 · 작성일 2026-07-01 · 최종 감사 2026-07-14
 </footer>
 
 <script>

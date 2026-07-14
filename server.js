@@ -14,7 +14,7 @@ const multer = require('multer');
 const sharp  = require('sharp');
 const path   = require('path');
 const fs     = require('fs');
-const { randomUUID, createHash } = require('crypto');
+const { randomUUID, createHash, randomBytes, timingSafeEqual } = require('crypto');
 const { initializeApp, cert } = require('firebase-admin/app');
 const { getFirestore, FieldValue, Timestamp } = require('firebase-admin/firestore');
 const { getAuth } = require('firebase-admin/auth');
@@ -38,7 +38,6 @@ function requiredEnv(name) {
 
 const PG_PASSWORD    = requiredEnv('PG_PASSWORD');
 const ADMIN_PASSWORD = requiredEnv('ADMIN_PASSWORD');
-const ADMIN_TOKEN    = requiredEnv('ADMIN_TOKEN');
 
 // 인증 강제 여부 — 기본 true. 구버전 앱(토큰 미전송)이 남아 있는 전환 기간에만
 // AUTH_ENFORCE=false로 완화 운영 (완화 모드에서도 토큰이 오면 검증·활용한다).
@@ -2168,6 +2167,95 @@ app.get('/api/rooms/:roomId/messages', requireAuth, async (req, res) => {
   }
 });
 
+// ─── 공개 탐색 API — 미니 웹앱 tteona.kr/explore 전용 ─────────────────────────
+// 앱 미설치 방문자(카톡 공유 유입·안드로이드)가 로그인 없이 코스를 열람하는 경로.
+// 응답은 화이트리스트 필드만 노출하고, 5분 인메모리 캐시로 Firestore 읽기를 억제.
+// 코스 상세는 기존 공개 페이지 /course/{id}가 담당하므로 목록만 제공한다.
+const publicExploreLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, key: (req) => req.ip || 'unknown' });
+const exploreCache = new Map(); // cacheKey → { data, expiresAt }
+
+app.get('/api/public/explore', publicExploreLimiter, async (req, res) => {
+  const sort = ['recommend', 'latest', 'popular'].includes(req.query.sort) ? req.query.sort : 'recommend';
+  const limit = Math.max(1, Math.min(60, parseInt(req.query.limit) || 48));
+  const lat = parseFloat(req.query.lat);
+  const lng = parseFloat(req.query.lng);
+  // 좌표는 소수 1자리(≈11km)로 반올림해 캐시 키 폭발 방지 — 추천 근접 점수엔 충분한 해상도
+  const latR = isNaN(lat) ? 'x' : (Math.round(lat * 10) / 10).toFixed(1);
+  const lngR = isNaN(lng) ? 'x' : (Math.round(lng * 10) / 10).toFixed(1);
+  const cacheKey = `${sort}:${latR}:${lngR}:${limit}`;
+
+  const hit = exploreCache.get(cacheKey);
+  if (hit && Date.now() < hit.expiresAt) return res.json(hit.data);
+
+  try {
+    const [coursesSnap, thumbRows] = await Promise.all([
+      db.collection('courses').limit(500).get(),
+      pgPool.query('SELECT course_id, url FROM course_thumbnails'),
+    ]);
+    const thumbs = {};
+    thumbRows.rows.forEach(r => { thumbs[r.course_id] = r.url; });
+
+    const now = Date.now();
+    const season = currentSeason();
+
+    const courses = coursesSnap.docs.map(d => {
+      const c = { ...d.data(), courseId: d.id };
+      const createdMs = c.createdAt?._seconds ? c.createdAt._seconds * 1000 : 0;
+
+      // 추천 점수 — /api/courses/recommend와 동일 가중치(인기40 + 신선25 + 근접25 + 시즌18)
+      let score = Math.min((c.likeCount || 0) * 4, 40);
+      const ageDays = (now - (createdMs || now)) / 86400000;
+      score += Math.max(0, 25 - ageDays * 0.5);
+      const mp = mainPlaceOf(c);
+      if (!isNaN(lat) && !isNaN(lng) && mp && mp.latitude && mp.longitude) {
+        const dist = haversineKm(lat, lng, mp.latitude, mp.longitude);
+        if (dist < 10)       score += 25;
+        else if (dist < 50)  score += 15;
+        else if (dist < 200) score += 5;
+      }
+      const haystack = (c.courseName || '') + ' ' + (c.places || []).map(p => p.placeName || '').join(' ');
+      if (season.words.some(w => haystack.includes(w))) score += 18;
+
+      // 표시용 장소명 — 연속 중복(같은 곳 여러 클립) 접기, iOS displayPlaces와 동일 규칙
+      const names = [];
+      const sorted = [...(c.places || [])].sort((a, b) => (a.order || 0) - (b.order || 0));
+      for (const p of sorted) {
+        if (p.placeName && p.placeName !== names[names.length - 1]) names.push(p.placeName);
+      }
+
+      return {
+        courseId: c.courseId,
+        courseName: c.courseName || '떠나 코스',
+        region: c.region || '',
+        tag: c.tag || '',
+        likeCount: c.likeCount || 0,
+        placeCount: names.length,
+        placeNames: names.slice(0, 3),
+        thumbnailUrl: thumbs[c.courseId] || null,
+        createdAt: createdMs,
+        _score: score,
+      };
+    });
+
+    if (sort === 'latest')       courses.sort((a, b) => b.createdAt - a.createdAt);
+    else if (sort === 'popular') courses.sort((a, b) => (b.likeCount - a.likeCount) || (b.createdAt - a.createdAt));
+    else                         courses.sort((a, b) => b._score - a._score);
+
+    const data = {
+      season: season.name,
+      courses: courses.slice(0, limit).map(({ _score, ...rest }) => rest),
+    };
+    exploreCache.set(cacheKey, { data, expiresAt: now + 5 * 60 * 1000 });
+    if (exploreCache.size > 200) {
+      for (const [k, v] of exploreCache) if (Date.now() >= v.expiresAt) exploreCache.delete(k);
+    }
+    res.json(data);
+  } catch (err) {
+    console.error('[PublicExplore] error:', err);
+    res.status(500).json({ error: 'explore failed' });
+  }
+});
+
 // ─── 코스 공유 OG 링크 ────────────────────────────────────────────────────────
 // iOS 앱: /course?id=UUID (쿼리 파라미터)
 // 직접 링크: /course/UUID (경로 파라미터) — 두 형식 모두 지원
@@ -2738,11 +2826,17 @@ function courseNotFoundHtml() {
 
 // ─── Admin API ───────────────────────────────────────────────────────────────
 
-// ADMIN_PASSWORD / ADMIN_TOKEN 은 파일 상단에서 환경변수 필수로 로드됨
+// ADMIN_PASSWORD 는 파일 상단에서 환경변수 필수로 로드됨.
+// 세션: 로그인마다 무작위 토큰 발급, 24시간 만료. 서버 재시작 시 전원 로그아웃(재로그인으로 충분).
+const ADMIN_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+const adminSessions = new Map(); // token → expiresAt
 
 function adminAuth(req, res, next) {
   const auth = req.headers['authorization'] || '';
-  if (auth === `Bearer ${ADMIN_TOKEN}`) return next();
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+  const expiresAt = adminSessions.get(token);
+  if (expiresAt && Date.now() < expiresAt) return next();
+  if (expiresAt) adminSessions.delete(token);
   res.status(401).json({ error: 'Unauthorized' });
 }
 
@@ -2756,9 +2850,13 @@ app.post('/api/admin/login', (req, res) => {
     return res.status(429).json({ error: '시도 횟수를 초과했습니다. 잠시 후 다시 시도해주세요.' });
   }
   const { password } = req.body;
-  if (password === ADMIN_PASSWORD) {
+  const pwBuf = Buffer.from(String(password ?? ''));
+  const answerBuf = Buffer.from(ADMIN_PASSWORD);
+  if (pwBuf.length === answerBuf.length && timingSafeEqual(pwBuf, answerBuf)) {
     adminLoginAttempts.delete(ip);
-    return res.json({ token: ADMIN_TOKEN });
+    const token = randomBytes(32).toString('hex');
+    adminSessions.set(token, now + ADMIN_SESSION_TTL_MS);
+    return res.json({ token });
   }
   if (!entry || now >= entry.resetAt) {
     adminLoginAttempts.set(ip, { count: 1, resetAt: now + 15 * 60 * 1000 });
@@ -2767,6 +2865,24 @@ app.post('/api/admin/login', (req, res) => {
   }
   res.status(401).json({ error: '비밀번호가 틀렸습니다' });
 });
+
+// 로그아웃 — 서버 측 세션 즉시 무효화 (localStorage에서 훔친 토큰도 함께 죽는다)
+app.post('/api/admin/logout', (req, res) => {
+  const auth = req.headers['authorization'] || '';
+  if (auth.startsWith('Bearer ')) adminSessions.delete(auth.slice(7));
+  res.json({ ok: true });
+});
+
+// 만료 엔트리 주기 청소 — adminSessions·adminLoginAttempts 무한 성장 방지
+setInterval(() => {
+  const now = Date.now();
+  for (const [token, expiresAt] of adminSessions) {
+    if (now >= expiresAt) adminSessions.delete(token);
+  }
+  for (const [ip, entry] of adminLoginAttempts) {
+    if (now >= entry.resetAt) adminLoginAttempts.delete(ip);
+  }
+}, 15 * 60 * 1000).unref();
 
 app.get('/api/admin/stats', adminAuth, async (req, res) => {
   try {
