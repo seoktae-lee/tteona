@@ -118,10 +118,21 @@ struct ProPaywallView: View {
                     }
                     .foregroundColor(.white.opacity(0.75))
 
+                    // 자동 갱신 조건 고지 — 심사 지침 3.1.2가 인앱 표시를 요구한다
+                    Text(L("paywall.autoRenewNotice"))
+                        .font(.tte(11))
+                        .foregroundColor(.white.opacity(0.55))
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 24)
+
                     HStack(spacing: 16) {
                         Button(L("paywall.restore")) { Task { await restore() } }
-                        Link(L("settings.terms"), destination: URL(string: "https://tteona.kr/terms")!)
-                        Link(L("paywall.privacyPolicy"), destination: URL(string: "https://tteona.kr/privacy")!)
+                        // EULA는 App Store Connect에 Apple 표준으로 선언돼 있다. 자체 약관(tteona.kr/terms)엔
+                        // 구독 조항이 없어 EULA 역할을 못 하므로, 여기서는 선언된 원문을 그대로 링크한다.
+                        Link(L("paywall.eula"),
+                             destination: URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!)
+                        Link(L("paywall.privacyPolicy"), destination: URL(string: "https://tteona.kr/privacy.html")!)
                     }
                     .font(.tte(12))
                     .foregroundColor(.white.opacity(0.5))
@@ -312,7 +323,7 @@ struct ProPaywallView: View {
                                 .background(Capsule().fill(Color.tteOrange.opacity(0.18)))
                         }
                     }
-                    Text(L("paywall.cancelAnytime"))
+                    Text(L("paywall.monthlyBilling"))
                         .font(.tte(12))
                         .foregroundColor(.white.opacity(0.55))
                 }
@@ -388,7 +399,7 @@ struct ProPaywallView: View {
             }
             return L("paywall.billedAnnually")
         }
-        return L("paywall.cancelAnytime")
+        return L("paywall.monthlyBilling")
     }
 
     private func purchase() async {

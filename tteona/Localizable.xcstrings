@@ -7908,6 +7908,29 @@
         }
       }
     },
+    "paywall.autoRenewNotice" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Subscriptions renew automatically unless canceled at least 24 hours before the end of the current period. Your Apple Account is charged for renewal. Manage or cancel anytime in your Apple Account settings."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "サブスクリプションは、期間終了の24時間前までに解約しない限り自動更新され、Appleアカウントに請求されます。購入後はAppleアカウント設定でいつでも管理・解約できます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "구독은 기간 종료 24시간 전까지 해지하지 않으면 자동으로 갱신되며, 요금은 Apple 계정으로 청구됩니다. 구매 후 Apple 계정 설정에서 언제든 관리·해지할 수 있어요."
+          }
+        }
+      }
+    },
     "paywall.bestValue" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -7937,19 +7960,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Billed once a year"
+            "value" : "Auto-renews yearly"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "年1回のお支払い"
+            "value" : "毎年自動更新"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "1년에 한 번 결제"
+            "value" : "1년마다 자동 갱신"
           }
         }
       }
@@ -7996,6 +8019,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%d%% 할인"
+          }
+        }
+      }
+    },
+    "paywall.eula" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Terms of Use (EULA)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "利用規約(EULA)"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이용약관(EULA)"
           }
         }
       }
@@ -8299,6 +8345,29 @@
         }
       }
     },
+    "paywall.monthlyBilling" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auto-renews monthly · Cancel anytime"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "毎月自動更新・いつでも解約可能"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "매월 자동 갱신 · 언제든 해지 가능"
+          }
+        }
+      }
+    },
     "paywall.noPaymentNow" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8351,19 +8420,19 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@/mo · billed once a year"
+            "value" : "%@/mo · auto-renews yearly"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "月%@相当 · 年1回のお支払い"
+            "value" : "月%@相当・毎年自動更新"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "월 %@ 꼴 · 1년에 한 번 결제"
+            "value" : "월 %@ 꼴 · 1년마다 자동 갱신"
           }
         }
       }
