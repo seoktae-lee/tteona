@@ -4,13 +4,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>tteona Admin</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="icon" type="image/png" href="tteona.png">
+  <!-- Chart.js 자체 호스팅 — 외부 CDN 의존 제거(CSP를 script-src 'self'로 좁히고 공급망 위험 차단) -->
+  <script src="chart.umd.min.js"></script>
   <style>
     :root {
       --bg:#0f1117; --surface:#1a1d27; --surface2:#22263a; --surface3:#2a2f45;
       --border:#2e3347; --accent:#ff6b35; --accent2:#ff9a6c;
       --green:#3ecf8e; --red:#ff5c72; --yellow:#f5c842; --blue:#4e8ef7; --purple:#9b6dff;
       --text:#e8eaf0; --muted:#7c829a;
+      /* 차트 시리즈 전용 (다크 서피스 대비 검증 통과 팔레트 — UI 액센트와 별도) */
+      --ch1:#e0561f; --ch2:#4e8ef7; --ch3:#22a06b; --ch4:#9b6dff; --ch5:#b8860b;
     }
     *{margin:0;padding:0;box-sizing:border-box;}
     body{background:var(--bg);color:var(--text);font-family:-apple-system,'Pretendard','Apple SD Gothic Neo',sans-serif;min-height:100vh;font-size:14px;}
@@ -53,14 +57,16 @@
     .logout-btn:hover{color:var(--text);}
 
     /* ── 메인 ── */
-    .main{flex:1;overflow-y:auto;}
-    .topbar{padding:18px 28px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--surface);position:sticky;top:0;z-index:10;}
+    .main{flex:1;overflow-y:auto;min-width:0;}
+    .topbar{padding:18px 28px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--surface);position:sticky;top:0;z-index:10;gap:12px;}
     .topbar-title{font-size:18px;font-weight:800;}
+    .topbar-right{display:flex;align-items:center;gap:12px;}
     .topbar-time{font-size:12px;color:var(--muted);}
     .content{padding:28px;}
 
     /* ── 통계 카드 ── */
     .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;}
+    @media (max-width:1100px){.stats-row{grid-template-columns:repeat(2,1fr);}}
     .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;position:relative;overflow:hidden;}
     .stat-card::before{content:'';position:absolute;top:-30px;right:-20px;width:80px;height:80px;border-radius:50%;opacity:.06;}
     .stat-card.c-accent::before{background:var(--accent);}
@@ -82,18 +88,22 @@
     .stat-value{font-size:32px;font-weight:900;letter-spacing:-1.5px;line-height:1;}
     .stat-sub{font-size:12px;color:var(--muted);margin-top:6px;}
 
-    /* ── 2단 그리드 ── */
+    /* ── 그리드 ── */
     .two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;}
     .three-col{display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:24px;}
+    @media (max-width:1100px){.two-col,.three-col{grid-template-columns:1fr;}}
 
     /* ── 패널 ── */
-    .panel{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;}
-    .panel-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+    .panel{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:0;}
+    .panel-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:8px;}
     .panel-title{font-size:14px;font-weight:700;}
-    .panel-body{padding:0;}
+    .panel-note{font-size:11px;color:var(--muted);}
+    .panel-mb{margin-bottom:24px;}
 
     /* ── 차트 ── */
-    .chart-wrap{padding:16px 20px 20px;}
+    .chart-wrap{padding:16px 20px 20px;position:relative;}
+    .chart-wrap canvas{max-width:100%;}
+    .range-select{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:5px 10px;font-size:12px;font-family:inherit;outline:none;cursor:pointer;}
 
     /* ── 리스트 ── */
     .list-item{display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:1px solid var(--border);transition:background .1s;}
@@ -121,6 +131,7 @@
     .badge-green{background:rgba(62,207,142,.15);color:var(--green);}
     .badge-blue{background:rgba(78,142,247,.15);color:var(--blue);}
     .badge-yellow{background:rgba(245,200,66,.15);color:var(--yellow);}
+    .badge-purple{background:rgba(155,109,255,.15);color:var(--purple);}
     .badge-muted{background:var(--surface2);color:var(--muted);}
 
     /* ── 테이블 ── */
@@ -135,6 +146,17 @@
     .search-wrap{padding:12px 20px;border-bottom:1px solid var(--border);}
     .search-input{width:100%;padding:9px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;outline:none;}
     .search-input:focus{border-color:var(--accent);}
+
+    /* 키-값 행 (시스템/캐시 등) */
+    .kv-row{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;border-bottom:1px solid var(--border);font-size:13px;}
+    .kv-row:last-child{border-bottom:none;}
+    .kv-key{color:var(--muted);}
+    .kv-val{font-weight:700;font-variant-numeric:tabular-nums;}
+
+    /* 안내 박스 */
+    .info-box{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:20px;font-size:13px;line-height:1.7;color:var(--muted);}
+    .info-box code{background:var(--surface3);padding:2px 7px;border-radius:6px;color:var(--text);font-size:12px;}
+    .info-box b{color:var(--text);}
 
     /* 탭 숨김 */
     .tab-content{display:none;}
@@ -155,7 +177,7 @@
 <!-- 로그인 -->
 <div id="login-screen">
   <div class="login-box">
-    <div class="login-logo">tteona</div>
+    <img src="tteona.png" alt="tteona" style="height:44px;margin-bottom:10px">
     <div class="login-sub">관리자 대시보드</div>
     <input type="password" id="pw-input" placeholder="관리자 비밀번호" onkeydown="if(event.key==='Enter')login()">
     <button class="btn btn-primary" onclick="login()">로그인</button>
@@ -170,23 +192,41 @@
     <!-- 사이드바 -->
     <div class="sidebar">
       <div class="sidebar-logo">
-        <div class="sidebar-logo-text">tteona</div>
+        <img src="tteona.png" alt="tteona" style="height:26px;display:block">
         <div class="sidebar-logo-sub">Admin Dashboard</div>
       </div>
 
-      <div class="nav-section">메뉴</div>
-      <div class="nav-item active" onclick="switchTab('overview',this)">
+      <div class="nav-section">지표</div>
+      <div class="nav-item active" data-tab="overview" onclick="switchTab('overview',this)">
         <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1" stroke-width="2"/><rect x="14" y="3" width="7" height="7" rx="1" stroke-width="2"/><rect x="3" y="14" width="7" height="7" rx="1" stroke-width="2"/><rect x="14" y="14" width="7" height="7" rx="1" stroke-width="2"/></svg>
         개요
       </div>
-      <div class="nav-item" onclick="switchTab('reports',this)">
+      <div class="nav-item" data-tab="growth" onclick="switchTab('growth',this)">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" d="M3 17l6-6 4 4 8-8m0 0h-5m5 0v5"/></svg>
+        성장 지표
+      </div>
+      <div class="nav-item" data-tab="content" onclick="switchTab('content',this)">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+        콘텐츠
+      </div>
+      <div class="nav-item" data-tab="subscription" onclick="switchTab('subscription',this)">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        PRO 구독
+      </div>
+
+      <div class="nav-section">운영</div>
+      <div class="nav-item" data-tab="reports" onclick="switchTab('reports',this)">
         <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
         신고 관리
         <span id="report-badge" style="margin-left:auto;background:var(--red);color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;display:none"></span>
       </div>
-      <div class="nav-item" onclick="switchTab('users',this)">
+      <div class="nav-item" data-tab="users" onclick="switchTab('users',this)">
         <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
         유저 관리
+      </div>
+      <div class="nav-item" data-tab="system" onclick="switchTab('system',this)">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="12" rx="2" stroke-width="2"/><path stroke-width="2" stroke-linecap="round" d="M6 20h12M12 16v4"/></svg>
+        시스템
       </div>
 
       <div class="sidebar-bottom">
@@ -199,125 +239,293 @@
     <div class="main">
       <div class="topbar">
         <div class="topbar-title" id="page-title">개요</div>
-        <div class="topbar-time" id="update-time">—</div>
+        <div class="topbar-right">
+          <div class="topbar-time" id="update-time">—</div>
+          <button class="btn btn-ghost" onclick="refreshCurrentTab()">↻ 새로고침</button>
+        </div>
       </div>
 
       <div class="content">
 
-        <!-- ── 개요 탭 ── -->
+        <!-- ══ 개요 탭 ══ -->
         <div id="tab-overview" class="tab-content active">
 
-          <!-- 통계 카드 -->
           <div class="stats-row">
             <div class="stat-card c-accent">
               <div class="stat-top">
                 <div class="stat-label">전체 유저</div>
-                <div class="stat-icon i-accent">
-                  <svg fill="none" stroke="#ff6b35" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8z"/></svg>
-                </div>
+                <div class="stat-icon i-accent"><svg fill="none" stroke="#ff6b35" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8z"/></svg></div>
               </div>
               <div class="stat-value" id="s-users" style="color:var(--accent)">—</div>
-              <div class="stat-sub">가입자 수</div>
+              <div class="stat-sub" id="s-users-sub">가입자 수</div>
             </div>
-            <div class="stat-card c-blue">
+            <div class="stat-card c-yellow">
               <div class="stat-top">
-                <div class="stat-label">전체 코스</div>
-                <div class="stat-icon i-blue">
-                  <svg fill="none" stroke="#4e8ef7" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
-                </div>
+                <div class="stat-label">DAU (오늘)</div>
+                <div class="stat-icon i-yellow"><svg fill="none" stroke="#f5c842" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg></div>
               </div>
-              <div class="stat-value" id="s-courses" style="color:var(--blue)">—</div>
-              <div class="stat-sub">생성된 코스</div>
+              <div class="stat-value" id="s-dau" style="color:var(--yellow)">—</div>
+              <div class="stat-sub" id="s-dau-sub">어제 —</div>
             </div>
             <div class="stat-card c-green">
               <div class="stat-top">
-                <div class="stat-label">신규 유저 7일</div>
-                <div class="stat-icon i-green">
-                  <svg fill="none" stroke="#3ecf8e" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3M13 7a4 4 0 11-8 0 4 4 0 018 0zM6 20v-2a4 4 0 014-4h2"/></svg>
-                </div>
+                <div class="stat-label">WAU / MAU</div>
+                <div class="stat-icon i-green"><svg fill="none" stroke="#3ecf8e" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" d="M3 17l6-6 4 4 8-8"/></svg></div>
               </div>
-              <div class="stat-value" id="s-new7" style="color:var(--green)">—</div>
-              <div class="stat-sub">최근 7일 신규</div>
+              <div class="stat-value" id="s-wau-mau" style="color:var(--green)">—</div>
+              <div class="stat-sub" id="s-stickiness">Stickiness —</div>
             </div>
             <div class="stat-card c-red">
               <div class="stat-top">
                 <div class="stat-label">미처리 신고</div>
-                <div class="stat-icon i-red">
-                  <svg fill="none" stroke="#ff5c72" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
-                </div>
+                <div class="stat-icon i-red"><svg fill="none" stroke="#ff5c72" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg></div>
               </div>
               <div class="stat-value" id="s-reports" style="color:var(--red)">—</div>
               <div class="stat-sub">처리 대기 중</div>
             </div>
           </div>
 
-          <div class="stats-row" style="grid-template-columns:repeat(3,1fr)">
-            <div class="stat-card c-yellow">
+          <div class="stats-row">
+            <div class="stat-card c-green">
               <div class="stat-top">
-                <div class="stat-label">활성 유저 7일</div>
-                <div class="stat-icon i-yellow">
-                  <svg fill="none" stroke="#f5c842" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-                </div>
+                <div class="stat-label">신규 유저 7일</div>
+                <div class="stat-icon i-green"><svg fill="none" stroke="#3ecf8e" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3M13 7a4 4 0 11-8 0 4 4 0 018 0zM6 20v-2a4 4 0 014-4h2"/></svg></div>
               </div>
-              <div class="stat-value" id="s-active7" style="color:var(--yellow)">—</div>
-              <div class="stat-sub">최근 7일 활성</div>
+              <div class="stat-value" id="s-new7" style="color:var(--green)">—</div>
+              <div class="stat-sub" id="s-new-today">오늘 —</div>
             </div>
             <div class="stat-card c-blue">
               <div class="stat-top">
-                <div class="stat-label">코스 생성 7일</div>
-                <div class="stat-icon i-blue">
-                  <svg fill="none" stroke="#4e8ef7" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" d="M12 4v16m8-8H4"/></svg>
-                </div>
+                <div class="stat-label">전체 코스</div>
+                <div class="stat-icon i-blue"><svg fill="none" stroke="#4e8ef7" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg></div>
               </div>
-              <div class="stat-value" id="s-courses7" style="color:var(--blue)">—</div>
-              <div class="stat-sub">최근 7일 생성</div>
+              <div class="stat-value" id="s-courses" style="color:var(--blue)">—</div>
+              <div class="stat-sub" id="s-courses7">최근 7일 —</div>
             </div>
-            <div class="stat-card c-green">
+            <div class="stat-card c-purple">
               <div class="stat-top">
-                <div class="stat-label">Places 캐시</div>
-                <div class="stat-icon i-green">
-                  <svg fill="none" stroke="#3ecf8e" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V9c0-2-1-3-3-3H7C5 6 4 7 4 7zm0 0l4-4m12 4l-4-4M8 3h8"/></svg>
-                </div>
+                <div class="stat-label">PRO 구독</div>
+                <div class="stat-icon i-purple"><svg fill="none" stroke="#9b6dff" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" d="M5 3l1.5 4.5L11 9l-4.5 1.5L5 15l-1.5-4.5L-1 9l4.5-1.5zM17 8l1 3 3 1-3 1-1 3-1-3-3-1 3-1z" transform="translate(2,0)"/></svg></div>
               </div>
-              <div class="stat-value" id="s-cache" style="color:var(--green)">—</div>
-              <div class="stat-sub" id="s-cache-sub">유효 캐시 비율</div>
+              <div class="stat-value" id="s-pro" style="color:var(--purple)">—</div>
+              <div class="stat-sub" id="s-pro-sub">활성 구독자</div>
+            </div>
+            <div class="stat-card c-yellow">
+              <div class="stat-top">
+                <div class="stat-label">주간 재방문율</div>
+                <div class="stat-icon i-yellow"><svg fill="none" stroke="#f5c842" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" d="M4 4v5h5M20 20v-5h-5M4 9a8 8 0 0114-3m2 8a8 8 0 01-14 3"/></svg></div>
+              </div>
+              <div class="stat-value" id="s-return" style="color:var(--yellow)">—</div>
+              <div class="stat-sub">지난주 활성 유저의 이번주 복귀</div>
             </div>
           </div>
 
-          <!-- 차트 + 최근 유저 -->
-          <div class="three-col">
+          <div class="two-col">
             <div class="panel">
               <div class="panel-header">
-                <div class="panel-title">7일 활동 추이</div>
-                <span style="font-size:11px;color:var(--muted)">PostgreSQL daily_stats</span>
+                <div class="panel-title">신규 가입 (30일)</div>
+                <span class="panel-note">users.createdAt 기준</span>
               </div>
-              <div class="chart-wrap">
-                <canvas id="activity-chart" height="120"></canvas>
-              </div>
+              <div class="chart-wrap"><canvas id="ov-signup-chart" height="130"></canvas></div>
             </div>
             <div class="panel">
               <div class="panel-header">
-                <div class="panel-title">최근 가입 유저</div>
+                <div class="panel-title">DAU 추이 (30일)</div>
+                <span class="panel-note">user_stats 이벤트 발생 유저</span>
               </div>
+              <div class="chart-wrap"><canvas id="ov-dau-chart" height="130"></canvas></div>
+            </div>
+          </div>
+
+          <div class="three-col">
+            <div class="panel">
+              <div class="panel-header">
+                <div class="panel-title">최근 신고</div>
+                <button class="btn btn-ghost" onclick="switchTab('reports',document.querySelector('.nav-item[data-tab=reports]'))">전체 보기</button>
+              </div>
+              <div id="recent-reports-list">
+                <div class="list-item"><div class="skeleton" style="width:100%;height:16px"></div></div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-header"><div class="panel-title">최근 가입 유저</div></div>
               <div id="recent-users-list">
                 <div class="list-item"><div class="skeleton" style="width:100%"></div></div>
               </div>
             </div>
           </div>
+        </div>
 
-          <!-- 최근 신고 미리보기 -->
+        <!-- ══ 성장 지표 탭 ══ -->
+        <div id="tab-growth" class="tab-content">
+
+          <div class="stats-row">
+            <div class="stat-card c-accent">
+              <div class="stat-top"><div class="stat-label">오늘 신규</div></div>
+              <div class="stat-value" id="g-today" style="color:var(--accent)">—</div>
+              <div class="stat-sub" id="g-month">이번 달 —</div>
+            </div>
+            <div class="stat-card c-green">
+              <div class="stat-top"><div class="stat-label">MAU</div></div>
+              <div class="stat-value" id="g-mau" style="color:var(--green)">—</div>
+              <div class="stat-sub" id="g-wau">WAU —</div>
+            </div>
+            <div class="stat-card c-blue">
+              <div class="stat-top"><div class="stat-label">인증 유저</div></div>
+              <div class="stat-value" id="g-verified" style="color:var(--blue)">—</div>
+              <div class="stat-sub">인증마크 보유</div>
+            </div>
+            <div class="stat-card c-red">
+              <div class="stat-top"><div class="stat-label">차단 유저</div></div>
+              <div class="stat-value" id="g-blocked" style="color:var(--red)">—</div>
+              <div class="stat-sub">isBlocked = true</div>
+            </div>
+          </div>
+
+          <div class="two-col">
+            <div class="panel">
+              <div class="panel-header">
+                <div class="panel-title">일별 신규 가입</div>
+                <select class="range-select" id="g-range" onchange="loadGrowth(true)">
+                  <option value="30">최근 30일</option>
+                  <option value="90">최근 90일</option>
+                  <option value="180">최근 180일</option>
+                </select>
+              </div>
+              <div class="chart-wrap"><canvas id="g-daily-chart" height="130"></canvas></div>
+            </div>
+            <div class="panel">
+              <div class="panel-header">
+                <div class="panel-title">누적 가입자</div>
+                <span class="panel-note">같은 기간</span>
+              </div>
+              <div class="chart-wrap"><canvas id="g-cumulative-chart" height="130"></canvas></div>
+            </div>
+          </div>
+
+          <div class="two-col">
+            <div class="panel">
+              <div class="panel-header">
+                <div class="panel-title">월별 가입</div>
+                <span class="panel-note">전체 기간</span>
+              </div>
+              <div class="chart-wrap"><canvas id="g-monthly-chart" height="130"></canvas></div>
+            </div>
+            <div class="panel">
+              <div class="panel-header">
+                <div class="panel-title">언어 분포 (국가 추정)</div>
+                <span class="panel-note">users.lang — 푸시 등록 시 수집</span>
+              </div>
+              <div class="chart-wrap" style="max-width:340px;margin:0 auto"><canvas id="g-lang-chart" height="220"></canvas></div>
+            </div>
+          </div>
+
+          <div class="panel panel-mb" style="margin-bottom:24px">
+            <div class="panel-header">
+              <div class="panel-title">활동 이벤트 (30일)</div>
+              <span class="panel-note">코스 생성 · 장소 방문 · 좋아요 · 공유</span>
+            </div>
+            <div class="chart-wrap"><canvas id="g-events-chart" height="110"></canvas></div>
+          </div>
+
           <div class="panel">
             <div class="panel-header">
-              <div class="panel-title">최근 신고</div>
-              <button class="btn btn-ghost" onclick="switchTab('reports',document.querySelector('.nav-item:nth-child(4)'))">전체 보기</button>
+              <div class="panel-title">활발한 유저 TOP 10 (30일)</div>
+              <span class="panel-note">이벤트 합계 기준</span>
             </div>
-            <div id="recent-reports-list">
-              <div class="list-item"><div class="skeleton" style="width:100%;height:16px"></div></div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>#</th><th>유저</th><th>이벤트</th><th>활동일수</th><th>마지막 활동</th></tr></thead>
+                <tbody id="g-top-users"><tr><td colspan="5" style="padding:28px;text-align:center;color:var(--muted)">로딩 중...</td></tr></tbody>
+              </table>
             </div>
           </div>
         </div>
 
-        <!-- ── 신고 관리 탭 ── -->
+        <!-- ══ 콘텐츠 탭 ══ -->
+        <div id="tab-content-x" class="tab-content">
+
+          <div class="stats-row">
+            <div class="stat-card c-blue">
+              <div class="stat-top"><div class="stat-label">전체 코스</div></div>
+              <div class="stat-value" id="c-courses" style="color:var(--blue)">—</div>
+              <div class="stat-sub" id="c-courses7">최근 7일 —</div>
+            </div>
+            <div class="stat-card c-accent">
+              <div class="stat-top"><div class="stat-label">그룹 방</div></div>
+              <div class="stat-value" id="c-rooms" style="color:var(--accent)">—</div>
+              <div class="stat-sub">전체 방 수</div>
+            </div>
+            <div class="stat-card c-green">
+              <div class="stat-top"><div class="stat-label">채팅 메시지</div></div>
+              <div class="stat-value" id="c-messages" style="color:var(--green)">—</div>
+              <div class="stat-sub" id="c-messages7">최근 7일 —</div>
+            </div>
+            <div class="stat-card c-purple">
+              <div class="stat-top"><div class="stat-label">브이로그 렌더</div></div>
+              <div class="stat-value" id="c-vlogs" style="color:var(--purple)">—</div>
+              <div class="stat-sub" id="c-vlogs-sub">7일 — · 평균 —</div>
+            </div>
+          </div>
+
+          <div class="two-col">
+            <div class="panel">
+              <div class="panel-header">
+                <div class="panel-title">일별 코스 생성 (30일)</div>
+                <span class="panel-note">courses.createdAt 기준</span>
+              </div>
+              <div class="chart-wrap"><canvas id="c-daily-chart" height="130"></canvas></div>
+            </div>
+            <div class="panel">
+              <div class="panel-header">
+                <div class="panel-title">태그 분포</div>
+                <span class="panel-note">상위 5개 + 기타</span>
+              </div>
+              <div class="chart-wrap" style="max-width:340px;margin:0 auto"><canvas id="c-tag-chart" height="220"></canvas></div>
+            </div>
+          </div>
+
+          <div class="two-col">
+            <div class="panel">
+              <div class="panel-header">
+                <div class="panel-title">지역 TOP 10</div>
+                <span class="panel-note">코스 수 기준</span>
+              </div>
+              <div class="chart-wrap"><canvas id="c-region-chart" height="220"></canvas></div>
+            </div>
+            <div class="panel">
+              <div class="panel-header">
+                <div class="panel-title">브이로그 파이프라인</div>
+                <span class="panel-note">vlog_jobs 상태별</span>
+              </div>
+              <div id="c-vlog-status">
+                <div class="kv-row"><span class="kv-key">로딩 중...</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header">
+              <div class="panel-title">인기 코스 TOP 10</div>
+              <span class="panel-note">좋아요 수 기준</span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>#</th><th>코스</th><th>지역</th><th>태그</th><th>작성자</th><th>좋아요</th><th>관리</th></tr></thead>
+                <tbody id="c-top-courses"><tr><td colspan="7" style="padding:28px;text-align:center;color:var(--muted)">로딩 중...</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- ══ PRO 구독 탭 ══ -->
+        <div id="tab-subscription" class="tab-content">
+          <div id="sub-body">
+            <div class="empty"><div class="skeleton" style="width:60%;margin:0 auto"></div></div>
+          </div>
+        </div>
+
+        <!-- ══ 신고 관리 탭 ══ -->
         <div id="tab-reports" class="tab-content">
           <div class="panel">
             <div class="panel-header">
@@ -330,7 +538,7 @@
           </div>
         </div>
 
-        <!-- ── 유저 관리 탭 ── -->
+        <!-- ══ 유저 관리 탭 ══ -->
         <div id="tab-users" class="tab-content">
           <div class="panel">
             <div class="panel-header">
@@ -349,6 +557,61 @@
           </div>
         </div>
 
+        <!-- ══ 시스템 탭 ══ -->
+        <div id="tab-system" class="tab-content">
+
+          <div class="stats-row">
+            <div class="stat-card c-green">
+              <div class="stat-top"><div class="stat-label">서버 가동</div></div>
+              <div class="stat-value" id="sys-uptime" style="color:var(--green);font-size:24px">—</div>
+              <div class="stat-sub">tteona-api uptime</div>
+            </div>
+            <div class="stat-card c-blue">
+              <div class="stat-top"><div class="stat-label">메모리</div></div>
+              <div class="stat-value" id="sys-memory" style="color:var(--blue);font-size:24px">—</div>
+              <div class="stat-sub">RSS</div>
+            </div>
+            <div class="stat-card c-yellow">
+              <div class="stat-top"><div class="stat-label">디스크 여유</div></div>
+              <div class="stat-value" id="sys-disk" style="color:var(--yellow);font-size:24px">—</div>
+              <div class="stat-sub">Vlog 저장 공간</div>
+            </div>
+            <div class="stat-card c-purple">
+              <div class="stat-top"><div class="stat-label">Vlog 대기열</div></div>
+              <div class="stat-value" id="sys-queue" style="color:var(--purple);font-size:24px">—</div>
+              <div class="stat-sub">대기 / 처리 중</div>
+            </div>
+          </div>
+
+          <div class="two-col">
+            <div class="panel">
+              <div class="panel-header">
+                <div class="panel-title">푸시 등록 기기</div>
+                <span class="panel-note">device_tokens</span>
+              </div>
+              <div id="sys-push">
+                <div class="kv-row"><span class="kv-key">로딩 중...</span></div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-header">
+                <div class="panel-title">캐시 현황</div>
+                <span class="panel-note">PostgreSQL</span>
+              </div>
+              <div id="sys-caches">
+                <div class="kv-row"><span class="kv-key">로딩 중...</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header"><div class="panel-title">세션</div></div>
+            <div id="sys-sessions">
+              <div class="kv-row"><span class="kv-key">로딩 중...</span></div>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
   </div>
@@ -356,38 +619,60 @@
 
 <script>
 const API = '/api/admin';
-let TOKEN = localStorage.getItem('admin_token') || '';
+// 인증 토큰은 httpOnly 쿠키에만 있다 — JS는 토큰을 읽지도 저장하지도 않는다(XSS 탈취 방지).
+// 요청엔 credentials:'same-origin'으로 쿠키가 자동 첨부되고, 로그인 상태는 /session으로 확인한다.
 let allUsers = [], allReports = [];
 let refreshTimer, countdownTimer, countdown = 30;
-let activityChart = null;
+let currentTab = 'overview';
 
-// ── 초기화 ──
-if (TOKEN) { showDashboard(); loadAll(); }
+// 차트 인스턴스 레지스트리 — 같은 canvas에 재렌더 시 destroy
+const charts = {};
+// 차트 시리즈 팔레트 (다크 서피스 검증 통과, 고정 순서 — 순환 금지)
+const CH = ['#e0561f', '#4e8ef7', '#22a06b', '#9b6dff', '#b8860b'];
+const GRID = 'rgba(46,51,71,.5)', TICK = '#7c829a';
+
+// 클라이언트 측 분석 데이터 캐시 (2분) — 서버에도 5분 캐시가 있지만 왕복을 줄인다
+const clientCache = {}; // key → { at, data }
+async function cachedApi(path, ttlMs = 120000, force = false) {
+  const hit = clientCache[path];
+  if (!force && hit && Date.now() - hit.at < ttlMs) return hit.data;
+  const data = await api(path);
+  if (data && !data.error) clientCache[path] = { at: Date.now(), data };
+  return data;
+}
+
+// ── 초기화 ── 쿠키는 JS가 못 읽으므로 서버에 세션 유효성을 물어 판별한다
+probeSession();
+async function probeSession() {
+  try {
+    const r = await fetch(`${API}/session`, { credentials:'same-origin' });
+    if (r.ok) { showDashboard(); loadAll(); }
+  } catch {}
+}
 
 async function login() {
   const pw = document.getElementById('pw-input').value;
-  const r = await fetch(`${API}/login`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({password:pw}) });
-  const data = await r.json();
+  const r = await fetch(`${API}/login`, {
+    method:'POST', credentials:'same-origin',
+    headers:{'Content-Type':'application/json'}, body:JSON.stringify({password:pw})
+  });
+  const data = await r.json().catch(() => ({}));
   if (r.ok) {
-    TOKEN = data.token;
-    localStorage.setItem('admin_token', TOKEN);
+    // 토큰은 응답 body에 있어도 무시한다 — 인증은 서버가 심은 httpOnly 쿠키로만 흐른다.
+    document.getElementById('pw-input').value = '';
     showDashboard();
     loadAll();
   } else {
-    document.getElementById('login-error').textContent = data.error;
+    document.getElementById('login-error').textContent = data.error || '로그인 실패';
     document.getElementById('pw-input').style.borderColor = 'var(--red)';
   }
 }
 
 function logout() {
-  // 서버 세션도 무효화 (실패해도 로컬 로그아웃은 진행)
-  if (TOKEN) {
-    fetch(`${API}/logout`, { method:'POST', headers:{'Authorization':`Bearer ${TOKEN}`} }).catch(()=>{});
-  }
-  localStorage.removeItem('admin_token');
+  // 서버 세션 무효화 + 쿠키 삭제 (실패해도 화면은 로그인으로 전환)
+  fetch(`${API}/logout`, { method:'POST', credentials:'same-origin' }).catch(()=>{});
   clearInterval(refreshTimer);
   clearInterval(countdownTimer);
-  TOKEN = '';
   document.getElementById('dashboard').style.display = 'none';
   document.getElementById('login-screen').style.display = 'flex';
 }
@@ -413,74 +698,405 @@ function startAutoRefresh() {
 async function api(path, opts={}) {
   const r = await fetch(`${API}${path}`, {
     ...opts,
-    headers:{'Authorization':`Bearer ${TOKEN}`,'Content-Type':'application/json',...(opts.headers||{})}
+    credentials:'same-origin',   // httpOnly 쿠키 자동 첨부
+    headers:{'Content-Type':'application/json',...(opts.headers||{})}
   });
   if (r.status === 401) { logout(); return null; }
   return r.json();
 }
 
 async function loadAll() {
-  await Promise.all([loadStats(), loadReports(), loadUsers()]);
+  await Promise.all([loadStats(), loadReports(), loadUsers(), loadOverviewAnalytics()]);
   document.getElementById('update-time').textContent = '업데이트 ' + new Date().toLocaleTimeString('ko-KR');
   countdown = 30;
 }
 
-// ── 통계 ──
+// 현재 탭 강제 새로고침 (클라이언트 캐시 무시)
+async function refreshCurrentTab() {
+  const loaders = {
+    overview:     () => Promise.all([loadStats(), loadReports(), loadUsers(), loadOverviewAnalytics(true)]),
+    growth:       () => loadGrowth(true),
+    'content-x':  () => loadContent(true),
+    subscription: () => loadSubscription(true),
+    reports:      () => loadReports(),
+    users:        () => loadUsers(),
+    system:       () => loadSystem(true),
+  };
+  await (loaders[currentTab] || loadAll)();
+  document.getElementById('update-time').textContent = '업데이트 ' + new Date().toLocaleTimeString('ko-KR');
+}
+
+// ── 차트 헬퍼 ──
+function makeChart(id, config) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (charts[id]) charts[id].destroy();
+  charts[id] = new Chart(el.getContext('2d'), config);
+}
+const axisOpts = (stepInt = true) => ({
+  x:{ ticks:{color:TICK,font:{size:11},maxTicksLimit:12}, grid:{display:false} },
+  y:{ ticks:{color:TICK,font:{size:11},...(stepInt?{precision:0}:{})}, grid:{color:GRID}, beginAtZero:true }
+});
+const legendOpts = (show) => ({ display: show, labels:{ color:TICK, font:{size:11}, boxWidth:12, boxHeight:12 } });
+const mdLabel = (iso) => iso.slice(5).replace('-', '/');   // '2026-07-16' → '07/16'
+
+// ── 통계 (개요 카드 + 시스템) ──
+let lastStats = null;
 async function loadStats() {
   const d = await api('/stats');
   if (!d) return;
-  document.getElementById('s-users').textContent     = d.totalUsers.toLocaleString();
-  document.getElementById('s-courses').textContent   = d.totalCourses.toLocaleString();
-  document.getElementById('s-reports').textContent   = d.pendingReports;
-  document.getElementById('s-new7').textContent      = d.newUsers7d;
-  document.getElementById('s-active7').textContent   = d.activeUsers7d;
-  document.getElementById('s-courses7').textContent  = d.coursesCreated7d;
-  const pct = d.placesCacheTotal > 0 ? Math.round(d.placesCacheValid / d.placesCacheTotal * 100) : 0;
-  document.getElementById('s-cache').textContent     = pct + '%';
-  document.getElementById('s-cache-sub').textContent = `${d.placesCacheValid} / ${d.placesCacheTotal}건 유효`;
+  lastStats = d;
+  setText('s-users',    d.totalUsers.toLocaleString());
+  setText('s-courses',  d.totalCourses.toLocaleString());
+  setText('s-reports',  d.pendingReports);
+  setText('s-new7',     d.newUsers7d);
+  setText('s-courses7', `최근 7일 +${d.coursesCreated7d}`);
 
-  // 신고 배지
   const badge = document.getElementById('report-badge');
   if (d.pendingReports > 0) { badge.textContent = d.pendingReports; badge.style.display = ''; }
   else badge.style.display = 'none';
 
-  renderActivityChart(d);
+  if (currentTab === 'system') renderSystem();
 }
 
-function renderActivityChart(d) {
-  const labels = Array.from({length:7}, (_,i) => {
-    const dt = new Date(); dt.setDate(dt.getDate() - (6-i));
-    return (dt.getMonth()+1) + '/' + dt.getDate();
+// ── 개요 분석 (성장·활동 요약 + 차트 2개) ──
+async function loadOverviewAnalytics(force = false) {
+  const [growth, activity, sub] = await Promise.all([
+    cachedApi('/analytics/growth?days=30', 120000, force),
+    cachedApi('/analytics/activity?days=30', 120000, force),
+    cachedApi('/analytics/subscription', 300000, force),
+  ]);
+  if (activity && !activity.error) {
+    setText('s-dau', activity.dauToday.toLocaleString());
+    setText('s-dau-sub', `어제 ${activity.dauYesterday.toLocaleString()}`);
+    setText('s-wau-mau', `${activity.wau.toLocaleString()} / ${activity.mau.toLocaleString()}`);
+    setText('s-stickiness', `Stickiness ${activity.stickiness}% (DAU/MAU)`);
+    setText('s-return', activity.weeklyReturnRate === null ? '—' : activity.weeklyReturnRate + '%');
+    renderOverviewDauChart(activity.daily);
+  }
+  if (growth && !growth.error) {
+    setText('s-new-today', `오늘 +${growth.newToday} · 이번 달 +${growth.newThisMonth}`);
+    setText('s-users-sub', `인증 ${growth.verifiedUsers} · 차단 ${growth.blockedUsers}`);
+    renderOverviewSignupChart(growth.daily);
+  }
+  if (sub) {
+    if (!sub.configured) { setText('s-pro', '—'); setText('s-pro-sub', 'RevenueCat 미연동'); }
+    else if (sub.error)  { setText('s-pro', '!'); setText('s-pro-sub', '조회 실패'); }
+    else {
+      const m = (sub.metrics || []).find(x => x.id === 'active_subscriptions');
+      setText('s-pro', m ? Number(m.value).toLocaleString() : '—');
+      setText('s-pro-sub', '활성 구독자 (RevenueCat)');
+    }
+  }
+}
+
+function renderOverviewSignupChart(daily) {
+  makeChart('ov-signup-chart', {
+    type: 'bar',
+    data: { labels: daily.map(r => mdLabel(r.date)),
+      datasets: [{ label:'신규 가입', data: daily.map(r => r.count), backgroundColor: CH[0], borderRadius: 4, maxBarThickness: 18 }] },
+    options: { responsive:true, plugins:{ legend:legendOpts(false) }, scales: axisOpts() }
   });
-  // daily_stats가 아직 비어있으면 0으로 채운 데이터 표시
-  const userData    = Array(7).fill(0);
-  const courseData  = Array(7).fill(0);
-  if (d.dailyBreakdown) {
-    d.dailyBreakdown.forEach((row, i) => {
-      if (i < 7) { userData[i] = row.new_users; courseData[i] = row.courses_created; }
+}
+
+function renderOverviewDauChart(daily) {
+  // user_stats에 기록이 없는 날은 행 자체가 없으므로 0으로 채운다
+  const map = Object.fromEntries(daily.map(r => [r.date, r.dau]));
+  const keys = lastNDates(30);
+  makeChart('ov-dau-chart', {
+    type: 'line',
+    data: { labels: keys.map(mdLabel),
+      datasets: [{ label:'DAU', data: keys.map(k => map[k] || 0), borderColor: CH[1], borderWidth: 2,
+                   pointRadius: 2, pointHoverRadius: 5, tension: .3,
+                   backgroundColor: 'rgba(78,142,247,.12)', fill: true }] },
+    options: { responsive:true, interaction:{mode:'index',intersect:false},
+      plugins:{ legend:legendOpts(false) }, scales: axisOpts() }
+  });
+}
+
+function lastNDates(n) {
+  const out = [];
+  const now = Date.now();
+  for (let i = n - 1; i >= 0; i--) {
+    out.push(new Date(now - i * 86400000 + 9 * 3600000).toISOString().slice(0, 10)); // KST
+  }
+  return out;
+}
+
+// ── 성장 지표 탭 ──
+async function loadGrowth(force = false) {
+  const days = document.getElementById('g-range').value;
+  const [growth, activity] = await Promise.all([
+    cachedApi(`/analytics/growth?days=${days}`, 120000, force),
+    cachedApi('/analytics/activity?days=30', 120000, force),
+  ]);
+  if (growth && !growth.error) {
+    setText('g-today',    '+' + growth.newToday);
+    setText('g-month',    `이번 달 +${growth.newThisMonth}`);
+    setText('g-verified', growth.verifiedUsers.toLocaleString());
+    setText('g-blocked',  growth.blockedUsers.toLocaleString());
+
+    makeChart('g-daily-chart', {
+      type: 'bar',
+      data: { labels: growth.daily.map(r => mdLabel(r.date)),
+        datasets: [{ label:'신규 가입', data: growth.daily.map(r => r.count), backgroundColor: CH[0], borderRadius: 4, maxBarThickness: 18 }] },
+      options: { responsive:true, plugins:{ legend:legendOpts(false) }, scales: axisOpts() }
+    });
+
+    makeChart('g-cumulative-chart', {
+      type: 'line',
+      data: { labels: growth.daily.map(r => mdLabel(r.date)),
+        datasets: [{ label:'누적 가입자', data: growth.daily.map(r => r.cumulative), borderColor: CH[2], borderWidth: 2,
+                     pointRadius: 0, pointHoverRadius: 5, tension: .2,
+                     backgroundColor: 'rgba(34,160,107,.12)', fill: true }] },
+      options: { responsive:true, interaction:{mode:'index',intersect:false},
+        plugins:{ legend:legendOpts(false) }, scales: axisOpts() }
+    });
+
+    makeChart('g-monthly-chart', {
+      type: 'bar',
+      data: { labels: growth.monthly.map(r => r.month),
+        datasets: [{ label:'월별 가입', data: growth.monthly.map(r => r.count), backgroundColor: CH[1], borderRadius: 4, maxBarThickness: 34 }] },
+      options: { responsive:true, plugins:{ legend:legendOpts(false) }, scales: axisOpts() }
+    });
+
+    const LANG_LABEL = { ko:'한국어 🇰🇷', en:'영어 🇺🇸', ja:'일본어 🇯🇵', unknown:'미상' };
+    const langs = growth.langDist;
+    makeChart('g-lang-chart', {
+      type: 'doughnut',
+      data: { labels: langs.map(r => LANG_LABEL[r.lang] || r.lang),
+        datasets: [{ data: langs.map(r => r.count),
+          backgroundColor: langs.map((_, i) => i < 5 ? CH[i] : '#555b73'),
+          borderColor: '#1a1d27', borderWidth: 2 }] },
+      options: { responsive:true, cutout:'62%', plugins:{ legend:{...legendOpts(true), position:'bottom'} } }
     });
   }
+  if (activity && !activity.error) {
+    setText('g-mau', activity.mau.toLocaleString());
+    setText('g-wau', `WAU ${activity.wau.toLocaleString()} · Stickiness ${activity.stickiness}%`);
 
-  const ctx = document.getElementById('activity-chart').getContext('2d');
-  if (activityChart) activityChart.destroy();
-  activityChart = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [
-        { label:'신규 유저', data: userData,   backgroundColor:'rgba(255,107,53,.6)', borderRadius:4 },
-        { label:'코스 생성', data: courseData, backgroundColor:'rgba(78,142,247,.6)',  borderRadius:4 }
-      ]
-    },
-    options: {
-      responsive:true, maintainAspectRatio:true,
-      plugins:{ legend:{ labels:{ color:'#7c829a', font:{size:11} } } },
-      scales:{
-        x:{ ticks:{color:'#7c829a',font:{size:11}}, grid:{color:'rgba(46,51,71,.5)'} },
-        y:{ ticks:{color:'#7c829a',font:{size:11},stepSize:1}, grid:{color:'rgba(46,51,71,.5)'}, beginAtZero:true }
-      }
+    const map = Object.fromEntries(activity.daily.map(r => [r.date, r]));
+    const keys = lastNDates(30);
+    const series = [
+      { label:'코스 생성',  key:'courses' },
+      { label:'장소 방문',  key:'visited' },
+      { label:'좋아요',     key:'likes'   },
+      { label:'공유',       key:'shares'  },
+    ];
+    makeChart('g-events-chart', {
+      type: 'bar',
+      data: { labels: keys.map(mdLabel),
+        datasets: series.map((s, i) => ({
+          label: s.label, data: keys.map(k => map[k]?.[s.key] || 0),
+          backgroundColor: CH[i], borderRadius: 3, maxBarThickness: 18,
+          borderColor: '#1a1d27', borderWidth: { top: 1 },   // 스택 세그먼트 사이 2px급 간격
+        })) },
+      options: { responsive:true, interaction:{mode:'index',intersect:false},
+        plugins:{ legend:legendOpts(true) },
+        scales: { x:{...axisOpts().x, stacked:true}, y:{...axisOpts().y, stacked:true} } }
+    });
+
+    const tbody = document.getElementById('g-top-users');
+    if (!activity.topUsers.length) {
+      tbody.innerHTML = '<tr><td colspan="5" style="padding:28px;text-align:center;color:var(--muted)">활동 데이터 없음</td></tr>';
+    } else {
+      tbody.innerHTML = activity.topUsers.map((u, i) => `
+        <tr>
+          <td style="color:var(--muted)">${i + 1}</td>
+          <td>
+            <div style="display:flex;align-items:center;gap:10px">
+              <div class="avatar" style="background:${avatarColor(u.userId)};width:30px;height:30px;font-size:12px">${escapeHtml((u.nickname || '?')[0].toUpperCase())}</div>
+              <div>
+                <div style="font-weight:600">${escapeHtml(u.nickname || '(닉네임 없음)')}</div>
+                <div style="font-size:11px;color:var(--muted)">${escapeHtml((u.userId || '').slice(0, 12))}...</div>
+              </div>
+            </div>
+          </td>
+          <td style="font-weight:700">${u.events.toLocaleString()}</td>
+          <td>${u.activeDays}일</td>
+          <td style="color:var(--muted);font-size:12px">${u.lastActive ? new Date(u.lastActive).toLocaleString('ko-KR') : '—'}</td>
+        </tr>`).join('');
     }
+  }
+}
+
+// ── 콘텐츠 탭 ──
+async function loadContent(force = false) {
+  const d = await cachedApi('/analytics/content', 120000, force);
+  if (!d || d.error) return;
+
+  setText('c-courses',   d.courses.total.toLocaleString());
+  setText('c-courses7',  `최근 7일 +${d.courses.daily.slice(-7).reduce((s, r) => s + r.count, 0)}`);
+  setText('c-rooms',     d.rooms.total.toLocaleString());
+  setText('c-messages',  d.messages.total.toLocaleString());
+  setText('c-messages7', `최근 7일 +${d.messages.last7d.toLocaleString()}`);
+  setText('c-vlogs',     d.vlogs.total.toLocaleString());
+  setText('c-vlogs-sub', `7일 +${d.vlogs.last7d} · 평균 렌더 ${fmtDuration(d.vlogs.avgRenderSec)}`);
+
+  makeChart('c-daily-chart', {
+    type: 'bar',
+    data: { labels: d.courses.daily.map(r => mdLabel(r.date)),
+      datasets: [{ label:'코스 생성', data: d.courses.daily.map(r => r.count), backgroundColor: CH[1], borderRadius: 4, maxBarThickness: 18 }] },
+    options: { responsive:true, plugins:{ legend:legendOpts(false) }, scales: axisOpts() }
   });
+
+  // 태그 도넛 — 상위 5개 + 기타 폴드 (팔레트 순환 금지)
+  const tags = d.courses.byTag;
+  const top5 = tags.slice(0, 5);
+  const rest = tags.slice(5).reduce((s, r) => s + r.count, 0);
+  const tagLabels = top5.map(r => r.tag).concat(rest > 0 ? ['기타'] : []);
+  const tagData   = top5.map(r => r.count).concat(rest > 0 ? [rest] : []);
+  makeChart('c-tag-chart', {
+    type: 'doughnut',
+    data: { labels: tagLabels,
+      datasets: [{ data: tagData,
+        backgroundColor: tagLabels.map((_, i) => i < 5 ? CH[i] : '#555b73'),
+        borderColor: '#1a1d27', borderWidth: 2 }] },
+    options: { responsive:true, cutout:'62%', plugins:{ legend:{...legendOpts(true), position:'bottom'} } }
+  });
+
+  // 지역 TOP10 — 크기 비교(단일 색상 가로 바)
+  makeChart('c-region-chart', {
+    type: 'bar',
+    data: { labels: d.courses.byRegion.map(r => r.region),
+      datasets: [{ label:'코스 수', data: d.courses.byRegion.map(r => r.count), backgroundColor: CH[2], borderRadius: 4, maxBarThickness: 16 }] },
+    options: { responsive:true, indexAxis:'y', plugins:{ legend:legendOpts(false) },
+      scales: { x:{ ticks:{color:TICK,font:{size:11},precision:0}, grid:{color:GRID}, beginAtZero:true },
+                y:{ ticks:{color:TICK,font:{size:11}}, grid:{display:false} } } }
+  });
+
+  // 브이로그 상태 — 상태값이므로 색+아이콘+라벨 (도넛 대신 상태 행)
+  const st = d.vlogs.byStatus;
+  const failRate = d.vlogs.total > 0 ? Math.round(st.failed / d.vlogs.total * 100) : 0;
+  document.getElementById('c-vlog-status').innerHTML = `
+    <div class="kv-row"><span class="kv-key">✅ 완료</span><span class="kv-val" style="color:var(--green)">${st.completed.toLocaleString()}</span></div>
+    <div class="kv-row"><span class="kv-key">⏳ 대기</span><span class="kv-val" style="color:var(--yellow)">${st.pending}</span></div>
+    <div class="kv-row"><span class="kv-key">🎬 처리 중</span><span class="kv-val" style="color:var(--blue)">${st.processing}</span></div>
+    <div class="kv-row"><span class="kv-key">📤 업로드 중</span><span class="kv-val">${st.uploading}</span></div>
+    <div class="kv-row"><span class="kv-key">❌ 실패</span><span class="kv-val" style="color:var(--red)">${st.failed} (${failRate}%)</span></div>
+    <div class="kv-row"><span class="kv-key">평균 렌더 시간</span><span class="kv-val">${fmtDuration(d.vlogs.avgRenderSec)}</span></div>`;
+
+  const tbody = document.getElementById('c-top-courses');
+  if (!d.courses.topLiked.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="padding:28px;text-align:center;color:var(--muted)">코스 없음</td></tr>';
+  } else {
+    tbody.innerHTML = d.courses.topLiked.map((c, i) => `
+      <tr>
+        <td style="color:var(--muted)">${i + 1}</td>
+        <td style="font-weight:600">${escapeHtml(c.courseName || '(제목 없음)')}</td>
+        <td><span class="badge badge-blue">${escapeHtml(c.region)}</span></td>
+        <td><span class="badge badge-muted">${escapeHtml(c.tag)}</span></td>
+        <td style="color:var(--muted);font-size:12px">${escapeHtml(c.authorNickname || '—')}</td>
+        <td style="font-weight:700;color:var(--accent)">♥ ${c.likeCount.toLocaleString()}</td>
+        <td><button class="btn btn-danger" onclick="deleteCourseFromList('${c.id}')">삭제</button></td>
+      </tr>`).join('');
+  }
+}
+
+async function deleteCourseFromList(courseId) {
+  if (!confirm('이 코스를 삭제하시겠습니까?\n삭제 후 복구할 수 없습니다.')) return;
+  await api(`/courses/${courseId}`, {method:'DELETE'});
+  delete clientCache['/analytics/content'];
+  loadContent(true); loadStats();
+}
+
+// ── PRO 구독 탭 ──
+// RevenueCat Overview 지표의 공식 정의에 맞춘 라벨.
+// new_customers/active_users는 결제가 아니라 App User ID 기준이므로 결제 지표로 읽히지 않게 적는다.
+const RC_METRIC_LABEL = {
+  active_subscriptions: { name:'활성 구독',          sub:'유효한 PRO 유료 구독 (체험 제외)' },
+  active_trials:        { name:'활성 체험',          sub:'진행 중인 무료 체험' },
+  mrr:                  { name:'MRR',                sub:'월 반복 수익' },
+  revenue:              { name:'수익 (28일)',        sub:'최근 28일 총매출 (광고 수익 제외)' },
+  new_customers:        { name:'신규 고객 (28일)',   sub:'새로 생긴 앱 유저 ID — 결제와 무관' },
+  active_users:         { name:'활성 사용자 (28일)', sub:'RevenueCat과 통신한 유저 (≈앱 실행)' },
+};
+async function loadSubscription(force = false) {
+  const d = await cachedApi('/analytics/subscription', 300000, force);
+  const el = document.getElementById('sub-body');
+  if (!d) return;
+  if (!d.configured) {
+    el.innerHTML = `
+      <div class="panel" style="margin-bottom:16px">
+        <div class="panel-header"><div class="panel-title">RevenueCat 연동 안내</div></div>
+        <div style="padding:20px">
+          <div class="info-box">
+            PRO 구독 지표를 보려면 WAS <b>.env</b>에 아래 두 값을 추가하고 <code>pm2 restart tteona-api</code> 하세요.<br><br>
+            · <code>REVENUECAT_API_KEY</code> — RevenueCat 콘솔 → Project Settings → API Keys → <b>v2 Secret key</b> (sk_...)<br>
+            · <code>REVENUECAT_PROJECT_ID</code> — Project Settings 화면 URL의 <code>projects/</code> 뒤 ID<br><br>
+            연동되면 활성 구독 · 체험 · MRR · 28일 수익 등이 이 탭과 개요 카드에 표시됩니다.
+            <b>tteona PRO</b>가 아직 스토어 미출시 상태면 연동해도 0으로 나오는 게 정상입니다.
+          </div>
+        </div>
+      </div>`;
+    return;
+  }
+  if (d.error) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">RevenueCat 조회 실패: ${escapeHtml(d.error)}</div></div>`;
+    return;
+  }
+  const cards = (d.metrics || []).map((m, i) => {
+    const meta = RC_METRIC_LABEL[m.id] || { name: m.name || m.id, sub: '' };
+    const isMoney = m.unit === '$' || m.id === 'mrr' || m.id === 'revenue';
+    const val = isMoney ? '$' + Number(m.value || 0).toLocaleString(undefined, {maximumFractionDigits:2})
+                        : Number(m.value || 0).toLocaleString();
+    const colors = ['purple','accent','green','blue','yellow','purple','blue'];
+    const c = colors[i % colors.length];
+    return `
+      <div class="stat-card c-${c}">
+        <div class="stat-top"><div class="stat-label">${escapeHtml(meta.name)}</div></div>
+        <div class="stat-value" style="color:var(--${c})">${val}</div>
+        <div class="stat-sub">${escapeHtml(meta.sub)}</div>
+      </div>`;
+  }).join('');
+  el.innerHTML = `
+    <div class="stats-row">${cards}</div>
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">데이터 출처</div>
+        <span class="panel-note">10분 캐시 · 마지막 조회 ${d.fetchedAt ? new Date(d.fetchedAt).toLocaleString('ko-KR') : '—'}</span>
+      </div>
+      <div style="padding:16px 20px;font-size:12px;color:var(--muted)">
+        RevenueCat Metrics Overview API — entitlement <code style="background:var(--surface2);padding:2px 6px;border-radius:5px">pro</code> 기준.
+        상세 차트·코호트는 RevenueCat 대시보드에서 확인하세요.
+      </div>
+    </div>`;
+}
+
+// ── 시스템 탭 ──
+async function loadSystem(force = false) {
+  await Promise.all([loadStats(), loadContent(force)]);
+  renderSystem();
+}
+
+function renderSystem() {
+  const d = lastStats;
+  if (!d || !d.system) return;
+  const s = d.system;
+  setText('sys-uptime', fmtDuration(s.uptimeSec));
+  setText('sys-memory', s.memoryRssMB + ' MB');
+  setText('sys-disk',   s.diskFreeMB === null ? '—' : (s.diskFreeMB >= 1024 ? (s.diskFreeMB / 1024).toFixed(1) + ' GB' : s.diskFreeMB + ' MB'));
+  setText('sys-queue',  `${s.vlogPending} / ${s.vlogProcessing}`);
+
+  const pct = d.placesCacheTotal > 0 ? Math.round(d.placesCacheValid / d.placesCacheTotal * 100) : 0;
+  document.getElementById('sys-sessions').innerHTML = `
+    <div class="kv-row"><span class="kv-key">활성 관리자 세션</span><span class="kv-val">${s.adminSessions}</span></div>
+    <div class="kv-row"><span class="kv-key">Places 캐시 유효율</span><span class="kv-val">${pct}% (${d.placesCacheValid.toLocaleString()} / ${d.placesCacheTotal.toLocaleString()})</span></div>`;
+
+  const c = clientCache['/analytics/content']?.data;
+  if (c && !c.error) {
+    document.getElementById('sys-push').innerHTML = `
+      <div class="kv-row"><span class="kv-key">전체 기기</span><span class="kv-val">${c.push.total.toLocaleString()}</span></div>
+      <div class="kv-row"><span class="kv-key">iOS (APNs)</span><span class="kv-val">${c.push.ios.toLocaleString()}</span></div>
+      <div class="kv-row"><span class="kv-key">Android (FCM)</span><span class="kv-val">${c.push.android.toLocaleString()}</span></div>
+      ${c.push.byLang.map(r => `<div class="kv-row"><span class="kv-key">언어 · ${escapeHtml(r.lang || '미상')}</span><span class="kv-val">${r.count.toLocaleString()}</span></div>`).join('')}`;
+    document.getElementById('sys-caches').innerHTML = `
+      <div class="kv-row"><span class="kv-key">Places 캐시</span><span class="kv-val">${c.caches.placesValid.toLocaleString()} / ${c.caches.placesTotal.toLocaleString()} 유효</span></div>
+      <div class="kv-row"><span class="kv-key">장소 사진</span><span class="kv-val">${c.caches.photos.toLocaleString()}</span></div>
+      <div class="kv-row"><span class="kv-key">번역 캐시</span><span class="kv-val">${c.caches.translations.toLocaleString()}</span></div>
+      <div class="kv-row"><span class="kv-key">추천 캐시</span><span class="kv-val">${c.caches.recommendations.toLocaleString()}</span></div>
+      <div class="kv-row"><span class="kv-key">코스 썸네일</span><span class="kv-val">${c.caches.thumbnails.toLocaleString()}</span></div>`;
+  }
 }
 
 // ── 신고 ──
@@ -505,16 +1121,16 @@ function renderReports(reports) {
       <div class="report-top">
         <div class="report-meta">
           <div class="report-reason">
-            <span class="badge ${r.targetType==='course'?'badge-blue':'badge-yellow'}">${r.targetType || '기타'}</span>
-            &nbsp;${r.reason || '사유 없음'}
+            <span class="badge ${r.targetType==='course'?'badge-blue':'badge-yellow'}">${escapeHtml(r.targetType || '기타')}</span>
+            &nbsp;${escapeHtml(r.reason || '사유 없음')}
           </div>
           <div class="report-ids" style="margin-top:6px">
-            신고 대상: ${r.targetId || '—'}<br>
-            신고자: ${r.reporterId?.slice(0,20) || '—'}... · ${r.createdAt ? new Date(r.createdAt).toLocaleString('ko-KR') : '—'}
+            신고 대상: ${escapeHtml(r.targetId || '—')}<br>
+            신고자: ${escapeHtml(r.reporterId?.slice(0,20) || '—')}... · ${r.createdAt ? new Date(r.createdAt).toLocaleString('ko-KR') : '—'}
           </div>
         </div>
         <div class="report-actions">
-          ${r.targetType === 'course' ? `<button class="btn btn-danger" onclick="deleteCourse('${r.targetId}','${r.id}')">코스 삭제</button>` : ''}
+          ${r.targetType === 'course' ? `<button class="btn btn-danger" data-cid="${escapeHtml(r.targetId || '')}" data-rid="${escapeHtml(r.id)}" onclick="deleteCourse(this.dataset.cid, this.dataset.rid)">코스 삭제</button>` : ''}
           <button class="btn btn-success" onclick="resolveReport('${r.id}')">해결</button>
         </div>
       </div>
@@ -534,8 +1150,8 @@ function renderRecentReports(reports) {
         <svg width="14" height="14" fill="none" stroke="#ff5c72" viewBox="0 0 24 24"><path stroke-width="2" d="M12 9v4m0 4h.01"/></svg>
       </div>
       <div class="list-info">
-        <div class="list-name">${r.reason || '(사유 없음)'}</div>
-        <div class="list-sub">${r.targetType} · ${r.createdAt ? new Date(r.createdAt).toLocaleDateString('ko-KR') : '—'}</div>
+        <div class="list-name">${escapeHtml(r.reason || '(사유 없음)')}</div>
+        <div class="list-sub">${escapeHtml(r.targetType || '기타')} · ${r.createdAt ? new Date(r.createdAt).toLocaleDateString('ko-KR') : '—'}</div>
       </div>
       <span class="badge badge-red">미처리</span>
     </div>
@@ -580,14 +1196,14 @@ function renderUsers(users) {
     <tr>
       <td>
         <div style="display:flex;align-items:center;gap:10px">
-          <div class="avatar" style="background:${avatarColor(u.uid)}">${(u.nickname||'?')[0].toUpperCase()}</div>
+          <div class="avatar" style="background:${avatarColor(u.uid)}">${escapeHtml((u.nickname||'?')[0].toUpperCase())}</div>
           <div>
-            <div style="font-weight:600">${u.nickname || '(닉네임 없음)'}</div>
+            <div style="font-weight:600">${escapeHtml(u.nickname || '(닉네임 없음)')}</div>
             <div style="font-size:11px;color:var(--muted)">${u.uid?.slice(0,12)}...</div>
           </div>
         </div>
       </td>
-      <td style="color:var(--muted);font-size:12px">${u.email || '—'}</td>
+      <td style="color:var(--muted);font-size:12px">${escapeHtml(u.email || '—')}</td>
       <td style="color:var(--muted);font-size:12px">${u.createdAt ? new Date(u.createdAt).toLocaleDateString('ko-KR') : '—'}</td>
       <td>${u.isBlocked ? '<span class="badge badge-red">차단됨</span>' : '<span class="badge badge-green">정상</span>'}</td>
       <td>${u.isVerified
@@ -644,10 +1260,10 @@ function renderRecentUsers(users) {
   if (!users.length) { el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">유저 없음</div>'; return; }
   el.innerHTML = users.map(u => `
     <div class="list-item">
-      <div class="avatar" style="background:${avatarColor(u.uid)};color:#fff">${(u.nickname||'?')[0].toUpperCase()}</div>
+      <div class="avatar" style="background:${avatarColor(u.uid)};color:#fff">${escapeHtml((u.nickname||'?')[0].toUpperCase())}</div>
       <div class="list-info">
-        <div class="list-name">${u.nickname || '(닉네임 없음)'}</div>
-        <div class="list-sub">${u.email || '—'}</div>
+        <div class="list-name">${escapeHtml(u.nickname || '(닉네임 없음)')}</div>
+        <div class="list-sub">${escapeHtml(u.email || '—')}</div>
       </div>
       <div class="list-right">${u.createdAt ? new Date(u.createdAt).toLocaleDateString('ko-KR') : '—'}</div>
     </div>
@@ -656,17 +1272,34 @@ function renderRecentUsers(users) {
 
 // ── 탭 전환 ──
 function switchTab(id, navEl) {
+  // 'content'는 HTML id 충돌을 피하려 tab-content-x를 쓴다
+  const domId = id === 'content' ? 'content-x' : id;
   document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  document.getElementById(`tab-${id}`).classList.add('active');
+  document.getElementById(`tab-${domId}`).classList.add('active');
   if (navEl) navEl.classList.add('active');
-  const titles = {overview:'개요', reports:'신고 관리', users:'유저 관리'};
+  const titles = {overview:'개요', growth:'성장 지표', content:'콘텐츠', subscription:'PRO 구독', reports:'신고 관리', users:'유저 관리', system:'시스템'};
   document.getElementById('page-title').textContent = titles[id] || id;
+  currentTab = domId;
+
+  // 탭 진입 시 지연 로드 (클라이언트 캐시 2분)
+  if (id === 'growth') loadGrowth();
+  else if (id === 'content') loadContent();
+  else if (id === 'subscription') loadSubscription();
+  else if (id === 'system') loadSystem();
 }
 
 // ── 유틸 ──
 const COLORS = ['#ff6b35','#4e8ef7','#3ecf8e','#f5c842','#9b6dff','#ff5c72'];
 function avatarColor(uid) { return COLORS[(uid||'').charCodeAt(0) % COLORS.length]; }
+function setText(id, v) { const el = document.getElementById(id); if (el) el.textContent = v; }
+function fmtDuration(sec) {
+  sec = Number(sec) || 0;
+  if (sec < 60) return sec + '초';
+  if (sec < 3600) return Math.floor(sec / 60) + '분 ' + (sec % 60) + '초';
+  if (sec < 86400) return Math.floor(sec / 3600) + '시간 ' + Math.floor(sec % 3600 / 60) + '분';
+  return Math.floor(sec / 86400) + '일 ' + Math.floor(sec % 86400 / 3600) + '시간';
+}
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c =>
     ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));

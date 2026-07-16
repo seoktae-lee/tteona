@@ -158,8 +158,17 @@ service cloud.firestore {
     }
 
     // reports 컬렉션 (콘텐츠 신고)
+    //   관리자 대시보드가 이 문서들을 렌더하므로, 저장 단계에서 필드를 조인다:
+    //   targetType은 앱이 쓰는 값(course/review)으로 한정하고, 문자열 길이를 캡해
+    //   저장형 XSS·거대 페이로드를 애초에 차단한다(프론트 이스케이프와 이중 방어).
     match /reports/{reportId} {
-      allow create: if isSignedIn() && request.resource.data.reporterId == request.auth.uid;
+      allow create: if isSignedIn()
+        && request.resource.data.reporterId == request.auth.uid
+        && request.resource.data.targetType in ['course', 'review']
+        && request.resource.data.targetId is string
+        && request.resource.data.targetId.size() <= 200
+        && request.resource.data.reason is string
+        && request.resource.data.reason.size() <= 1000;
       allow read, update, delete: if false;
     }
 

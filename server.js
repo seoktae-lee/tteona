@@ -2828,13 +2828,40 @@ function courseNotFoundHtml() {
 
 // ADMIN_PASSWORD 는 파일 상단에서 환경변수 필수로 로드됨.
 // 세션: 로그인마다 무작위 토큰 발급, 24시간 만료. 서버 재시작 시 전원 로그아웃(재로그인으로 충분).
+// 토큰 전달: 브라우저는 httpOnly 쿠키(admin_session)로만 받아 JS가 못 읽는다(XSS로 탈취 불가).
+//           curl/배포 스크립트는 Authorization: Bearer 헤더도 계속 허용한다.
 const ADMIN_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const adminSessions = new Map(); // token → expiresAt
+const ADMIN_COOKIE = 'admin_session';
+// path를 /api/admin으로 좁히고 SameSite=Strict로 CSRF를 차단, HTTPS 전용(secure).
+const ADMIN_COOKIE_OPTS = { httpOnly: true, secure: true, sameSite: 'strict', path: '/api/admin' };
+
+// req.headers.cookie 수동 파싱 (cookie-parser 의존성 없이). 값은 URL 디코드.
+function parseCookies(req) {
+  const out = {};
+  const raw = req.headers.cookie;
+  if (!raw) return out;
+  for (const part of raw.split(';')) {
+    const i = part.indexOf('=');
+    if (i < 0) continue;
+    const k = part.slice(0, i).trim();
+    if (!k || (k in out)) continue;
+    try { out[k] = decodeURIComponent(part.slice(i + 1).trim()); }
+    catch { out[k] = part.slice(i + 1).trim(); }
+  }
+  return out;
+}
+
+// 토큰 소스: Authorization 헤더 우선(스크립트), 없으면 httpOnly 쿠키(브라우저)
+function adminTokenFrom(req) {
+  const auth = req.headers['authorization'] || '';
+  if (auth.startsWith('Bearer ')) return auth.slice(7);
+  return parseCookies(req)[ADMIN_COOKIE] || '';
+}
 
 function adminAuth(req, res, next) {
-  const auth = req.headers['authorization'] || '';
-  const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-  const expiresAt = adminSessions.get(token);
+  const token = adminTokenFrom(req);
+  const expiresAt = token ? adminSessions.get(token) : undefined;
   if (expiresAt && Date.now() < expiresAt) return next();
   if (expiresAt) adminSessions.delete(token);
   res.status(401).json({ error: 'Unauthorized' });
@@ -2856,7 +2883,9 @@ app.post('/api/admin/login', (req, res) => {
     adminLoginAttempts.delete(ip);
     const token = randomBytes(32).toString('hex');
     adminSessions.set(token, now + ADMIN_SESSION_TTL_MS);
-    return res.json({ token });
+    // 브라우저용: httpOnly 쿠키. 응답 body의 token은 curl/배포 스크립트 전용(브라우저 JS는 무시).
+    res.cookie(ADMIN_COOKIE, token, { ...ADMIN_COOKIE_OPTS, maxAge: ADMIN_SESSION_TTL_MS });
+    return res.json({ ok: true, token });
   }
   if (!entry || now >= entry.resetAt) {
     adminLoginAttempts.set(ip, { count: 1, resetAt: now + 15 * 60 * 1000 });
@@ -2866,12 +2895,16 @@ app.post('/api/admin/login', (req, res) => {
   res.status(401).json({ error: '비밀번호가 틀렸습니다' });
 });
 
-// 로그아웃 — 서버 측 세션 즉시 무효화 (localStorage에서 훔친 토큰도 함께 죽는다)
+// 로그아웃 — 서버 측 세션 즉시 무효화 + 쿠키 제거
 app.post('/api/admin/logout', (req, res) => {
-  const auth = req.headers['authorization'] || '';
-  if (auth.startsWith('Bearer ')) adminSessions.delete(auth.slice(7));
+  const token = adminTokenFrom(req);
+  if (token) adminSessions.delete(token);
+  res.clearCookie(ADMIN_COOKIE, ADMIN_COOKIE_OPTS);
   res.json({ ok: true });
 });
+
+// 세션 확인 — 프론트가 페이지 로드 시 로그인 상태를 판별한다(쿠키는 JS가 못 읽으므로).
+app.get('/api/admin/session', adminAuth, (req, res) => res.json({ ok: true }));
 
 // 만료 엔트리 주기 청소 — adminSessions·adminLoginAttempts 무한 성장 방지
 setInterval(() => {
@@ -2887,7 +2920,7 @@ setInterval(() => {
 app.get('/api/admin/stats', adminAuth, async (req, res) => {
   try {
     const weekAgo = Timestamp.fromMillis(Date.now() - 7 * 86400000);
-    const [usersSnap, newUsersSnap, coursesSnap, reportsSnap, pgStats, activeStats, cacheStats] = await Promise.all([
+    const [usersSnap, newUsersSnap, coursesSnap, reportsSnap, pgStats, activeStats, cacheStats, vlogQueue, diskFree] = await Promise.all([
       db.collection('users').count().get(),
       // 신규 가입: users 문서 createdAt 기준 (daily_stats.new_users는 적재 로직이 없어 항상 0이었음)
       db.collection('users').where('createdAt', '>=', weekAgo).count().get(),
@@ -2905,6 +2938,12 @@ app.get('/api/admin/stats', adminAuth, async (req, res) => {
         WHERE stat_date >= CURRENT_DATE - INTERVAL '7 days'
       `),
       pgPool.query('SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE expires_at > NOW()) AS valid FROM places_cache'),
+      pgPool.query(`
+        SELECT COUNT(*) FILTER (WHERE status = 'pending')::int    AS pending,
+               COUNT(*) FILTER (WHERE status = 'processing')::int AS processing
+        FROM vlog_jobs
+      `),
+      diskFreeMB(VLOG_DIR).catch(() => null),
     ]);
 
     res.json({
@@ -2916,6 +2955,15 @@ app.get('/api/admin/stats', adminAuth, async (req, res) => {
       coursesCreated7d: Number(pgStats.rows[0].courses_7d),
       placesCacheTotal: Number(cacheStats.rows[0].total),
       placesCacheValid: Number(cacheStats.rows[0].valid),
+      // 시스템 상태 — 시스템 탭에서 표시
+      system: {
+        uptimeSec:      Math.floor(process.uptime()),
+        memoryRssMB:    Math.round(process.memoryUsage().rss / 1048576),
+        diskFreeMB:     diskFree,
+        vlogPending:    vlogQueue.rows[0].pending,
+        vlogProcessing: vlogQueue.rows[0].processing,
+        adminSessions:  adminSessions.size,
+      },
     });
   } catch (err) {
     console.error('admin stats error:', err);
@@ -3051,6 +3099,322 @@ app.post('/api/admin/users/:uid/verify', adminAuth, async (req, res) => {
   } catch (err) {
     console.error('admin verify error:', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Admin Analytics ──────────────────────────────────────────────────────────
+// 대시보드 상세 지표. users/courses 전수 스캔은 select()로 필요한 필드만 받고
+// 5분 메모리 캐시를 둔다 — 대시보드 자동 새로고침이 Firestore 읽기 비용을 키우지 않도록.
+
+const analyticsCache = new Map(); // key → { at, data }
+async function cachedAnalytics(key, ttlMs, loader) {
+  const hit = analyticsCache.get(key);
+  if (hit && Date.now() - hit.at < ttlMs) return hit.data;
+  const data = await loader();
+  analyticsCache.set(key, { at: Date.now(), data });
+  return data;
+}
+
+// KST 기준 YYYY-MM-DD (서버 TZ와 무관하게 고정)
+function kstDateKey(d) {
+  return new Date(d.getTime() + 9 * 3600000).toISOString().slice(0, 10);
+}
+
+function scanAllUsers() {
+  return cachedAnalytics('users-scan', 5 * 60 * 1000, async () => {
+    const snap = await db.collection('users')
+      .select('createdAt', 'isBlocked', 'isVerified').get();
+    return snap.docs.map(d => {
+      const x = d.data();
+      return {
+        createdAt:  x.createdAt?.toDate?.() || null,
+        isBlocked:  x.isBlocked === true,
+        isVerified: x.isVerified === true,
+      };
+    });
+  });
+}
+
+// 언어 분포 — 기기 언어는 userPrivate.lang에 저장된다(FCM 토큰 등록 시).
+// 푸시 미등록 유저는 잡히지 않으므로 'unknown'으로 집계된다.
+function scanUserLangs() {
+  return cachedAnalytics('user-langs-scan', 5 * 60 * 1000, async () => {
+    const snap = await db.collection('userPrivate').select('lang').get();
+    const dist = new Map();
+    snap.docs.forEach(d => {
+      const lang = typeof d.data().lang === 'string' ? d.data().lang.slice(0, 8) : null;
+      if (lang) dist.set(lang, (dist.get(lang) || 0) + 1);
+    });
+    return dist;
+  });
+}
+
+function scanAllCourses() {
+  return cachedAnalytics('courses-scan', 5 * 60 * 1000, async () => {
+    const snap = await db.collection('courses')
+      .select('courseName', 'tag', 'region', 'likeCount', 'authorId', 'createdAt').get();
+    return snap.docs.map(d => {
+      const x = d.data();
+      return {
+        id:         d.id,
+        courseName: x.courseName || '',
+        tag:        typeof x.tag === 'string' ? x.tag : '기타',
+        region:     typeof x.region === 'string' && x.region ? x.region : '미상',
+        likeCount:  Number(x.likeCount) || 0,
+        authorId:   x.authorId || '',
+        createdAt:  x.createdAt?.toDate?.() || null,
+      };
+    });
+  });
+}
+
+// TOP 유저·인기 코스에 닉네임을 붙인다 (uid → nickname, 실패는 빈 문자열)
+async function nicknamesByUid(uids) {
+  const unique = [...new Set(uids.filter(Boolean))];
+  if (!unique.length) return {};
+  const refs = unique.map(uid => db.collection('users').doc(uid));
+  const docs = await db.getAll(...refs, { fieldMask: ['nickname'] }).catch(() => []);
+  const out = {};
+  docs.forEach(d => { if (d.exists) out[d.id] = d.data().nickname || ''; });
+  return out;
+}
+
+// 성장 지표 — 일별/월별 가입 추이, 누적, 언어(국가 추정) 분포
+app.get('/api/admin/analytics/growth', adminAuth, async (req, res) => {
+  try {
+    const days = Math.max(7, Math.min(365, parseInt(req.query.days) || 30));
+    const [users, langScan] = await Promise.all([scanAllUsers(), scanUserLangs()]);
+
+    const byDay = new Map(), byMonth = new Map();
+    const langDist = new Map(langScan);
+    let blocked = 0, verified = 0, dated = 0;
+    for (const u of users) {
+      if (u.isBlocked) blocked++;
+      if (u.isVerified) verified++;
+      if (!u.createdAt) continue;
+      dated++;
+      const k = kstDateKey(u.createdAt);
+      byDay.set(k, (byDay.get(k) || 0) + 1);
+      byMonth.set(k.slice(0, 7), (byMonth.get(k.slice(0, 7)) || 0) + 1);
+    }
+
+    // 최근 N일 일별 + 누적 (윈도 이전 가입자·createdAt 없는 유저는 base에 깔린다)
+    const now = Date.now();
+    const dailyKeys = [];
+    for (let i = days - 1; i >= 0; i--) dailyKeys.push(kstDateKey(new Date(now - i * 86400000)));
+    let cumulative = users.length - dated;
+    for (const [k, v] of byDay) if (k < dailyKeys[0]) cumulative += v;
+    const daily = dailyKeys.map(k => {
+      const count = byDay.get(k) || 0;
+      cumulative += count;
+      return { date: k, count, cumulative };
+    });
+
+    // 푸시 미등록(언어 미수집) 유저 — 탈퇴 잔여 userPrivate 문서가 있으면 음수가 될 수 있어 0으로 클램프
+    const langKnown = [...langDist.values()].reduce((s, v) => s + v, 0);
+    if (users.length - langKnown > 0) langDist.set('unknown', users.length - langKnown);
+
+    res.json({
+      totalUsers:    users.length,
+      blockedUsers:  blocked,
+      verifiedUsers: verified,
+      newToday:      byDay.get(dailyKeys[dailyKeys.length - 1]) || 0,
+      newThisMonth:  byMonth.get(kstDateKey(new Date()).slice(0, 7)) || 0,
+      daily,
+      monthly: [...byMonth.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1))
+        .map(([month, count]) => ({ month, count })),
+      langDist: [...langDist.entries()].map(([lang, count]) => ({ lang, count }))
+        .sort((a, b) => b.count - a.count),
+    });
+  } catch (err) {
+    console.error('admin analytics/growth error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 활동 지표 — DAU 추이, WAU/MAU, Stickiness, 주간 재방문율, 활발한 유저 TOP10
+app.get('/api/admin/analytics/activity', adminAuth, async (req, res) => {
+  try {
+    const days = Math.max(7, Math.min(180, parseInt(req.query.days) || 30));
+    const [dailyQ, kpiQ, retQ, topQ] = await Promise.all([
+      pgPool.query(`
+        SELECT stat_date::text AS date,
+               COUNT(DISTINCT user_id)::int                    AS dau,
+               COALESCE(SUM(courses_created), 0)::int          AS courses,
+               COALESCE(SUM(places_visited), 0)::int           AS visited,
+               COALESCE(SUM(courses_liked), 0)::int            AS likes,
+               COALESCE(SUM(courses_shared), 0)::int           AS shares
+        FROM user_stats
+        WHERE stat_date >= CURRENT_DATE - ($1 - 1) * INTERVAL '1 day'
+        GROUP BY stat_date ORDER BY stat_date
+      `, [days]),
+      pgPool.query(`
+        SELECT COUNT(DISTINCT user_id) FILTER (WHERE stat_date = CURRENT_DATE)::int      AS dau_today,
+               COUNT(DISTINCT user_id) FILTER (WHERE stat_date = CURRENT_DATE - 1)::int  AS dau_yesterday,
+               COUNT(DISTINCT user_id) FILTER (WHERE stat_date >= CURRENT_DATE - 6)::int AS wau,
+               COUNT(DISTINCT user_id)::int                                              AS mau
+        FROM user_stats
+        WHERE stat_date >= CURRENT_DATE - 29
+      `),
+      pgPool.query(`
+        WITH prev AS (SELECT DISTINCT user_id FROM user_stats
+                      WHERE stat_date >= CURRENT_DATE - 13 AND stat_date < CURRENT_DATE - 6),
+             cur  AS (SELECT DISTINCT user_id FROM user_stats
+                      WHERE stat_date >= CURRENT_DATE - 6)
+        SELECT (SELECT COUNT(*) FROM prev)::int                                AS prev_cnt,
+               (SELECT COUNT(*) FROM prev p JOIN cur c USING (user_id))::int   AS returned
+      `),
+      pgPool.query(`
+        SELECT user_id,
+               COALESCE(SUM(COALESCE(courses_created,0) + COALESCE(places_visited,0)
+                          + COALESCE(courses_liked,0) + COALESCE(courses_shared,0)), 0)::int AS events,
+               COUNT(DISTINCT stat_date)::int AS active_days,
+               MAX(last_active)               AS last_active
+        FROM user_stats
+        WHERE stat_date >= CURRENT_DATE - 29
+        GROUP BY user_id ORDER BY events DESC, active_days DESC LIMIT 10
+      `),
+    ]);
+
+    const nick = await nicknamesByUid(topQ.rows.map(r => r.user_id));
+    const k = kpiQ.rows[0], ret = retQ.rows[0];
+    res.json({
+      dauToday:     k.dau_today,
+      dauYesterday: k.dau_yesterday,
+      wau:          k.wau,
+      mau:          k.mau,
+      stickiness:   k.mau > 0 ? Math.round(k.dau_today / k.mau * 100) : 0,
+      weeklyReturnRate: ret.prev_cnt > 0 ? Math.round(ret.returned / ret.prev_cnt * 100) : null,
+      daily: dailyQ.rows,
+      topUsers: topQ.rows.map(r => ({
+        userId: r.user_id, nickname: nick[r.user_id] || '',
+        events: r.events, activeDays: r.active_days, lastActive: r.last_active,
+      })),
+    });
+  } catch (err) {
+    console.error('admin analytics/activity error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 콘텐츠 지표 — 코스(태그·지역·인기), 그룹 방, 채팅, 브이로그, 푸시 기기, 캐시
+app.get('/api/admin/analytics/content', adminAuth, async (req, res) => {
+  try {
+    const days = Math.max(7, Math.min(180, parseInt(req.query.days) || 30));
+    const [courses, roomsSnap, msgQ, vlogQ, pushQ, pushLangQ, cacheQ] = await Promise.all([
+      scanAllCourses(),
+      db.collection('rooms').count().get(),
+      pgPool.query(`
+        SELECT COUNT(*)::int AS total,
+               COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days')::int AS last7d
+        FROM room_messages
+      `),
+      pgPool.query(`
+        SELECT COUNT(*)::int AS total,
+               COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days')::int  AS last7d,
+               COUNT(*) FILTER (WHERE status = 'completed')::int                     AS completed,
+               COUNT(*) FILTER (WHERE status = 'failed')::int                        AS failed,
+               COUNT(*) FILTER (WHERE status = 'pending')::int                       AS pending,
+               COUNT(*) FILTER (WHERE status = 'processing')::int                    AS processing,
+               COUNT(*) FILTER (WHERE status = 'uploading')::int                     AS uploading,
+               COALESCE(EXTRACT(EPOCH FROM AVG(completed_at - started_at)
+                 FILTER (WHERE status = 'completed' AND started_at IS NOT NULL)), 0)::int AS avg_render_sec
+        FROM vlog_jobs
+      `),
+      pgPool.query(`
+        SELECT COUNT(*)::int AS total,
+               COUNT(*) FILTER (WHERE platform = 'ios')::int     AS ios,
+               COUNT(*) FILTER (WHERE platform = 'android')::int AS android
+        FROM device_tokens
+      `),
+      pgPool.query(`SELECT lang, COUNT(*)::int AS count FROM device_tokens GROUP BY lang ORDER BY count DESC`),
+      pgPool.query(`
+        SELECT (SELECT COUNT(*) FROM places_cache)::int                          AS places_total,
+               (SELECT COUNT(*) FROM places_cache WHERE expires_at > NOW())::int AS places_valid,
+               (SELECT COUNT(*) FROM place_photos)::int                          AS photos,
+               (SELECT COUNT(*) FROM translation_cache)::int                     AS translations,
+               (SELECT COUNT(*) FROM recommendation_cache)::int                  AS recommendations,
+               (SELECT COUNT(*) FROM course_thumbnails)::int                     AS thumbnails
+      `),
+    ]);
+
+    // 코스 집계 — 일별 생성(최근 N일), 태그·지역 분포, 인기 TOP10
+    const now = Date.now();
+    const dailyKeys = [];
+    for (let i = days - 1; i >= 0; i--) dailyKeys.push(kstDateKey(new Date(now - i * 86400000)));
+    const byDay = new Map(), byTag = new Map(), byRegion = new Map();
+    for (const c of courses) {
+      byTag.set(c.tag, (byTag.get(c.tag) || 0) + 1);
+      byRegion.set(c.region, (byRegion.get(c.region) || 0) + 1);
+      if (c.createdAt) {
+        const k = kstDateKey(c.createdAt);
+        byDay.set(k, (byDay.get(k) || 0) + 1);
+      }
+    }
+    const topLiked = [...courses].sort((a, b) => b.likeCount - a.likeCount).slice(0, 10);
+    const nick = await nicknamesByUid(topLiked.map(c => c.authorId));
+
+    const v = vlogQ.rows[0];
+    res.json({
+      courses: {
+        total: courses.length,
+        daily: dailyKeys.map(k => ({ date: k, count: byDay.get(k) || 0 })),
+        byTag: [...byTag.entries()].map(([tag, count]) => ({ tag, count }))
+          .sort((a, b) => b.count - a.count),
+        byRegion: [...byRegion.entries()].map(([region, count]) => ({ region, count }))
+          .sort((a, b) => b.count - a.count).slice(0, 10),
+        topLiked: topLiked.map(c => ({
+          id: c.id, courseName: c.courseName, region: c.region, tag: c.tag,
+          likeCount: c.likeCount, authorNickname: nick[c.authorId] || '',
+        })),
+      },
+      rooms:    { total: roomsSnap.data().count },
+      messages: { total: msgQ.rows[0].total, last7d: msgQ.rows[0].last7d },
+      vlogs: {
+        total: v.total, last7d: v.last7d, avgRenderSec: v.avg_render_sec,
+        byStatus: { completed: v.completed, failed: v.failed, pending: v.pending,
+                    processing: v.processing, uploading: v.uploading },
+      },
+      push: {
+        total: pushQ.rows[0].total, ios: pushQ.rows[0].ios, android: pushQ.rows[0].android,
+        byLang: pushLangQ.rows,
+      },
+      caches: {
+        placesTotal:     cacheQ.rows[0].places_total,
+        placesValid:     cacheQ.rows[0].places_valid,
+        photos:          cacheQ.rows[0].photos,
+        translations:    cacheQ.rows[0].translations,
+        recommendations: cacheQ.rows[0].recommendations,
+        thumbnails:      cacheQ.rows[0].thumbnails,
+      },
+    });
+  } catch (err) {
+    console.error('admin analytics/content error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PRO 구독 지표 — RevenueCat Metrics Overview (환경변수 미설정 시 configured:false)
+// REVENUECAT_API_KEY: v2 secret key (sk_...), REVENUECAT_PROJECT_ID: RC 콘솔 프로젝트 ID
+const REVENUECAT_API_KEY   = process.env.REVENUECAT_API_KEY || '';
+const REVENUECAT_PROJECT_ID = process.env.REVENUECAT_PROJECT_ID || '';
+
+app.get('/api/admin/analytics/subscription', adminAuth, async (req, res) => {
+  if (!REVENUECAT_API_KEY || !REVENUECAT_PROJECT_ID) return res.json({ configured: false });
+  try {
+    const data = await cachedAnalytics('revenuecat-overview', 10 * 60 * 1000, async () => {
+      const r = await fetch(
+        `https://api.revenuecat.com/v2/projects/${encodeURIComponent(REVENUECAT_PROJECT_ID)}/metrics/overview`,
+        { headers: { Authorization: `Bearer ${REVENUECAT_API_KEY}` } }
+      );
+      if (!r.ok) throw new Error(`RevenueCat API ${r.status}`);
+      const body = await r.json();
+      return { metrics: body.metrics || [], fetchedAt: new Date().toISOString() };
+    });
+    res.json({ configured: true, ...data });
+  } catch (err) {
+    console.error('admin analytics/subscription error:', err);
+    res.status(502).json({ configured: true, error: err.message });
   }
 });
 
