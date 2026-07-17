@@ -141,7 +141,8 @@ struct ImpromptuSessionView: View {
                 VlogGenerationView(
                     course: course,
                     sessionId: sessionId,
-                    thumbnailCourseId: courseSavedToFirestore ? course.courseId : nil
+                    thumbnailCourseId: courseSavedToFirestore ? course.courseId : nil,
+                    shareRoomIds: activeRoomIds
                 ) {
                     dismiss()
                 }

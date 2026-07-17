@@ -1,4 +1,5 @@
 import SwiftUI
+import AVKit
 
 // 채팅 메시지 + 여행 활동(피드) 시스템 메시지를 시간순으로 합친 타임라인 엔트리
 private enum ChatTimelineEntry: Identifiable {
@@ -19,12 +20,23 @@ private enum ChatTimelineEntry: Identifiable {
     }
 }
 
+// 그룹핑 계산 결과 — 같은 발신자 연속 묶음의 첫 메시지에만 닉네임을,
+// 같은 발신자·같은 분(分) 연속 묶음의 마지막 메시지에만 시간을 찍는다 (카톡식)
+private struct TimelineRow: Identifiable {
+    let entry: ChatTimelineEntry
+    var showNickname = false
+    var showTime = false
+    var id: String { entry.id }
+}
+
 struct GroupChatView: View {
     let room: Room
 
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var userService: UserService
     @EnvironmentObject private var roomService: RoomService
+
+    @Environment(\.scenePhase) private var scenePhase
 
     @StateObject private var chat = ChatSocketService()
     @State private var draft = ""
@@ -57,6 +69,29 @@ struct GroupChatView: View {
         return all.sorted { $0.date < $1.date }
     }
 
+    private var rows: [TimelineRow] {
+        let list = entries
+        return list.indices.map { i in
+            guard case .message(let m) = list[i] else { return TimelineRow(entry: list[i]) }
+            var row = TimelineRow(entry: list[i], showNickname: true, showTime: true)
+            if i > 0, case .message(let prev) = list[i - 1], prev.userId == m.userId {
+                row.showNickname = false
+            }
+            if i < list.count - 1, case .message(let next) = list[i + 1], next.userId == m.userId,
+               Calendar.current.isDate(next.createdAt, equalTo: m.createdAt, toGranularity: .minute) {
+                row.showTime = false
+            }
+            return row
+        }
+    }
+
+    // 이 메시지를 아직 읽지 않은 멤버 수 (발신자 제외) — 0이면 표시하지 않는다.
+    // 멤버 목록은 라이브 스냅샷(myRooms) 우선 — 중간에 초대코드로 들어온 멤버 반영.
+    private func unreadCount(for m: ChatMessage) -> Int {
+        let members = roomService.myRooms.first(where: { $0.roomId == room.roomId })?.memberIds ?? room.memberIds
+        return members.filter { $0 != m.userId && (chat.readCursors[$0] ?? .distantPast) < m.createdAt }.count
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             ScrollViewReader { proxy in
@@ -77,8 +112,8 @@ struct GroupChatView: View {
                             }
                             .padding(.vertical, 6)
                         }
-                        ForEach(entries) { entry in
-                            switch entry {
+                        ForEach(rows) { row in
+                            switch row.entry {
                             case .message(let m):
                                 ChatBubble(
                                     message: m,
@@ -86,15 +121,18 @@ struct GroupChatView: View {
                                     myUserId: uid,
                                     quickEmojis: quickEmojis,
                                     highlighted: highlightedId == m.id,
+                                    showNickname: row.showNickname,
+                                    showTime: row.showTime,
+                                    unreadCount: unreadCount(for: m),
                                     onReply: { replyingTo = m; inputFocused = true },
                                     onReact: { emoji in chat.toggleReaction(messageId: m.id, emoji: emoji) },
                                     onQuoteTap: { scrollToOriginal(of: m) },
                                     onResend: { chat.resend(m) }
                                 )
-                                .id(entry.id)
+                                .id(row.id)
                             case .system(let f):
                                 SystemMessageRow(text: GroupChatView.systemText(for: f))
-                                    .id(entry.id)
+                                    .id(row.id)
                             }
                         }
                         Color.clear.frame(height: 1).id("BOTTOM")
@@ -134,6 +172,11 @@ struct GroupChatView: View {
             // 이 방을 보고 있는 동안엔 채팅 푸시 배너 억제
             AppNotificationManager.shared.activeChatRoom = PendingChatRoom(roomId: room.roomId, targetUserId: "")
             AppNotificationManager.shared.currentUserId = uid
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // 백그라운드에서 수신한 메시지는 읽음 처리하지 않는다 — 복귀 시점에 한 번에 처리
+            chat.viewerActive = (phase == .active)
+            if phase == .active { chat.markRead() }
         }
         .onDisappear {
             chat.disconnect()
@@ -255,6 +298,10 @@ private struct ChatBubble: View {
     let myUserId: String
     var quickEmojis: [String] = []
     var highlighted: Bool = false
+    var showNickname: Bool = true   // 같은 발신자 연속 묶음의 첫 메시지에만
+    var showTime: Bool = true       // 같은 발신자·같은 분(分) 묶음의 마지막 메시지에만
+    var unreadCount: Int = 0        // 아직 안 읽은 멤버 수 (발신자 제외, 0이면 숨김)
+    @State private var showPlayer = false   // 브이로그 첨부 전체화면 재생
     var onReply: () -> Void = {}
     var onReact: (String) -> Void = { _ in }
     var onQuoteTap: () -> Void = {}
@@ -264,7 +311,7 @@ private struct ChatBubble: View {
         HStack {
             if isMine { Spacer(minLength: 40) }
             VStack(alignment: isMine ? .trailing : .leading, spacing: 3) {
-                if !isMine {
+                if !isMine && showNickname {
                     Text(message.nickname)
                         .font(.tte(11))
                         .foregroundColor(.tteMediumGray)
@@ -282,10 +329,10 @@ private struct ChatBubble: View {
                             .buttonStyle(.plain)
                             .accessibilityLabel(L("chat.resend"))
                         }
-                        timeLabel
+                        metaColumn
                     }
                     bubbleBody
-                    if !isMine { timeLabel }
+                    if !isMine { metaColumn }
                 }
                 reactionChips
             }
@@ -317,9 +364,13 @@ private struct ChatBubble: View {
                 .contentShape(Rectangle())
                 .onTapGesture { onQuoteTap() }
             }
-            Text(message.text)
-                .font(.tte(15))
-                .foregroundColor(isMine ? .white : .tteDarkGray)
+            if message.kind == "vlog" {
+                vlogContent
+            } else {
+                Text(message.text)
+                    .font(.tte(15))
+                    .foregroundColor(isMine ? .white : .tteDarkGray)
+            }
         }
         .padding(.horizontal, 13)
         .padding(.vertical, 9)
@@ -374,10 +425,98 @@ private struct ChatBubble: View {
         }
     }
 
-    private var timeLabel: some View {
-        Text(message.createdAt.formatted(date: .omitted, time: .shortened))
-            .font(.tte(10))
-            .foregroundColor(.tteMediumGray.opacity(0.7))
+    // 브이로그 첨부 (서버 자동 공유, kind == "vlog") — 썸네일 탭 → 전체화면 재생.
+    // 완성본은 서버 보존 기간(7일) 이후 만료된다 — 썸네일 로드 실패 시 플레이스홀더 표시.
+    private var vlogContent: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ZStack {
+                if let thumb = message.thumbUrl, let url = URL(string: thumb) {
+                    AsyncImage(url: url) { phase in
+                        if case .success(let img) = phase {
+                            img.resizable().scaledToFill()
+                        } else {
+                            vlogPlaceholder
+                        }
+                    }
+                } else {
+                    vlogPlaceholder
+                }
+            }
+            .frame(width: 168, height: 224)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(
+                Image(systemName: "play.circle.fill")
+                    .font(.tte(42))
+                    .foregroundColor(.white.opacity(0.92))
+                    .shadow(color: .black.opacity(0.35), radius: 5)
+            )
+            .contentShape(Rectangle())
+            .onTapGesture { showPlayer = true }
+
+            Text(message.text)
+                .font(.tte(13, .medium))
+                .foregroundColor(isMine ? .white : .tteDarkGray)
+        }
+        .fullScreenCover(isPresented: $showPlayer) {
+            if let urlStr = message.attachmentUrl, let url = URL(string: urlStr) {
+                VlogChatPlayerView(url: url)
+            }
+        }
+    }
+
+    private var vlogPlaceholder: some View {
+        ZStack {
+            Rectangle().fill(Color.black.opacity(0.15))
+            Image(systemName: "film")
+                .font(.tte(30))
+                .foregroundColor(isMine ? .white.opacity(0.7) : .tteMediumGray)
+        }
+    }
+
+    // 말풍선 바깥 메타 — 카톡처럼 안읽음 숫자(시그니처 컬러)를 시간 위에 세로로 쌓는다
+    private var metaColumn: some View {
+        VStack(alignment: isMine ? .trailing : .leading, spacing: 1) {
+            if unreadCount > 0 {
+                Text("\(unreadCount)")
+                    .font(.tte(10, .semibold))
+                    .foregroundColor(.tteOrange)
+            }
+            if showTime {
+                Text(message.createdAt.formatted(date: .omitted, time: .shortened))
+                    .font(.tte(10))
+                    .foregroundColor(.tteMediumGray.opacity(0.7))
+            }
+        }
+    }
+}
+
+// MARK: - 채팅방 공유 브이로그 전체화면 재생
+
+private struct VlogChatPlayerView: View {
+    let url: URL
+    @Environment(\.dismiss) private var dismiss
+    @State private var player: AVPlayer?
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            Color.black.ignoresSafeArea()
+            VideoPlayer(player: player)
+                .ignoresSafeArea()
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.tte(30))
+                    .foregroundColor(.white.opacity(0.85))
+                    .padding(16)
+            }
+        }
+        .onAppear {
+            let p = AVPlayer(url: url)
+            player = p
+            p.play()
+        }
+        .onDisappear { player?.pause() }
     }
 }
 

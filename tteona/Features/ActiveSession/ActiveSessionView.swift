@@ -189,7 +189,8 @@ struct ActiveSessionView: View {
                 createdAt: course.createdAt,
                 places: orderedPlaces
             )
-            VlogGenerationView(course: reorderedCourse, sessionId: course.courseId) {
+            VlogGenerationView(course: reorderedCourse, sessionId: course.courseId,
+                               shareRoomIds: roomIds) {
                 vlogCompleted = true
                 showVlog = false
             }

@@ -9,7 +9,11 @@ struct VlogGenerationView: View {
     let sessionId: String
     // 이번 세션에서 새로 저장된 코스일 때만 전달 — 프리뷰에 탐색탭 썸네일 선택 노출
     var thumbnailCourseId: String? = nil
+    // 세션 시작 때 위치를 공유한 방들 — 공유 설정이 켜져 있으면 완성본이 이 방들에 자동 공유된다
+    var shareRoomIds: Set<String> = []
     var onDismissToHome: (() -> Void)? = nil
+    // 방 선택 화면의 "완성된 브이로그도 공유" 토글과 같은 저장소를 본다
+    @AppStorage("vlog.shareToRooms") private var shareVlogPref = true
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var pro = ProManager.shared
     @State private var showPaywall = false
@@ -53,7 +57,8 @@ struct VlogGenerationView: View {
             if let url = vlogURL {
                 VlogPreviewView(vlogURL: url, thumbnailCourseId: thumbnailCourseId,
                                 savedFormatsCount: savedFormatsCount,
-                                fallbackNotice: didFallback) {
+                                fallbackNotice: didFallback,
+                                shareMissed: didFallback && shareVlogPref && !shareRoomIds.isEmpty) {
                     // 부모가 전달한 종료 클로저가 화면 닫기까지 책임진다
                     if let onDismissToHome {
                         onDismissToHome()
@@ -446,6 +451,7 @@ struct VlogGenerationView: View {
                         formats: Array(selectedFormats), bgm: selectedBgm,
                         watermark: !pro.isPro,   // PRO 유저만 워터마크 제거
                         priority: pro.isPro,     // PRO 유저 우선 렌더링
+                        shareRoomIds: shareVlogPref ? Array(shareRoomIds) : [],
                         onProgress: { p, stage in
                             progress = p
                             stageText = stage
@@ -617,6 +623,8 @@ struct VlogPreviewView: View {
     let savedFormatsCount: Int
     /// 서버 합성에 실패해 음악·워터마크가 빠진 로컬 버전이 저장된 경우 — 조용히 넘기지 않고 알린다
     let fallbackNotice: Bool
+    /// 방 공유가 예정돼 있었는데 로컬 폴백이라 서버가 공유하지 못한 경우 — 기대 불일치를 알린다
+    let shareMissed: Bool
     let onDismiss: () -> Void
 
     @State private var player: AVPlayer
@@ -628,11 +636,13 @@ struct VlogPreviewView: View {
 
     init(vlogURL: URL, thumbnailCourseId: String? = nil,
          savedFormatsCount: Int = 1, fallbackNotice: Bool = false,
+         shareMissed: Bool = false,
          onDismiss: @escaping () -> Void) {
         self.vlogURL = vlogURL
         self.thumbnailCourseId = thumbnailCourseId
         self.savedFormatsCount = savedFormatsCount
         self.fallbackNotice = fallbackNotice
+        self.shareMissed = shareMissed
         self.onDismiss = onDismiss
         _player = State(initialValue: AVPlayer(url: vlogURL))
     }
@@ -665,17 +675,27 @@ struct VlogPreviewView: View {
                     .background(Capsule().fill(Color.white.opacity(0.12)))
 
                     if fallbackNotice {
-                        HStack(spacing: 6) {
-                            Image(systemName: "wifi.exclamationmark")
-                                .font(.tte(11))
-                                .foregroundColor(.yellow)
-                            Text(L("vlog.done.fallbackNotice"))
-                                .font(.tte(11))
-                                .foregroundColor(.white.opacity(0.8))
-                                .multilineTextAlignment(.center)
+                        VStack(spacing: 3) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "wifi.exclamationmark")
+                                    .font(.tte(11))
+                                    .foregroundColor(.yellow)
+                                Text(L("vlog.done.fallbackNotice"))
+                                    .font(.tte(11))
+                                    .foregroundColor(.white.opacity(0.8))
+                                    .multilineTextAlignment(.center)
+                            }
+                            if shareMissed {
+                                Text(L("vlog.done.fallbackNoShare"))
+                                    .font(.tte(11))
+                                    .foregroundColor(.white.opacity(0.8))
+                                    .multilineTextAlignment(.center)
+                            }
                         }
                         .padding(.horizontal, 12).padding(.vertical, 6)
-                        .background(Capsule().fill(Color.yellow.opacity(0.12)))
+                        .background(
+                            RoundedRectangle(cornerRadius: 14).fill(Color.yellow.opacity(0.12))
+                        )
                         .padding(.horizontal, 24)
                     }
                 }

@@ -327,20 +327,41 @@ fs.mkdirSync(ROOM_IMG_DIR, { recursive: true });
 
 // Vlog 완성본은 본인만 다운로드 가능 — jobId가 순번이라 추측 가능하므로 소유자 검증
 // (썸네일·아바타는 공개 프로필/공유 페이지에서 쓰이므로 그대로 공개)
-app.use('/uploads/vlog', requireAuth, async (req, res, next) => {
+// 예외: 채팅방에 공유된 완성본은 ?st=공유토큰(128bit 랜덤)으로 방 멤버가 무인증 재생.
+// 토큰은 방 멤버에게만 전달되는 채팅 메시지에 실리므로 사실상 멤버 한정 링크다.
+app.use('/uploads/vlog', async (req, res, next) => {
   const m = req.path.match(/^\/(\d+)\//);
   if (!m) return res.status(404).json({ error: 'not found' });
-  if (req.uid) {
+
+  const st = typeof req.query.st === 'string' ? req.query.st : null;
+  if (st) {
     try {
-      const r = await pgPool.query('SELECT user_id FROM vlog_jobs WHERE id = $1', [m[1]]);
-      if (r.rows.length === 0 || r.rows[0].user_id !== req.uid) {
-        return res.status(403).json({ error: 'forbidden' });
+      const r = await pgPool.query(
+        `SELECT options->>'shareToken' AS tok FROM vlog_jobs WHERE id = $1`, [m[1]]
+      );
+      const tok = r.rows[0]?.tok;
+      if (tok && tok.length === st.length &&
+          timingSafeEqual(Buffer.from(tok), Buffer.from(st))) {
+        return next();
       }
-    } catch (err) {
-      return res.status(500).json({ error: 'Internal server error' });
-    }
+    } catch { /* 아래 403 */ }
+    return res.status(403).json({ error: 'forbidden' });
   }
-  next();
+
+  // 기존 소유자 경로 — 변경 없음
+  requireAuth(req, res, async () => {
+    if (req.uid) {
+      try {
+        const r = await pgPool.query('SELECT user_id FROM vlog_jobs WHERE id = $1', [m[1]]);
+        if (r.rows.length === 0 || r.rows[0].user_id !== req.uid) {
+          return res.status(403).json({ error: 'forbidden' });
+        }
+      } catch (err) {
+        return res.status(500).json({ error: 'Internal server error' });
+      }
+    }
+    next();
+  });
 });
 
 app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
@@ -1412,7 +1433,7 @@ const vlogUpload = multer({
 //                   bgm?: 'auto'|'none'|'mood/파일명',
 //                   places: [{order, placeName, shotAt?}] }  (shotAt: 클립 촬영시각 표시 문자열)
 app.post('/api/vlog/jobs', requireAuth, vlogJobLimiter, async (req, res) => {
-  const { courseId, courseName, tag, formats, bgm, places, watermark, priority } = req.body || {};
+  const { courseId, courseName, tag, formats, bgm, places, watermark, priority, shareRoomIds } = req.body || {};
   const userId = req.uid || req.body?.userId; // 검증된 uid 우선
   if (!userId || !Array.isArray(places) || places.length === 0) {
     return res.status(400).json({ error: 'userId and places required' });
@@ -1427,6 +1448,11 @@ app.post('/api/vlog/jobs', requireAuth, vlogJobLimiter, async (req, res) => {
     }
     const wanted = Array.isArray(formats)
       ? formats.filter(f => ['reels', 'youtube', 'insta'].includes(f)) : [];
+    // 완성 시 자동 공유할 방 — 세션 시작 때 고른 방들. 토큰은 방 멤버의 무인증 재생용
+    // (jobId가 순번이라 URL 추측이 가능하므로, 토큰 없인 소유자 외 접근 불가 원칙 유지)
+    const shareRooms = Array.isArray(shareRoomIds)
+      ? [...new Set(shareRoomIds.filter(r => typeof r === 'string' && r.length > 0 && r.length <= 64))].slice(0, 10)
+      : [];
     const r = await pgPool.query(
       `INSERT INTO vlog_jobs (user_id, course_id, course_name, status, clips, options)
        VALUES ($1, $2, $3, 'uploading', $4, $5) RETURNING id`,
@@ -1435,7 +1461,9 @@ app.post('/api/vlog/jobs', requireAuth, vlogJobLimiter, async (req, res) => {
        JSON.stringify({ tag: tag || null, formats: wanted,
                         bgm: typeof bgm === 'string' ? bgm.slice(0, 200) : null,
                         watermark: watermark !== false,
-                        priority: priority === true })]
+                        priority: priority === true,
+                        shareRoomIds: shareRooms,
+                        shareToken: shareRooms.length > 0 ? randomBytes(16).toString('hex') : null })]
     );
     res.json({ jobId: r.rows[0].id });
   } catch (err) {
@@ -1918,6 +1946,8 @@ setInterval(async () => {
       // url이 있어야 알림을 탭했을 때 완성본을 바로 재생할 수 있다.
       data:    { type: 'vlog_done', jobId: String(job.id), url },
     }).catch(() => {});
+    // 세션 시작 때 고른 채팅방에 완성본 자동 공유 (부가 기능 — 실패해도 완성엔 무관)
+    shareVlogToRooms(job, url).catch(e => console.error(`[VlogShare] job ${job.id} error:`, e.message));
   } catch (err) {
     console.error(`[Vlog] job ${job.id} 실패:`, err.message);
     // 일시 오류(디스크 순간 부족·프로세스 신호 등)로 유저가 곧장 열화본(로컬 폴백)을
@@ -2042,12 +2072,14 @@ app.post('/api/rooms/:roomId/leave', requireAuth, async (req, res) => {
       // 마지막 멤버 → 하위 컬렉션(members/locations/feed/comments) 포함 방 전체 삭제
       await db.recursiveDelete(ref);
       roomInfoCache.delete(roomId);
+      await pgPool.query('DELETE FROM room_reads WHERE room_id = $1', [roomId]).catch(() => {});
       return res.json({ ok: true, deleted: true });
     }
 
     await ref.update({ memberIds: FieldValue.arrayRemove(uid) });
     await ref.collection('members').doc(uid).delete().catch(() => {});
     await ref.collection('locations').doc(uid).delete().catch(() => {});
+    await pgPool.query('DELETE FROM room_reads WHERE room_id = $1 AND user_id = $2', [roomId, uid]).catch(() => {});
     roomInfoCache.delete(roomId);
     res.json({ ok: true, deleted: false });
   } catch (err) {
@@ -2104,6 +2136,7 @@ app.post('/api/users/me/purge', requireAuth, async (req, res) => {
     await pgPool.query('DELETE FROM device_tokens WHERE user_id = $1', [uid]).catch(() => {});
     await pgPool.query('DELETE FROM user_stats WHERE user_id = $1', [uid]).catch(() => {});
     await pgPool.query('DELETE FROM user_avatars WHERE user_id = $1', [uid]).catch(() => {});
+    await pgPool.query('DELETE FROM room_reads WHERE user_id = $1', [uid]).catch(() => {});
     // 채팅 본문은 대화 맥락 유지를 위해 남기되 닉네임은 익명화
     await pgPool.query(
       `UPDATE room_messages SET nickname = '탈퇴한 사용자' WHERE user_id = $1`, [uid]
@@ -2140,7 +2173,8 @@ app.get('/api/rooms/:roomId/messages', requireAuth, async (req, res) => {
     let where = 'room_id = $1';
     if (before) { params.splice(1, 0, before); where += ' AND created_at < $2'; }
     const result = await pgPool.query(
-      `SELECT id, message_id, user_id, nickname, text, reply_to_nickname, reply_to_text, created_at
+      `SELECT id, message_id, user_id, nickname, text, reply_to_nickname, reply_to_text, created_at,
+              kind, attachment_url, thumb_url
        FROM room_messages WHERE ${where}
        ORDER BY created_at DESC LIMIT $${params.length}`,
       params
@@ -2160,7 +2194,12 @@ app.get('/api/rooms/:roomId/messages', requireAuth, async (req, res) => {
       });
       rows.forEach(r => { r.reactions = byMsg[r.message_id] || []; });
     }
-    res.json({ messages: rows });
+
+    // 멤버별 읽음 커서 — 클라이언트가 메시지별 안읽음 수를 계산하는 데 쓴다
+    const reads = await pgPool.query(
+      'SELECT user_id, last_read_at FROM room_reads WHERE room_id = $1', [roomId]
+    );
+    res.json({ messages: rows, reads: reads.rows });
   } catch (err) {
     console.error('[RoomMessages] error:', err);
     res.status(500).json({ error: err.message });
@@ -3495,6 +3534,71 @@ async function pushChatToOfflineMembers(roomId, senderId, senderNick, text, conn
   }
 }
 
+// ─── 브이로그 완성 → 채팅방 자동 공유 ─────────────────────────────────────────
+// 세션 시작 때 고른 방(options.shareRoomIds)에 완성본을 비디오 메시지(kind='vlog')로 올린다.
+// 완성 푸시·다운로드와 독립적인 부가 기능 — 여기서 실패해도 잡 완성에는 영향이 없다.
+async function shareVlogToRooms(job, url) {
+  const opts = (typeof job.options === 'object' && job.options !== null)
+    ? job.options : (() => { try { return JSON.parse(job.options || '{}'); } catch { return {}; } })();
+  const roomIds = Array.isArray(opts.shareRoomIds) ? [...new Set(opts.shareRoomIds)] : [];
+  const token = opts.shareToken;
+  if (roomIds.length === 0 || !token) return;
+
+  // 썸네일 추출 (1초 지점 1프레임, 480px) — 실패해도 공유는 진행, 클라가 플레이스홀더 표시
+  const jobDir = path.join(VLOG_DIR, String(job.id));
+  const mainFile = path.join(jobDir, decodeURIComponent(path.basename(new URL(url).pathname)));
+  const thumbFile = path.join(jobDir, 'share_thumb.jpg');
+  let thumbUrl = null;
+  try {
+    await runFF(['-ss', '1', '-i', mainFile, '-frames:v', '1', '-vf', 'scale=480:-2', thumbFile], 60 * 1000);
+    if (fs.existsSync(thumbFile)) {
+      thumbUrl = `https://tteona.kr/uploads/vlog/${job.id}/share_thumb.jpg?st=${token}`;
+    }
+  } catch (e) {
+    console.warn(`[VlogShare] job ${job.id} 썸네일 추출 실패: ${e.message}`);
+  }
+
+  const nickname = await nicknameOf(job.user_id, null);
+  const attachmentUrl = `${url}?st=${token}`;
+  const text = `🎬 ${job.course_name || '나의 오늘'}`;   // 구버전 앱은 이 텍스트를 그대로 표시(폴백)
+
+  for (const roomId of roomIds) {
+    try {
+      // 완성까지 수십 분 걸릴 수 있다 — 그 사이 방을 나갔거나 방이 삭제됐으면 공유하지 않는다
+      const info = await getRoomInfo(roomId, { refreshIfMissing: job.user_id }).catch(() => null);
+      if (!info || !info.memberIds.includes(job.user_id)) {
+        console.log(`[VlogShare] job ${job.id} → room ${roomId} 건너뜀 (멤버 아님/방 없음)`);
+        continue;
+      }
+
+      const messageId = randomUUID();
+      const createdAt = new Date();
+      await pgPool.query(
+        `INSERT INTO room_messages (message_id, room_id, user_id, nickname, text, created_at, kind, attachment_url, thumb_url)
+         VALUES ($1, $2, $3, $4, $5, $6, 'vlog', $7, $8)`,
+        [messageId, roomId, job.user_id, nickname, text, createdAt, attachmentUrl, thumbUrl]
+      );
+      const payload = JSON.stringify({
+        type: 'chat', messageId, roomId, userId: job.user_id, nickname, text,
+        kind: 'vlog', attachmentUrl, thumbUrl, ts: createdAt.getTime(),
+      });
+      const room = wsRooms.get(roomId);
+      const connected = new Set();
+      if (room) {
+        room.forEach(client => {
+          if (client.readyState === WebSocket.OPEN) client.send(payload);
+          if (client.userId) connected.add(client.userId);
+        });
+      }
+      // 방을 안 보고 있는 멤버에게는 채팅 푸시 ("닉네임: 🎬 코스명")
+      pushChatToOfflineMembers(roomId, job.user_id, nickname, text, connected);
+      console.log(`[VlogShare] job ${job.id} → room ${roomId} 공유 완료`);
+    } catch (e) {
+      console.error(`[VlogShare] job ${job.id} → room ${roomId} 실패:`, e.message);
+    }
+  }
+}
+
 // ─── WebSocket 실시간 위치 공유 ───────────────────────────────────────────────
 
 const httpServer = http.createServer(app);
@@ -3502,6 +3606,30 @@ const wss = new WebSocket.Server({ server: httpServer, path: '/ws/location' });
 
 // roomId → Set<WebSocket>
 const wsRooms = new Map();
+
+// 채팅 읽음 커서 (카톡식 안읽음 카운트) — 멤버별 "이 방에서 마지막으로 읽은 시각" 하나만
+// 유지한다. 메시지별 안읽음 수는 클라이언트가 "커서가 메시지 시각보다 이전인 멤버 수
+// (발신자 제외)"로 계산하므로 메시지×멤버 단위 저장이 필요 없다.
+async function ensureChatReadSchema() {
+  await pgPool.query(`
+    CREATE TABLE IF NOT EXISTS room_reads (
+      room_id      TEXT        NOT NULL,
+      user_id      TEXT        NOT NULL,
+      last_read_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (room_id, user_id)
+    )
+  `);
+}
+ensureChatReadSchema().catch(err => console.error('[ChatRead] schema migration error:', err.message));
+
+// 채팅 첨부 컬럼 (브이로그 공유) — kind='text'(기본)|'vlog'. 추가 컬럼이라 구버전과 호환:
+// 구버전 서버 INSERT는 kind 기본값으로 채워지고, 구버전 앱은 text 폴백("🎬 코스명")을 그대로 표시한다.
+async function ensureChatAttachmentSchema() {
+  await pgPool.query(`ALTER TABLE room_messages ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'text'`);
+  await pgPool.query(`ALTER TABLE room_messages ADD COLUMN IF NOT EXISTS attachment_url TEXT`);
+  await pgPool.query(`ALTER TABLE room_messages ADD COLUMN IF NOT EXISTS thumb_url TEXT`);
+}
+ensureChatAttachmentSchema().catch(err => console.error('[ChatAttachment] schema migration error:', err.message));
 
 // 채팅 재전송 중복 제거: clientMsgId → { messageId, ts }.
 // 폰이 서버 에코를 놓쳐 12초 뒤 재전송하면 같은 clientMsgId가 다시 온다. 그때 DB에 또
@@ -3643,6 +3771,22 @@ wss.on('connection', (ws) => {
       }
       // 접속 안 한 멤버에게만 APNs 푸시 (카톡처럼 "닉네임: 메시지")
       pushChatToOfflineMembers(ws.roomId, ws.userId, ws.nickname, text, connected);
+    }
+
+    // 읽음 커서 갱신 — 방을 보고 있는 멤버가 보낸다(입장 직후·새 메시지 수신 시).
+    // 커서를 서버 시각으로 올리고 방 전체에 브로드캐스트하면 각 클라이언트가
+    // 메시지별 안읽음 수를 다시 계산해 숫자를 깎는다.
+    if (msg.type === 'read' && ws.roomId && ws.userId) {
+      const now = new Date();
+      pgPool.query(
+        `INSERT INTO room_reads (room_id, user_id, last_read_at) VALUES ($1, $2, $3)
+         ON CONFLICT (room_id, user_id)
+         DO UPDATE SET last_read_at = GREATEST(room_reads.last_read_at, EXCLUDED.last_read_at)`,
+        [ws.roomId, ws.userId, now]
+      ).catch(e => console.error('[WS read] persist error:', e.message));
+      const payload = JSON.stringify({ type: 'read', userId: ws.userId, ts: now.getTime() });
+      const room = wsRooms.get(ws.roomId);
+      if (room) room.forEach(c => { if (c.readyState === WebSocket.OPEN) c.send(payload); });
     }
 
     // 이모지 반응 토글 — 있으면 제거, 없으면 추가 후 방 전체에 브로드캐스트

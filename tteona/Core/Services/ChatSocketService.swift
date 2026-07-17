@@ -9,6 +9,9 @@ struct ChatMessage: Identifiable, Equatable {
     let createdAt: Date
     var replyToNickname: String? = nil   // 답장 인용 — 원본 작성자
     var replyToText: String? = nil       // 답장 인용 — 원본 내용
+    var kind: String = "text"            // "text" | "vlog"(브이로그 자동 공유 — 서버만 생성)
+    var attachmentUrl: String? = nil     // kind != text일 때 재생 URL (?st= 공유토큰 포함)
+    var thumbUrl: String? = nil          // 첨부 썸네일 URL
     var reactions: [String: Set<String>] = [:]  // 이모지 → 반응한 userId 집합
     var pending: Bool = false   // 서버 확정 전 낙관적 표시
     var failed: Bool = false    // 전송 실패(타임아웃) — 재전송 가능
@@ -37,6 +40,13 @@ class ChatSocketService: ObservableObject {
     /// 더 이전 메시지가 남아 있는가 (페이지네이션)
     @Published var canLoadOlder = false
     @Published var isLoadingOlder = false
+    /// 멤버별 읽음 커서 (userId → 마지막으로 읽은 시각) — 카톡식 안읽음 카운트의 근거.
+    /// 어떤 메시지의 안읽음 수 = 커서가 메시지 시각보다 이전인 멤버 수(발신자 제외).
+    @Published var readCursors: [String: Date] = [:]
+
+    /// 화면이 실제로 보이는 상태인가 — 백그라운드에서 수신한 메시지를 읽음 처리하지 않기 위한 게이트.
+    /// GroupChatView가 scenePhase에 맞춰 갱신한다.
+    var viewerActive = true
 
     private var wsTask: URLSessionWebSocketTask?
     private var roomId: String?
@@ -91,6 +101,9 @@ class ChatSocketService: ObservableObject {
                                createdAt: date,
                                replyToNickname: row["reply_to_nickname"] as? String,
                                replyToText: row["reply_to_text"] as? String,
+                               kind: (row["kind"] as? String) ?? "text",
+                               attachmentUrl: row["attachment_url"] as? String,
+                               thumbUrl: row["thumb_url"] as? String,
                                reactions: reactions)
         }
     }
@@ -102,6 +115,15 @@ class ChatSocketService: ObservableObject {
               let rows = json["messages"] as? [[String: Any]] else { return }
         messages = parseRows(rows)
         canLoadOlder = rows.count >= 50   // 50개 꽉 찼으면 더 있을 수 있음
+        // 멤버별 읽음 커서 — 실시간 read 브로드캐스트가 오기 전의 초기값
+        if let reads = json["reads"] as? [[String: Any]] {
+            for r in reads {
+                if let uid = r["user_id"] as? String,
+                   let date = ChatSocketService.parseDate(r["last_read_at"] as? String) {
+                    readCursors[uid] = max(readCursors[uid] ?? .distantPast, date)
+                }
+            }
+        }
     }
 
     /// 위로 스크롤해 더 이전 메시지를 불러온다(서버 before 커서 페이지네이션).
@@ -270,6 +292,16 @@ class ChatSocketService: ObservableObject {
             joined = true
             isConnected = true
             flushOutbox()
+            markRead()   // 입장 시점까지의 메시지를 읽음 처리
+            return
+        }
+
+        // 다른 멤버의 읽음 커서 갱신 — 메시지별 안읽음 숫자가 깎인다
+        if type == "read" {
+            guard let uid = json["userId"] as? String,
+                  let ts = json["ts"] as? Double else { return }
+            let date = Date(timeIntervalSince1970: ts / 1000)
+            readCursors[uid] = max(readCursors[uid] ?? .distantPast, date)
             return
         }
 
@@ -330,7 +362,22 @@ class ChatSocketService: ObservableObject {
         guard !messages.contains(where: { $0.id == messageId }) else { return }
         messages.append(ChatMessage(id: messageId, userId: uid, nickname: nick, text: text, createdAt: ts,
                                     replyToNickname: json["replyToNickname"] as? String,
-                                    replyToText: json["replyToText"] as? String))
+                                    replyToText: json["replyToText"] as? String,
+                                    kind: (json["kind"] as? String) ?? "text",
+                                    attachmentUrl: json["attachmentUrl"] as? String,
+                                    thumbUrl: json["thumbUrl"] as? String))
+        // 화면을 보고 있으면 방금 받은 메시지를 바로 읽음 처리 (백그라운드면 보류)
+        if viewerActive { markRead() }
+    }
+
+    // MARK: - 읽음 처리
+
+    /// 서버에 읽음 커서 갱신을 알린다. 입장 직후·새 메시지 수신·포그라운드 복귀 시 호출.
+    /// 내 커서는 낙관적으로 즉시 올려 서버 에코를 기다리지 않고 화면에 반영한다.
+    func markRead() {
+        guard joined, let userId else { return }
+        readCursors[userId] = max(readCursors[userId] ?? .distantPast, Date())
+        send(["type": "read"])
     }
 
     // MARK: - 이모지 반응 토글 (낙관적)

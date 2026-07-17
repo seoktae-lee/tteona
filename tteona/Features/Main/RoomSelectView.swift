@@ -7,6 +7,10 @@ struct RoomSelectView: View {
     @EnvironmentObject private var roomService: RoomService
     @Environment(\.dismiss) private var dismiss
 
+    // 완성된 브이로그를 선택한 방 채팅에 자동 공유할지 — 위치 공유와 별개의 동의라 토글로 분리.
+    // 설정은 기억된다 (VlogGenerationView가 같은 키를 읽어 잡 생성 시 서버에 전달).
+    @AppStorage("vlog.shareToRooms") private var shareVlog = true
+
     var body: some View {
         VStack(spacing: 0) {
             // 핸들
@@ -66,6 +70,23 @@ struct RoomSelectView: View {
                 }
             }
             .padding(.horizontal, 20)
+
+            // 브이로그 자동 공유 토글 — 방을 하나라도 골랐을 때만 의미가 있다
+            if !selectedRoomIds.isEmpty {
+                Toggle(isOn: $shareVlog) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(L("roomselect.shareVlog"))
+                            .font(.tte(15, .semibold))
+                            .foregroundColor(.tteDarkGray)
+                        Text(L("roomselect.shareVlogHint"))
+                            .font(.tte(12))
+                            .foregroundColor(.tteMediumGray)
+                    }
+                }
+                .tint(.tteOrange)
+                .padding(.horizontal, 24)
+                .padding(.top, 16)
+            }
 
             Spacer()
 
