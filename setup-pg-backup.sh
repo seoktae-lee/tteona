@@ -54,7 +54,8 @@ chmod 700 /home/ubuntu/backups/pg-backup.sh
 chmod 700 /home/ubuntu/backups/pg
 
 # 3) 크론 등록 (기존 등록 제거 후 재등록 — 중복 방지)
-( crontab -l 2>/dev/null | grep -v 'pg-backup.sh' ; \
+# grep이 0줄 매칭이면 exit 1 → set -e가 서브셸을 끊어 "빈 crontab"이 설치되는 사고 방지용 || true
+( { crontab -l 2>/dev/null | grep -v 'pg-backup.sh'; } || true; \
   echo "30 3 * * * /home/ubuntu/backups/pg-backup.sh >> /home/ubuntu/backups/pg/backup.log 2>&1" ) | crontab -
 echo "  크론 등록 완료:"
 crontab -l | grep pg-backup
