@@ -3631,6 +3631,46 @@ async function ensureChatAttachmentSchema() {
 }
 ensureChatAttachmentSchema().catch(err => console.error('[ChatAttachment] schema migration error:', err.message));
 
+// 위치정보 이용·제공 사실 확인자료 (위치정보법 제16조② / 위치기반서비스 이용약관 제5조).
+// 개별 좌표가 아니라 "언제·누가·어떤 목적으로·누구에게 위치를 제공/이용했는지"의 사실을 기록한다.
+// 동행 위치공유는 연결(세션)당 1회만 적재해 좌표 폭주를 막고, 보유기간 6개월 경과분은 자동 파기한다.
+async function ensureLocationLogSchema() {
+  await pgPool.query(`
+    CREATE TABLE IF NOT EXISTS location_access_logs (
+      id         BIGSERIAL   PRIMARY KEY,
+      user_id    TEXT        NOT NULL,
+      action     TEXT        NOT NULL,       -- 'provide' | 'use'
+      purpose    TEXT        NOT NULL,       -- 예: '동행 위치공유'
+      recipient  TEXT,                       -- 예: 'group:{roomId}'
+      room_id    TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pgPool.query(`CREATE INDEX IF NOT EXISTS idx_lal_user_time ON location_access_logs (user_id, created_at DESC)`);
+}
+
+// 확인자료 보유기간: 6개월(약관 제5조). 하루 1회 만료분 파기.
+async function purgeOldLocationLogs() {
+  try {
+    const r = await pgPool.query(`DELETE FROM location_access_logs WHERE created_at < NOW() - INTERVAL '6 months'`);
+    if (r.rowCount) console.log(`[LocationLog] purged ${r.rowCount} expired rows`);
+  } catch (e) { console.error('[LocationLog] purge error:', e.message); }
+}
+
+// 스키마 생성이 끝난 뒤에 첫 파기를 돌린다 (테이블 생성 전에 DELETE가 먼저 실행되는 레이스 방지).
+ensureLocationLogSchema()
+  .then(() => purgeOldLocationLogs())
+  .catch(err => console.error('[LocationLog] schema migration error:', err.message));
+setInterval(purgeOldLocationLogs, 24 * 60 * 60 * 1000).unref?.();
+
+function logLocationAccess({ userId, action, purpose, recipient, roomId }) {
+  if (!userId) return;
+  pgPool.query(
+    `INSERT INTO location_access_logs (user_id, action, purpose, recipient, room_id) VALUES ($1, $2, $3, $4, $5)`,
+    [String(userId), action, purpose, recipient || null, roomId || null],
+  ).catch(e => console.error('[LocationLog] insert error:', e.message));
+}
+
 // 채팅 재전송 중복 제거: clientMsgId → { messageId, ts }.
 // 폰이 서버 에코를 놓쳐 12초 뒤 재전송하면 같은 clientMsgId가 다시 온다. 그때 DB에 또
 // 넣지 않고 발신자에게 확정 에코만 다시 보내, 방에 같은 메시지가 두 번 저장되는 것을 막는다.
@@ -3685,6 +3725,17 @@ wss.on('connection', (ws) => {
     }
 
     if (msg.type === 'location' && ws.roomId) {
+      // 위치정보 제공 사실 기록 — 이 연결에서 처음 위치를 보낼 때 1회만(좌표 폭주 방지)
+      if (!ws.locLogged) {
+        ws.locLogged = true;
+        logLocationAccess({
+          userId:    ws.userId,
+          action:    'provide',
+          purpose:   '동행 위치공유',
+          recipient: 'group:' + ws.roomId,
+          roomId:    ws.roomId,
+        });
+      }
       const payload = JSON.stringify({
         type:      'location',
         userId:    ws.userId,
