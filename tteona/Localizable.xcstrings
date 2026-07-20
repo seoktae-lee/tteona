@@ -15041,6 +15041,236 @@
           }
         }
       }
+    },
+    "tutorial.myToday.text": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "여행의 하이라이트, 브이로그를 같이 만들어봐요!\n'나의 오늘'을 눌러 시작해요"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Let's make your first travel vlog together!\nTap 'My Today' to begin"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "旅のハイライト、Vlogを一緒に作りましょう！\n「私の今日」をタップしてスタート"
+          }
+        }
+      }
+    },
+    "tutorial.capture.text": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "'여기서 촬영'을 눌러 이 순간을 5초 영상으로 남겨봐요!\n무료로도 장소 6곳까지 담을 수 있어요"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap 'Capture here' to record this moment in 5 seconds!\nFree plan fits up to 6 places"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「ここで撮影」をタップして、この瞬間を5秒の動画に！\n無料でも6か所まで残せます"
+          }
+        }
+      }
+    },
+    "tutorial.endToday.text": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "첫 장소 칩이 생겼어요! 이제 '오늘 종료'를 눌러\n브이로그로 만들어봐요"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your first place chip is in! Now tap 'End today'\nto turn it into a vlog"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最初の場所チップができました！「今日を終了」をタップして\nVlogにしてみましょう"
+          }
+        }
+      }
+    },
+    "tutorial.vlogOnly.hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "'브이로그만 생성하기'를 눌러봐요!"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap 'Create vlog only'!"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「Vlogだけ作成」をタップ！"
+          }
+        }
+      }
+    },
+    "tutorial.format.text": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "촬영 방향에 딱 맞는 포맷을 미리 골라놨어요.\n이대로 만들어볼까요?"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "We pre-picked the format that matches how you filmed.\nShall we go with it?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "撮影の向きに合ったフォーマットを選んでおきました。\nこのまま作ってみましょう？"
+          }
+        }
+      }
+    },
+    "tutorial.bgm.text": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "마지막이에요! '자동 추천'이 여행 분위기에 맞는\n음악을 골라줘요. 바로 만들어봐요!"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last step! 'Auto pick' chooses music that fits\nyour trip's mood. Let's make it!"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最後です！「自動おすすめ」が旅の雰囲気に合う\n音楽を選んでくれます。さっそく作りましょう！"
+          }
+        }
+      }
+    },
+    "tutorial.done.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "첫 브이로그 완성!"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "First vlog complete!"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "初めてのVlog完成！"
+          }
+        }
+      }
+    },
+    "tutorial.done.message": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이번엔 한 곳만 담았지만, 무료로도 '나의 오늘' 한 번에 최대 6곳을 5초씩 담을 수 있어요. 다음 여행은 더 풍성하게 만들어봐요!"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You captured one place this time — but even on the free plan, a single 'My Today' can hold up to 6 places, 5 seconds each. Make your next trip even richer!"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "今回は1か所だけでしたが、無料でも「私の今日」1回で最大6か所を5秒ずつ残せます。次の旅はもっと豊かに作ってみましょう！"
+          }
+        }
+      }
+    },
+    "tutorial.done.button": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "좋아요, 알겠어요!"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Got it!"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "わかりました！"
+          }
+        }
+      }
+    },
+    "tutorial.skip": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "튜토리얼 그만 보기"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dismiss tutorial"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "チュートリアルを閉じる"
+          }
+        }
+      }
     }
   },
   "version": "1.1"

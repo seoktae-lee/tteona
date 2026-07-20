@@ -16,6 +16,7 @@ struct VlogGenerationView: View {
     @AppStorage("vlog.shareToRooms") private var shareVlogPref = true
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var pro = ProManager.shared
+    @ObservedObject private var tutorial = VlogTutorial.shared
     @State private var showPaywall = false
 
     @State private var phase: Phase = .chooseFormat
@@ -55,15 +56,24 @@ struct VlogGenerationView: View {
         case .generating: generatingView
         case .preview:
             if let url = vlogURL {
-                VlogPreviewView(vlogURL: url, thumbnailCourseId: thumbnailCourseId,
-                                savedFormatsCount: savedFormatsCount,
-                                fallbackNotice: didFallback,
-                                shareMissed: didFallback && shareVlogPref && !shareRoomIds.isEmpty) {
-                    // 부모가 전달한 종료 클로저가 화면 닫기까지 책임진다
-                    if let onDismissToHome {
-                        onDismissToHome()
-                    } else {
-                        dismiss()
+                ZStack {
+                    VlogPreviewView(vlogURL: url, thumbnailCourseId: thumbnailCourseId,
+                                    savedFormatsCount: savedFormatsCount,
+                                    fallbackNotice: didFallback,
+                                    shareMissed: didFallback && shareVlogPref && !shareRoomIds.isEmpty) {
+                        // 부모가 전달한 종료 클로저가 화면 닫기까지 책임진다
+                        if let onDismissToHome {
+                            onDismissToHome()
+                        } else {
+                            dismiss()
+                        }
+                    }
+
+                    // 튜토리얼 완주 — 축하 + 무료 한도(6곳×5초) 안내
+                    if tutorial.isOn(.celebrate) {
+                        TutorialCelebrateOverlay {
+                            tutorial.finish()
+                        }
                     }
                 }
             }
@@ -107,7 +117,17 @@ struct VlogGenerationView: View {
 
                 Spacer()
 
+                // 튜토리얼 — 기본 포맷 그대로 다음 단계로 유도
+                if tutorial.isOn(.chooseFormat) {
+                    TutorialBubble(mascot: "tteoni-travel", text: L("tutorial.format.text")) {
+                        tutorial.finish()
+                    }
+                    .padding(.horizontal, 40)
+                    .padding(.bottom, 8)
+                }
+
                 Button {
+                    tutorial.advance(to: .chooseBgm)
                     phase = .chooseBgm
                 } label: {
                     Text(selectedFormats.isEmpty ? L("session.makeVlog") : L("vlog.makeVersions", selectedFormats.count + 1))
@@ -116,9 +136,13 @@ struct VlogGenerationView: View {
                         .frame(maxWidth: .infinity).frame(height: 56)
                         .background(RoundedRectangle(cornerRadius: 16).fill(Color.tteOrange))
                 }
+                .tutorialGlow(tutorial.isOn(.chooseFormat), cornerRadius: 16)
                 .padding(.horizontal, 24)
 
-                Button(L("common.close")) { dismiss() }
+                Button(L("common.close")) {
+                    tutorial.handleVlogExit()
+                    dismiss()
+                }
                     .font(.tte(14))
                     .foregroundColor(.white.opacity(0.6))
                     .padding(.top, 14)
@@ -269,6 +293,15 @@ struct VlogGenerationView: View {
                     .padding(.bottom, 12)
                 }
 
+                // 튜토리얼 — 자동 추천 BGM 그대로 생성 유도
+                if tutorial.isOn(.chooseBgm) {
+                    TutorialBubble(mascot: "tteoni-wink", text: L("tutorial.bgm.text")) {
+                        tutorial.finish()
+                    }
+                    .padding(.horizontal, 40)
+                    .padding(.bottom, 8)
+                }
+
                 Button {
                     stopBgmPreview()
                     phase = .generating
@@ -279,6 +312,7 @@ struct VlogGenerationView: View {
                         .frame(maxWidth: .infinity).frame(height: 56)
                         .background(RoundedRectangle(cornerRadius: 16).fill(Color.tteOrange))
                 }
+                .tutorialGlow(tutorial.isOn(.chooseBgm), cornerRadius: 16)
                 .padding(.horizontal, 24)
 
                 Button(L("vlog.back")) {
@@ -528,6 +562,8 @@ struct VlogGenerationView: View {
                 }
             }
             phase = .preview
+            // 튜토리얼: 첫 브이로그 완성 → 축하 카드
+            tutorial.advance(to: .celebrate)
         } catch {
             if Task.isCancelled || error is CancellationError { return }
             errorMessage = error.localizedDescription
@@ -571,7 +607,10 @@ struct VlogGenerationView: View {
                         .foregroundColor(.white.opacity(0.75))
                     }
 
-                    Button(L("vlog.goBack")) { dismiss() }
+                    Button(L("vlog.goBack")) {
+                        tutorial.handleVlogExit()
+                        dismiss()
+                    }
                         .font(.tte(14))
                         .foregroundColor(.white.opacity(0.5))
                 }

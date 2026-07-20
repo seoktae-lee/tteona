@@ -11,6 +11,7 @@ struct ImpromptuSessionView: View {
     @EnvironmentObject private var courseService: CourseService
     @EnvironmentObject private var roomService: RoomService
     @StateObject private var locationService = LocationService()
+    @ObservedObject private var tutorial = VlogTutorial.shared
     @Environment(\.dismiss) private var dismiss
 
     private let activityManager = TodaySessionActivityManager.shared
@@ -61,6 +62,8 @@ struct ImpromptuSessionView: View {
         .task {
             guard !didStartSession else { return }
             didStartSession = true
+            // 튜토리얼: '나의 오늘' 진입 확인 → 촬영 유도 단계로
+            tutorial.advance(to: .captureHere)
             locationService.requestPermission()
             locationService.startContinuousUpdates()
             activityManager.start()
@@ -212,6 +215,7 @@ struct ImpromptuSessionView: View {
         VStack {
             HStack {
                 Button {
+                    tutorial.handleSessionExit()
                     dismiss()
                 } label: {
                     Image(systemName: "chevron.left")
@@ -250,6 +254,22 @@ struct ImpromptuSessionView: View {
     private var bottomPanel: some View {
         VStack {
             Spacer()
+
+            // 튜토리얼 — 촬영/종료 버튼 바로 위에서 다음 행동을 안내
+            if tutorial.isOn(.captureHere) {
+                TutorialBubble(mascot: "tteoni-travel", text: L("tutorial.capture.text")) {
+                    tutorial.finish()
+                }
+                .padding(.horizontal, 36)
+                .padding(.bottom, 6)
+            } else if tutorial.isOn(.endToday) {
+                TutorialBubble(mascot: "tteoni-wink", text: L("tutorial.endToday.text")) {
+                    tutorial.finish()
+                }
+                .padding(.horizontal, 36)
+                .padding(.bottom, 6)
+            }
+
             VStack(spacing: 12) {
                 if !capturedPlaces.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
@@ -299,6 +319,7 @@ struct ImpromptuSessionView: View {
                             .fill(budgetFull ? Color.tteMediumGray : Color.tteOrange))
                     }
                     .disabled(isResolvingLocation || budgetFull)
+                    .tutorialGlow(tutorial.isOn(.captureHere), cornerRadius: 14)
 
                     if !capturedPlaces.isEmpty {
                         Button { showEndAlert = true } label: {
@@ -309,6 +330,7 @@ struct ImpromptuSessionView: View {
                                 .background(RoundedRectangle(cornerRadius: 14)
                                     .stroke(Color.tteOrange, lineWidth: 1.5))
                         }
+                        .tutorialGlow(tutorial.isOn(.endToday), cornerRadius: 14)
                     }
                 }
             }
@@ -397,6 +419,22 @@ struct ImpromptuSessionView: View {
                 Text(L("impromptu.endSheet.subtitle", capturedPlaces.count))
                     .font(.tte(14))
                     .foregroundColor(.tteMediumGray)
+
+                // 튜토리얼 — '브이로그만 생성하기' 카드로 시선 유도
+                if tutorial.isOn(.chooseVlogOnly) {
+                    HStack(spacing: 6) {
+                        Image("tteoni-wink")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 22, height: 22)
+                        Text(L("tutorial.vlogOnly.hint"))
+                            .font(.tte(12.5, .bold))
+                            .foregroundColor(.tteOrange)
+                    }
+                    .padding(.horizontal, 12).padding(.vertical, 6)
+                    .background(Capsule().fill(Color.tteOrange.opacity(0.12)))
+                    .padding(.top, 6)
+                }
             }
             .padding(.bottom, 28)
 
@@ -409,10 +447,12 @@ struct ImpromptuSessionView: View {
                         subtitle: L("impromptu.vlogOnly.subtitle"),
                         isPrimary: true
                     ) {
+                        tutorial.advance(to: .chooseFormat)
                         buildCourseAndEnd(saveToFirestore: false)
                         pendingShowVlog = true
                         showEndAlert = false
                     }
+                    .tutorialGlow(tutorial.isOn(.chooseVlogOnly), cornerRadius: 20)
 
                     endChoiceCard(
                         icon: "mappin.and.ellipse",
@@ -453,7 +493,8 @@ struct ImpromptuSessionView: View {
 
             Spacer().frame(height: 36)
         }
-        .presentationDetents([.height(430)])
+        .onAppear { tutorial.advance(to: .chooseVlogOnly) }
+        .presentationDetents([.height(tutorial.isOn(.chooseVlogOnly) ? 466 : 430)])
         .presentationDragIndicator(.hidden)
         .presentationCornerRadius(28)
     }
@@ -535,6 +576,7 @@ struct ImpromptuSessionView: View {
                 }
                 Spacer()
                 Button {
+                    tutorial.advance(to: .chooseFormat)
                     buildCourseAndEnd(saveToFirestore: true)
                     showSaveCourse = false
                     showVlog = true
@@ -581,6 +623,10 @@ struct ImpromptuSessionView: View {
         guard let place = pendingPlace else { return }
         Haptics.success()
         capturedPlaces.append(place)
+        // 튜토리얼: 첫 장소 칩 확인 → '오늘 종료' 유도 단계로
+        if capturedPlaces.count == 1 {
+            tutorial.advance(to: .endToday)
+        }
         reorderPlaces()
         recomputeRecordedSeconds()
         sessionStore.save(places: capturedPlaces, roomIds: Array(activeRoomIds))
@@ -612,6 +658,8 @@ struct ImpromptuSessionView: View {
         recomputeRecordedSeconds()
         if capturedPlaces.isEmpty {
             sessionStore.clear()
+            // 튜토리얼: 칩이 다 사라지면 촬영 유도 단계로 복귀
+            tutorial.regress(to: .captureHere)
         } else {
             sessionStore.save(places: capturedPlaces)
         }
@@ -723,6 +771,11 @@ struct ImpromptuSessionView: View {
         capturedPlaces = validatedPlaces
         reorderPlaces()
         recomputeRecordedSeconds()
+
+        // 튜토리얼: 이전 세션에 이미 칩이 있으면 촬영 단계는 건너뛴다
+        if !capturedPlaces.isEmpty {
+            tutorial.advance(to: .endToday)
+        }
 
         if !session.roomIds.isEmpty {
             activeRoomIds = Set(session.roomIds)

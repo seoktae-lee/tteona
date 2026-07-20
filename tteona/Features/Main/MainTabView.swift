@@ -43,6 +43,12 @@ struct MainTabView: View {
                         UserDefaults.standard.set(true, forKey: key)
                     }
                     withAnimation(.easeOut(duration: 0.25)) { showNavGuide = false }
+                    // 내비 가이드가 끝나면 바로 첫 브이로그 튜토리얼로 이어간다
+                    if let uid = authService.currentUser?.uid {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                            VlogTutorial.shared.beginIfNeeded(uid: uid)
+                        }
+                    }
                 }
                 .transition(.opacity)
                 .zIndex(10)
@@ -194,6 +200,14 @@ struct MainTabView: View {
                     withAnimation(.easeIn(duration: 0.3)) { showNavGuide = true }
                 }
             }
+            // 시각 검증용: 완료 플래그를 지우고 브이로그 튜토리얼 즉시 시작
+            if ProcessInfo.processInfo.arguments.contains("-previewVlogTutorial") {
+                let uid = authService.currentUser?.uid ?? "preview"
+                UserDefaults.standard.removeObject(forKey: "vlogTutorialDone_\(uid)")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                    VlogTutorial.shared.beginIfNeeded(uid: uid)
+                }
+            }
             #endif
             // 첫 진입 시 나루 내비게이션 가이드 (딥링크 진입 시에는 방해하지 않음)
             if !hasSeenNavGuide,
@@ -202,6 +216,15 @@ struct MainTabView: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
                     guard !hasSeenNavGuide else { return }
                     withAnimation(.easeIn(duration: 0.3)) { showNavGuide = true }
+                }
+            } else if hasSeenNavGuide,
+                      deepLinkHandler.pendingCourseId == nil,
+                      deepLinkHandler.pendingRoomCode == nil,
+                      let uid = authService.currentUser?.uid {
+                // 내비 가이드는 이미 봤지만 첫 브이로그를 아직 안 만든 계정(기존 유저 포함)도
+                // 한 번은 안내한다 — 말풍선은 터치를 막지 않고 X로 영구 종료 가능.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                    VlogTutorial.shared.beginIfNeeded(uid: uid)
                 }
             }
             // 콜드 스타트 딥링크: MainTabView 진입 전 이미 pendingCourseId가 설정된 경우

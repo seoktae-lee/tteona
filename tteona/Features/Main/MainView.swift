@@ -11,6 +11,7 @@ struct MainView: View {
     @StateObject private var locationService = LocationService()
     @ObservedObject private var activeSessionStore = ActiveSessionStore.shared
     @ObservedObject private var impromptuSessionStore = ImpromptuSessionStore.shared
+    @ObservedObject private var tutorial = VlogTutorial.shared
     @State private var selectedCourse: Course?
     @State private var pendingSessionInfo: CourseSessionInfo? = nil
     @State private var pendingImpromptuRoomIds: Set<String>? = nil
@@ -540,6 +541,16 @@ struct MainView: View {
     private var createCourseButton: some View {
         VStack {
             Spacer()
+
+            // 첫 브이로그 튜토리얼 1단계 — '나의 오늘'을 누르도록 유도
+            if tutorial.isOn(.tapMyToday) {
+                TutorialBubble(mascot: "tteoni-guide", text: L("tutorial.myToday.text")) {
+                    tutorial.finish()
+                }
+                .padding(.horizontal, 44)
+                .padding(.bottom, 8)
+            }
+
             ZStack(alignment: .bottom) {
                 // 보조 버튼 — 좌: 이어하기 도크(세로 스택 → 중앙 CTA와 겹침 방지), 우: 현재 위치
                 HStack(alignment: .bottom) {
@@ -593,6 +604,10 @@ struct MainView: View {
                             .fill(Color.tteOrange)
                             .shadow(color: .tteOrange.opacity(0.45), radius: 12, y: 4)
                     )
+                }
+                .tutorialGlow(tutorial.isOn(.tapMyToday), cornerRadius: 27)
+                .overlay {
+                    if tutorial.isOn(.tapMyToday) { TutorialSparkles() }
                 }
             }
             .padding(.bottom, 104)
