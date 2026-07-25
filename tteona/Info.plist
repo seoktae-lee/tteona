@@ -66,6 +66,11 @@
 		<string>Pretendard-SemiBold.otf</string>
 		<string>Pretendard-Bold.otf</string>
 		<string>Pretendard-ExtraBold.otf</string>
+		<string>Jua-Regular.ttf</string>
+		<string>NanumPenScript-Regular.ttf</string>
+		<string>BlackHanSans-Regular.ttf</string>
+		<string>BMKkubulimTTF.ttf</string>
+		<string>HSGooltokki.ttf</string>
 	</array>
 	<key>UIBackgroundModes</key>
 	<array>

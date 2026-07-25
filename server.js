@@ -1407,6 +1407,27 @@ const VLOG_DIR = path.join(__dirname, 'uploads', 'vlog');
 fs.mkdirSync(VLOG_DIR, { recursive: true });
 const VLOG_FONT = path.join(__dirname, 'assets', 'fonts', 'GowunBatang-Regular.ttf');
 
+// 유저가 고를 수 있는 자막 서체 — 키는 앱과 공유(job options.font). 파일 없으면 기본(고운바탕) 폴백.
+const VLOG_FONT_FILES = {
+  gowun:        'GowunBatang-Regular.ttf',
+  pretendard:   'Pretendard-Bold.otf',
+  nanumpen:     'NanumPenScript-Regular.ttf',
+  jua:          'Jua-Regular.ttf',
+  blackhansans: 'BlackHanSans-Regular.ttf',
+  kkubulim:     'BMKkubulimTTF.ttf',
+  gooltokki:    'HSGooltokki.ttf',
+};
+function resolveVlogFont(key) {
+  const file = VLOG_FONT_FILES[key];
+  if (file) {
+    const p = path.join(__dirname, 'assets', 'fonts', file);
+    if (fs.existsSync(p)) return p;
+  }
+  return VLOG_FONT;
+}
+// 자막 크기 배율 — 앱과 공유(job options.fontScale). 기본(medium)은 기존 동작과 동일.
+const VLOG_FONT_SCALE = { small: 1.0, medium: 1.28, large: 1.64 };
+
 // 클립 업로드용 multer — 영상은 크므로 디스크에 바로 저장 (개당 최대 300MB)
 const vlogUpload = multer({
   storage: multer.diskStorage({
@@ -1433,7 +1454,7 @@ const vlogUpload = multer({
 //                   bgm?: 'auto'|'none'|'mood/파일명',
 //                   places: [{order, placeName, shotAt?}] }  (shotAt: 클립 촬영시각 표시 문자열)
 app.post('/api/vlog/jobs', requireAuth, vlogJobLimiter, async (req, res) => {
-  const { courseId, courseName, tag, formats, bgm, places, watermark, priority, shareRoomIds } = req.body || {};
+  const { courseId, courseName, tag, formats, bgm, places, watermark, priority, shareRoomIds, font, fontScale } = req.body || {};
   const userId = req.uid || req.body?.userId; // 검증된 uid 우선
   if (!userId || !Array.isArray(places) || places.length === 0) {
     return res.status(400).json({ error: 'userId and places required' });
@@ -1462,6 +1483,9 @@ app.post('/api/vlog/jobs', requireAuth, vlogJobLimiter, async (req, res) => {
                         bgm: typeof bgm === 'string' ? bgm.slice(0, 200) : null,
                         watermark: watermark !== false,
                         priority: priority === true,
+                        // 자막 서체·크기 — 미지정/미지원 값은 렌더 시 기본(고운바탕·medium)으로 폴백
+                        font: VLOG_FONT_FILES[font] ? font : null,
+                        fontScale: VLOG_FONT_SCALE[fontScale] ? fontScale : null,
                         shareRoomIds: shareRooms,
                         shareToken: shareRooms.length > 0 ? randomBytes(16).toString('hex') : null })]
     );
@@ -1663,6 +1687,9 @@ async function composeVlog(job) {
     ...(opts.formats || []).filter(f => f !== mainFormat && FORMAT_SPECS[f])];
   // 워터마크: 기본 적용, plus 유저만 opts.watermark === false로 제거
   const watermark = opts.watermark !== false && fs.existsSync(VLOG_LOGO);
+  // 유저가 고른 자막 서체·크기 (미지정이면 기본 고운바탕·medium)
+  const subFont = resolveVlogFont(opts.font);
+  const fontScale = VLOG_FONT_SCALE[opts.fontScale] || 1.0;
   await setProgress(4);
 
   const enc = ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21', '-pix_fmt', 'yuv420p',
@@ -1732,7 +1759,7 @@ async function composeVlog(job) {
       const show = Math.min(2.5, D).toFixed(2);
       const fadeOutStart = Math.max(0.4, Math.min(2.5, D) - 0.4).toFixed(2);
       const alpha = `'if(lt(t,0.4),t/0.4,if(lt(t,${fadeOutStart}),1,if(lt(t,${show}),(${show}-t)/0.4,0)))'`;
-      const placeSize = Math.round(Math.min(W, H) * 0.042);
+      const placeSize = Math.round(Math.min(W, H) * 0.042 * fontScale);
       const dateSize2 = Math.round(placeSize * 0.62);
       const shadow = 'shadowcolor=black@0.35:shadowx=2:shadowy=2';
 
@@ -1749,13 +1776,13 @@ async function composeVlog(job) {
           `[bgb][fgs]overlay=(W-w)/2:(H-h)/2,setsar=1`;
 
       const overlays = [
-        // 장소명 — 오렌지(#FF6B35), 화면 세로 중앙 바로 위
-        `drawtext=fontfile=${VLOG_FONT}:textfile=${subTxt}:fontcolor=0xFF6B35:fontsize=${placeSize}:x=(w-text_w)/2:y=(h/2)-${Math.round(placeSize * 1.3)}:${shadow}:alpha=${alpha}`,
+        // 장소명 — 오렌지(#FF6B35), 화면 세로 중앙 바로 위 (유저 선택 서체)
+        `drawtext=fontfile=${subFont}:textfile=${subTxt}:fontcolor=0xFF6B35:fontsize=${placeSize}:x=(w-text_w)/2:y=(h/2)-${Math.round(placeSize * 1.3)}:${shadow}:alpha=${alpha}`,
       ];
       // 촬영 시각 — 흰색, 장소명 아래 (iOS가 shotAt 전달 시)
       if (c.shotAt) {
         const dateTxt = writeTextFile(workDir, `date_${i}.txt`, String(c.shotAt));
-        overlays.push(`drawtext=fontfile=${VLOG_FONT}:textfile=${dateTxt}:fontcolor=white:fontsize=${dateSize2}:x=(w-text_w)/2:y=(h/2)+${Math.round(dateSize2 * 0.3)}:${shadow}:alpha=${alpha}`);
+        overlays.push(`drawtext=fontfile=${subFont}:textfile=${dateTxt}:fontcolor=white:fontsize=${dateSize2}:x=(w-text_w)/2:y=(h/2)+${Math.round(dateSize2 * 0.3)}:${shadow}:alpha=${alpha}`);
       }
       const fades = ['fade=t=in:st=0:d=0.4'];
       if (!isLast) fades.push(`fade=t=out:st=${Math.max(0, D - 0.4).toFixed(2)}:d=0.4`);

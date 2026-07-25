@@ -136,6 +136,8 @@ actor VlogServerService {
                   watermark: Bool = true,
                   priority: Bool = false,
                   shareRoomIds: [String] = [],   // 완성 시 서버가 이 방들의 채팅에 자동 공유
+                  font: String = "gowun",        // 장소 자막 서체 키 (VlogTextStyle)
+                  fontScale: String = "medium",  // 장소 자막 크기 (small/medium/large)
                   onProgress: @escaping @MainActor (Double, String) -> Void) async throws -> GeneratedVlog {
 
         // 로컬에 실제 존재하는 클립만 수집
@@ -200,6 +202,8 @@ actor VlogServerService {
                 watermark: watermark,
                 priority: priority,
                 shareRoomIds: shareRoomIds,
+                font: font,
+                fontScale: fontScale,
                 placesPayload: placesPayload
             )
             uploadedOrders = []
@@ -320,6 +324,7 @@ actor VlogServerService {
     private func createJob(userId: String, courseId: String, courseName: String, tag: String,
                            formats: [String], bgm: String, watermark: Bool, priority: Bool,
                            shareRoomIds: [String],
+                           font: String, fontScale: String,
                            placesPayload: [[String: Any]]) async throws -> Int {
         guard let url = URL(string: "\(baseURL)/jobs") else { throw ServerVlogError.badResponse("bad url") }
         return try await retrying(3) {
@@ -333,6 +338,8 @@ actor VlogServerService {
                 "watermark": watermark,
                 "priority": priority,
                 "shareRoomIds": shareRoomIds,
+                "font": font,
+                "fontScale": fontScale,
                 "places": placesPayload,
             ])
             let (data, resp) = try await URLSession.shared.data(for: req)

@@ -14,6 +14,9 @@ struct VlogGenerationView: View {
     var onDismissToHome: (() -> Void)? = nil
     // 방 선택 화면의 "완성된 브이로그도 공유" 토글과 같은 저장소를 본다
     @AppStorage("vlog.shareToRooms") private var shareVlogPref = true
+    // 장소 자막 서체·크기 — 다음 생성에도 기억된다 (기본: 고운바탕·보통)
+    @AppStorage("vlog.font") private var vlogFont = VlogFont.gowun.rawValue
+    @AppStorage("vlog.fontScale") private var vlogFontScale = VlogFontScale.medium.rawValue
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var pro = ProManager.shared
     @ObservedObject private var tutorial = VlogTutorial.shared
@@ -47,12 +50,13 @@ struct VlogGenerationView: View {
 
     private let vlogService = VlogService()
 
-    enum Phase { case chooseFormat, chooseBgm, generating, preview, error }
+    enum Phase { case chooseFormat, chooseBgm, chooseText, generating, preview, error }
 
     var body: some View {
         switch phase {
         case .chooseFormat: chooseFormatView
         case .chooseBgm: chooseBgmView
+        case .chooseText: chooseTextView
         case .generating: generatingView
         case .preview:
             if let url = vlogURL {
@@ -304,9 +308,9 @@ struct VlogGenerationView: View {
 
                 Button {
                     stopBgmPreview()
-                    phase = .generating
+                    phase = .chooseText
                 } label: {
-                    Text(L("session.makeVlog"))
+                    Text(L("vlog.next"))
                         .font(.tte(17, .bold))
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity).frame(height: 56)
@@ -425,6 +429,163 @@ struct VlogGenerationView: View {
         playingTrackId = nil
     }
 
+    // MARK: - 글씨 스타일 선택
+
+    private var selectedFont: VlogFont { VlogFont(rawValue: vlogFont) ?? .gowun }
+    private var selectedScale: VlogFontScale { VlogFontScale(rawValue: vlogFontScale) ?? .medium }
+    /// 미리보기에 쓸 실제 첫 장소명 (없으면 샘플)
+    private var previewPlaceName: String {
+        course.places.first?.placeName ?? L("vlog.font.sampleName")
+    }
+    /// 미리보기 자막 날짜 — 서버 자막과 같은 형식(yyyy.MM.dd HH:mm)
+    private static var previewDateString: String {
+        let df = DateFormatter()
+        df.calendar = Calendar(identifier: .gregorian)
+        df.locale = Locale(identifier: "en_US_POSIX")
+        df.dateFormat = "yyyy.MM.dd  HH:mm"
+        return df.string(from: Date())
+    }
+
+    private var chooseTextView: some View {
+        ZStack {
+            VlogAuroraBackground()
+            VStack(spacing: 0) {
+                Spacer(minLength: 40)
+                Text(L("vlog.textSheet.title"))
+                    .font(.tte(22, .bold))
+                    .foregroundColor(.white)
+                Text(L("vlog.textSheet.subtitle"))
+                    .font(.tte(13))
+                    .foregroundColor(.white.opacity(0.65))
+                    .padding(.top, 6)
+
+                // 실제 자막이 얹히는 모습 미리보기 (영상 프레임 흉내)
+                textPreviewCard
+                    .padding(.horizontal, 24)
+                    .padding(.top, 24)
+
+                ScrollView(showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 18) {
+                        // 서체
+                        Text(L("vlog.textSheet.fontLabel"))
+                            .font(.tte(13, .semibold))
+                            .foregroundColor(.white.opacity(0.75))
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 10) {
+                                ForEach(VlogFont.allCases) { font in
+                                    fontChip(font)
+                                }
+                            }
+                        }
+
+                        // 크기
+                        Text(L("vlog.textSheet.sizeLabel"))
+                            .font(.tte(13, .semibold))
+                            .foregroundColor(.white.opacity(0.75))
+                        HStack(spacing: 10) {
+                            ForEach(VlogFontScale.allCases) { scale in
+                                sizePill(scale)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.top, 22)
+                    .padding(.bottom, 12)
+                }
+
+                Button {
+                    phase = .generating
+                } label: {
+                    Text(L("session.makeVlog"))
+                        .font(.tte(17, .bold))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity).frame(height: 56)
+                        .background(RoundedRectangle(cornerRadius: 16).fill(Color.tteOrange))
+                }
+                .padding(.horizontal, 24)
+
+                Button(L("vlog.back")) {
+                    phase = .chooseBgm
+                }
+                .font(.tte(14))
+                .foregroundColor(.white.opacity(0.6))
+                .padding(.top, 14)
+                .padding(.bottom, 36)
+            }
+        }
+    }
+
+    /// 선택한 서체·크기가 실제 자막처럼 얹힌 미리보기
+    private var textPreviewCard: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 20)
+                .fill(
+                    LinearGradient(colors: [Color(red: 0.18, green: 0.10, blue: 0.05),
+                                            Color(red: 0.30, green: 0.16, blue: 0.08)],
+                                   startPoint: .topLeading, endPoint: .bottomTrailing)
+                )
+            VStack(spacing: 6) {
+                Text(previewPlaceName)
+                    .font(.custom(selectedFont.postScriptName, size: 30 * selectedScale.multiplier))
+                    .foregroundColor(.tteOrange)
+                    .shadow(color: .black.opacity(0.35), radius: 2, x: 2, y: 2)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                Text(Self.previewDateString)
+                    .font(.custom(selectedFont.postScriptName, size: 30 * selectedScale.multiplier * 0.62))
+                    .foregroundColor(.white)
+                    .shadow(color: .black.opacity(0.35), radius: 2, x: 2, y: 2)
+            }
+            .padding(.horizontal, 16)
+        }
+        .frame(height: 150)
+        .overlay(
+            RoundedRectangle(cornerRadius: 20).stroke(Color.white.opacity(0.12), lineWidth: 1)
+        )
+    }
+
+    private func fontChip(_ font: VlogFont) -> some View {
+        let isOn = selectedFont == font
+        return Button {
+            vlogFont = font.rawValue
+            Haptics.light()
+        } label: {
+            Text(font.displayName)
+                .font(.custom(font.postScriptName, size: 17))
+                .foregroundColor(isOn ? .white : .white.opacity(0.7))
+                .padding(.horizontal, 16).frame(height: 46)
+                .background(
+                    RoundedRectangle(cornerRadius: 14)
+                        .fill(Color.white.opacity(isOn ? 0.14 : 0.06))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(isOn ? Color.tteOrange : Color.clear, lineWidth: 1.5)
+                )
+        }
+    }
+
+    private func sizePill(_ scale: VlogFontScale) -> some View {
+        let isOn = selectedScale == scale
+        return Button {
+            vlogFontScale = scale.rawValue
+            Haptics.light()
+        } label: {
+            Text(scale.displayName)
+                .font(.tte(15, isOn ? .bold : .regular))
+                .foregroundColor(isOn ? .white : .white.opacity(0.7))
+                .frame(maxWidth: .infinity).frame(height: 48)
+                .background(
+                    RoundedRectangle(cornerRadius: 14)
+                        .fill(Color.white.opacity(isOn ? 0.14 : 0.06))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(isOn ? Color.tteOrange : Color.clear, lineWidth: 1.5)
+                )
+        }
+    }
+
     // MARK: - 생성 중
     private var generatingView: some View {
         ZStack {
@@ -486,6 +647,7 @@ struct VlogGenerationView: View {
                         watermark: !pro.isPro,   // PRO 유저만 워터마크 제거
                         priority: pro.isPro,     // PRO 유저 우선 렌더링
                         shareRoomIds: shareVlogPref ? Array(shareRoomIds) : [],
+                        font: vlogFont, fontScale: vlogFontScale,
                         onProgress: { p, stage in
                             progress = p
                             stageText = stage
@@ -517,6 +679,7 @@ struct VlogGenerationView: View {
                     progress = 0.05
                     mainURL = try await vlogService.generateVlog(
                         course: course, sessionId: sessionId,
+                        font: selectedFont, fontScale: selectedScale,
                         onProgress: { p in Task { @MainActor in progress = p } }
                     )
                 }
@@ -524,6 +687,7 @@ struct VlogGenerationView: View {
                 didFallback = forceLocal
                 mainURL = try await vlogService.generateVlog(
                     course: course, sessionId: sessionId,
+                    font: selectedFont, fontScale: selectedScale,
                     onProgress: { p in Task { @MainActor in progress = p } }
                 )
             }

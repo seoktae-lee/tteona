@@ -6,6 +6,7 @@ class VlogService {
 
     // MARK: - Public
     func generateVlog(course: Course, sessionId: String,
+                      font: VlogFont = .gowun, fontScale: VlogFontScale = .medium,
                       onProgress: @escaping (Double) -> Void) async throws -> URL {
         let places = course.places
 
@@ -23,7 +24,8 @@ class VlogService {
 
         await MainActor.run { onProgress(0.1) }
 
-        let outURL = try await buildComposition(segments: segments, onProgress: onProgress)
+        let outURL = try await buildComposition(segments: segments, font: font,
+                                                fontScale: fontScale, onProgress: onProgress)
 
         await MainActor.run { onProgress(1.0) }
         dlog("[Vlog] done: \(outURL.lastPathComponent)")
@@ -45,6 +47,8 @@ class VlogService {
     // MARK: - Composition + CALayer 오버레이 + 페이드 전환
     private func buildComposition(
         segments: [(asset: AVURLAsset, placeName: String, date: Date)],
+        font: VlogFont = .gowun,
+        fontScale: VlogFontScale = .medium,
         onProgress: @escaping (Double) -> Void
     ) async throws -> URL {
 
@@ -193,6 +197,8 @@ class VlogService {
                 placeName: info.placeName,
                 dateStr: Self.fmt(info.date),
                 size: outputSize,
+                font: font,
+                fontScale: fontScale,
                 startSec: startSec,
                 clipDuration: durSec,
                 totalDuration: totalSec
@@ -290,6 +296,8 @@ class VlogService {
         placeName: String,
         dateStr: String,
         size: CGSize,
+        font: VlogFont,
+        fontScale: VlogFontScale,
         startSec: Double,
         clipDuration: Double,
         totalDuration: Double
@@ -301,29 +309,35 @@ class VlogService {
         let H = size.height
         let cY = H / 2
 
-        let prostoFont = UIFont(name: "GowunBatang-Regular", size: 80)
-            ?? UIFont.systemFont(ofSize: 80, weight: .bold)
-        let prostoSmallFont = UIFont(name: "GowunBatang-Regular", size: 52)
-            ?? UIFont.systemFont(ofSize: 52, weight: .regular)
+        // 유저 선택 서체·크기 (medium = 기존 80/52pt). 로드 실패 시 시스템 폰트 폴백.
+        let placeSize = 80 * fontScale.multiplier
+        let dateSize = 52 * fontScale.multiplier
+        let placeFont = UIFont(name: font.postScriptName, size: placeSize)
+            ?? UIFont.systemFont(ofSize: placeSize, weight: .bold)
+        let smallFont = UIFont(name: font.postScriptName, size: dateSize)
+            ?? UIFont.systemFont(ofSize: dateSize, weight: .regular)
+        // 큰 글씨는 기준 프레임(높이 100/65)을 넘칠 수 있어 배율만큼 프레임도 키운다
+        let placeH = 100 * fontScale.multiplier
+        let dateH = 65 * fontScale.multiplier
 
         let placeLayer = CATextLayer()
-        placeLayer.string = "📍 \(placeName)"
-        placeLayer.font = prostoFont
-        placeLayer.fontSize = 80
+        placeLayer.string = placeName
+        placeLayer.font = placeFont
+        placeLayer.fontSize = placeSize
         placeLayer.foregroundColor = UIColor(red: 1, green: 0.42, blue: 0.21, alpha: 1).cgColor
         placeLayer.alignmentMode = .center
         placeLayer.contentsScale = UIScreen.main.scale
-        placeLayer.frame = CGRect(x: 60, y: cY - 100, width: W - 120, height: 100)
+        placeLayer.frame = CGRect(x: 60, y: cY - placeH, width: W - 120, height: placeH)
         container.addSublayer(placeLayer)
 
         let dateLayer = CATextLayer()
         dateLayer.string = dateStr
-        dateLayer.font = prostoSmallFont
-        dateLayer.fontSize = 52
+        dateLayer.font = smallFont
+        dateLayer.fontSize = dateSize
         dateLayer.foregroundColor = UIColor.white.cgColor
         dateLayer.alignmentMode = .center
         dateLayer.contentsScale = UIScreen.main.scale
-        dateLayer.frame = CGRect(x: 60, y: cY + 10, width: W - 120, height: 65)
+        dateLayer.frame = CGRect(x: 60, y: cY + 10, width: W - 120, height: dateH)
         container.addSublayer(dateLayer)
 
         // CoreAnimation 타임라인 기준 애니메이션 (beginTime = composition 시간)
