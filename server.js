@@ -2408,6 +2408,11 @@ function courseHtml({ courseId, courseName, ogDescription, placeNames, placeCoun
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHtml(courseName)} — tteona</title>
+  <!-- Favicon -->
+  <link rel="icon" href="/favicon.ico?v=2" sizes="any">
+  <link rel="icon" type="image/png" href="/favicon-32x32.png?v=2" sizes="32x32">
+  <link rel="icon" type="image/png" href="/favicon-16x16.png?v=2" sizes="16x16">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2">
 
   <meta property="og:type"        content="website">
   <meta property="og:title"       content="${escapeHtml(ogTitle)}">
@@ -2844,6 +2849,11 @@ function courseNotFoundHtml() {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>떠나 — 코스를 찾을 수 없어요</title>
+  <!-- Favicon -->
+  <link rel="icon" href="/favicon.ico?v=2" sizes="any">
+  <link rel="icon" type="image/png" href="/favicon-32x32.png?v=2" sizes="32x32">
+  <link rel="icon" type="image/png" href="/favicon-16x16.png?v=2" sizes="16x16">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2">
   <meta property="og:title" content="떠나 — 코스를 찾을 수 없어요">
   <meta property="og:image" content="https://tteona.kr/og-image.png">
   <style>
