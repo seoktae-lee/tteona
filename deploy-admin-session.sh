@@ -23,7 +23,7 @@ ssh -i "$WAS_KEY" -p $PORT $WAS_HOST \
 
 echo "▶ [3/5] WEB: admin/index.html 업로드 (백업 후 교체)..."
 ssh -i "$WEB_KEY" -p $PORT $WEB_HOST \
-  "sudo cp /var/www/tteona.kr/admin/index.html /var/www/tteona.kr/admin/index.html.bak-\$(date +%Y%m%d-%H%M%S)"
+  "mkdir -p /home/ubuntu/web-backups && chmod 700 /home/ubuntu/web-backups && sudo cp /var/www/tteona.kr/admin/index.html /home/ubuntu/web-backups/admin-index.html.bak-\$(date +%Y%m%d-%H%M%S)"
 scp -i "$WEB_KEY" -P $PORT "$SCRIPT_DIR/admin/index.html" $WEB_HOST:/tmp/admin-index.html
 ssh -i "$WEB_KEY" -p $PORT $WEB_HOST \
   "sudo mv /tmp/admin-index.html /var/www/tteona.kr/admin/index.html"

@@ -38,8 +38,9 @@ ssh -i "$WAS_KEY" -p $PORT $WAS_HOST \
 
 echo "▶ [4/6] WEB: 랜딩 백업 + explore 업로드..."
 ssh -i "$WEB_KEY" -p $PORT $WEB_HOST \
-  "sudo cp /var/www/tteona.kr/index.html /var/www/tteona.kr/index.html.bak-$(date +%Y%m%d-%H%M%S) && \
-   sudo cp /var/www/tteona.kr/popular.html /var/www/tteona.kr/popular.html.bak-$(date +%Y%m%d-%H%M%S)"
+  "mkdir -p /home/ubuntu/web-backups && chmod 700 /home/ubuntu/web-backups && \
+   sudo cp /var/www/tteona.kr/index.html /home/ubuntu/web-backups/index.html.bak-$(date +%Y%m%d-%H%M%S) && \
+   sudo cp /var/www/tteona.kr/popular.html /home/ubuntu/web-backups/popular.html.bak-$(date +%Y%m%d-%H%M%S)"
 scp -i "$WEB_KEY" -P $PORT -r "$WEB_SRC/explore" $WEB_HOST:/tmp/explore-deploy
 scp -i "$WEB_KEY" -P $PORT "$WEB_SRC/index.html" "$WEB_SRC/popular.html" $WEB_HOST:/tmp/
 ssh -i "$WEB_KEY" -p $PORT $WEB_HOST \
