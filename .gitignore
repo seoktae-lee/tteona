@@ -31,3 +31,8 @@ Pods/
 functions/node_modules/
 functions/lib/
 functions/firebase-debug.log
+
+# 마케팅 자산 (로컬 전용 — 저장소에 넣지 않는다)
+#  out/    : render.sh로 언제든 재생성되는 PNG
+#  fonts/  : Pretendard 중복본 (tteona/Fonts·assets/fonts에 이미 있음)
+marketing/
