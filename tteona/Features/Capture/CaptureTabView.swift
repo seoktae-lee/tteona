@@ -277,30 +277,47 @@ struct CaptureTabView: View {
     }
 
     /// 클립 길이 — 총 예산을 어떻게 쪼갤지의 선택. 10초·무제한은 PRO
+    /// 지금 화면에 낼 길이들. 무료 유저에게 잠긴 길이를 셋씩 늘어놓을 이유가 없다 —
+    /// 어느 걸 눌러도 같은 페이월로 가므로 '더 길게' 하나로 묶는다.
+    /// 칩 개수가 줄어 작은 기기에서도 안전하고, 자물쇠가 하나뿐이라 덜 인색해 보인다.
+    private var visibleLengths: [VlogClipLength] {
+        pro.isPro ? VlogClipLength.allCases : VlogClipLength.allCases.filter { !$0.requiresPro }
+    }
+
     private var clipLengthChips: some View {
         HStack(spacing: 6) {
-            ForEach(VlogClipLength.allCases) { length in
+            ForEach(visibleLengths) { length in
                 let selected = pro.effectiveClipLength == length
-                let locked = !pro.canUse(length)
                 // 남은 예산보다 긴 길이는 골라도 잘려서 찍힌다 — 미리 흐리게 알린다
-                let overBudget = !locked && (length.seconds ?? .infinity) > remainingSeconds
+                let overBudget = (length.seconds ?? .infinity) > remainingSeconds
                 Button {
                     Haptics.light()
-                    // 잠긴 길이를 누르는 순간이 가장 자연스러운 업셀 지점이다 — 바로 구독 화면으로
-                    if locked { fullCover = .paywall } else { pro.clipLength = length }
+                    pro.clipLength = length
+                } label: {
+                    Text(length.shortLabel)
+                        .font(.tte(13, .bold))
+                        .foregroundColor(selected ? .black : .white.opacity(overBudget ? 0.45 : 1))
+                        .padding(.horizontal, 13)
+                        .frame(height: 32)
+                        .background(Capsule().fill(selected ? Color.white : Color.black.opacity(0.45)))
+                }
+            }
+
+            if !pro.isPro {
+                // 잠긴 길이를 만지는 순간이 가장 자연스러운 업셀 지점이다
+                Button {
+                    Haptics.light()
+                    fullCover = .paywall
                 } label: {
                     HStack(spacing: 3) {
-                        Text(length.shortLabel)
+                        Image(systemName: "lock.fill").font(.tte(9))
+                        Text(L("camera.clipLength.more"))
                             .font(.tte(13, .bold))
-                        if locked {
-                            Image(systemName: "lock.fill").font(.tte(9))
-                        }
                     }
-                    .foregroundColor(selected ? .black
-                                     : .white.opacity(locked || overBudget ? 0.45 : 1))
-                    .padding(.horizontal, 13)
+                    .foregroundColor(.white.opacity(0.6))
+                    .padding(.horizontal, 12)
                     .frame(height: 32)
-                    .background(Capsule().fill(selected ? Color.white : Color.black.opacity(0.45)))
+                    .background(Capsule().fill(Color.black.opacity(0.45)))
                 }
             }
         }

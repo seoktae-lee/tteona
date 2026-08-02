@@ -1801,25 +1801,25 @@
         }
       }
     },
-    "camera.clipLength.proOnly": {
+    "camera.clipLength.more": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ is available on PRO"
+            "value": "Longer"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@はPROで使えます"
+            "value": "もっと長く"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@는 PRO에서 쓸 수 있어요"
+            "value": "더 길게"
           }
         }
       }
@@ -1843,29 +1843,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "%d초"
-          }
-        }
-      }
-    },
-    "camera.clipLength.unlimited": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Free"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "無制限"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "무제한"
           }
         }
       }
@@ -8431,19 +8408,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Videos up to 5 minutes"
+            "value": "5 minutes a day"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "動画の長さを5分に拡大"
+            "value": "1日5分に拡大"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "영상 길이 5분으로 확대"
+            "value": "촬영 시간 하루 5분으로"
           }
         }
       }
@@ -8454,19 +8431,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No 5s/place or 30s total limit — up to 5 minutes"
+            "value": "30s → 5 min, plus 10s / 15s / 20s clip lengths"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "場所ごと5秒・合計30秒の制限なしで最大5分まで"
+            "value": "無料30秒 → 5分 · 10/15/20秒の長さも使えます"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "장소당 5초·총 30초 제한 없이 최대 5분까지"
+            "value": "무료 30초 → 5분 · 10·15·20초 길이까지 열려요"
           }
         }
       }
@@ -8960,13 +8937,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Longer, freer travel moments"
+            "value": "Capture your trip longer, and freely"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "旅の瞬間をもっと長く、もっと自由に"
+            "value": "旅の瞬間をもっと長く、自由に"
           }
         },
         "ko": {
@@ -15308,19 +15285,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The free plan allows 5 seconds per place, 30 seconds total."
+            "value": "You’ve used all 30 seconds for today.\nTurn what you’ve captured into a vlog."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "無料では場所ごとに5秒、合計30秒まで収録できます。"
+            "value": "今日の30秒をすべて使いました。\nこれまでの瞬間でブイログを作ってみましょう。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "무료로는 장소당 5초, 총 30초까지 담을 수 있어요."
+            "value": "오늘 담을 수 있는 30초를 모두 썼어요.\n지금까지 찍은 순간들로 브이로그를 만들어보세요."
           }
         }
       }
@@ -15354,19 +15331,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No per-place limit, up to 5 minutes total"
+            "value": "Up to 20s per place · 5 min a day"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "場所ごとの制限なし、最大5分まで自由に"
+            "value": "一つの場所に最大20秒 · 1日合計5分まで"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "장소당 제한 없이 최대 5분까지 자유롭게"
+            "value": "한 장소에 최대 20초 · 하루 총 5분까지"
           }
         }
       }
