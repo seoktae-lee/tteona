@@ -840,6 +840,7 @@ struct VlogGenerationView: View {
                     mainURL = try await vlogService.generateVlog(
                         course: course, sessionId: sessionId,
                         style: subtitleStyle,
+                        watermark: !pro.isPro,   // 결제로 지운 워터마크가 폴백에서 되살아나면 안 된다
                         onProgress: { p in Task { @MainActor in progress = p } }
                     )
                 }
@@ -848,6 +849,7 @@ struct VlogGenerationView: View {
                 mainURL = try await vlogService.generateVlog(
                     course: course, sessionId: sessionId,
                     style: subtitleStyle,
+                    watermark: !pro.isPro,
                     onProgress: { p in Task { @MainActor in progress = p } }
                 )
             }

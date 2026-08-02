@@ -7,6 +7,7 @@ class VlogService {
     // MARK: - Public
     func generateVlog(course: Course, sessionId: String,
                       style: VlogSubtitleStyle = .default,
+                      watermark: Bool = true,
                       onProgress: @escaping (Double) -> Void) async throws -> URL {
         let places = course.places
 
@@ -25,7 +26,7 @@ class VlogService {
         await MainActor.run { onProgress(0.1) }
 
         let outURL = try await buildComposition(segments: segments, style: style,
-                                                onProgress: onProgress)
+                                                watermark: watermark, onProgress: onProgress)
 
         await MainActor.run { onProgress(1.0) }
         dlog("[Vlog] done: \(outURL.lastPathComponent)")
@@ -48,6 +49,7 @@ class VlogService {
     private func buildComposition(
         segments: [(asset: AVURLAsset, placeName: String, date: Date)],
         style: VlogSubtitleStyle = .default,
+        watermark: Bool = true,
         onProgress: @escaping (Double) -> Void
     ) async throws -> URL {
 
@@ -208,6 +210,9 @@ class VlogService {
         parentLayer.frame = CGRect(origin: .zero, size: outputSize)
         parentLayer.addSublayer(videoLayer)
         parentLayer.addSublayer(overlayLayer)
+        if watermark, let logo = makeWatermarkLayer(size: outputSize) {
+            parentLayer.addSublayer(logo)
+        }
 
         videoComp.animationTool = AVVideoCompositionCoreAnimationTool(
             postProcessingAsVideoLayer: videoLayer,
@@ -384,6 +389,32 @@ class VlogService {
         container.add(opacityAnim, forKey: "textOverlay")
 
         return container
+    }
+
+    /// 우측 상단 tteona 로고 워터마크 — 서버(server.js)와 **같은 사양**으로 맞춘다.
+    /// 폭 = 짧은 변의 20%, 여백 = 짧은 변의 3.5%, 불투명도 0.55, 로고 파일도 동일(SHA 일치).
+    ///
+    /// 로컬 합성에는 워터마크가 없어서, 게스트 영상이 무료 회원 영상보다 깨끗한 역전이 있었다.
+    /// 가입할수록 손해가 되는 구조라 가입 유도와 정면으로 부딪힌다.
+    ///
+    /// 서버는 클립마다 얹어 전환 페이드와 함께 사라지지만, 여기서는 영상 전체에 한 장으로
+    /// 고정한다 — 합성 구조상 그게 자연스럽고, 전환마다 깜빡이지 않아 오히려 낫다.
+    private func makeWatermarkLayer(size: CGSize) -> CALayer? {
+        guard let logo = UIImage(named: "tteona-logo")?.cgImage else { return nil }
+        let side = min(size.width, size.height)
+        let w = side * 0.20
+        let h = w * CGFloat(logo.height) / CGFloat(logo.width)
+        let margin = side * 0.035
+
+        let layer = CALayer()
+        layer.contents = logo
+        layer.contentsGravity = .resizeAspect
+        layer.opacity = 0.55
+        // 영상 합성용 레이어 트리는 원점이 좌하단이라 y가 위로 자란다 — '상단'은 y가 큰 쪽
+        layer.frame = CGRect(x: size.width - w - margin,
+                             y: size.height - h - margin,
+                             width: w, height: h)
+        return layer
     }
 
     // MARK: - 회전 보정 트랜스폼

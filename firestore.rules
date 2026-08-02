@@ -2,9 +2,17 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // 로그인한 사용자만 접근 가능
+    // 진짜 계정을 가진 사용자만 접근 가능.
+    //
+    // 익명(게스트) 계정도 request.auth가 채워지므로 `!= null`만으로는 걸러지지 않는다.
+    // 게스트는 촬영·브이로그까지만 하고 코스·그룹·발자취 같은 축적 기능은 쓸 수 없어야 하므로,
+    // 규칙에서도 익명을 명시적으로 배제한다 (앱 쪽 게이팅이 뚫려도 여기가 마지막 방어선).
+    //
+    // sign_in_provider 값: password / apple.com / google.com / custom(카카오) / anonymous
+    // → 'anonymous'만 막으면 기존 로그인 수단은 전부 그대로 통과한다.
     function isSignedIn() {
-      return request.auth != null;
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider != 'anonymous';
     }
 
     function isOwner(userId) {
