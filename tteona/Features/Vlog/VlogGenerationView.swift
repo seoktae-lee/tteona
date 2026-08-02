@@ -618,6 +618,18 @@ struct VlogGenerationView: View {
                         .foregroundColor(.white.opacity(0.6))
                 }
 
+                // 이어받기는 이미 되는데 유저가 모른다. 느린 회선에서 이 한 문장이
+                // "멈춘 건가?" 하는 불안을 없애준다 — 예상 시간보다 이게 더 큰 안심이다.
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.icloud")
+                        .font(.tte(12))
+                    Text(L("vlog.keepsRunning"))
+                        .font(.tte(13))
+                        .multilineTextAlignment(.center)
+                }
+                .foregroundColor(.white.opacity(0.55))
+                .padding(.horizontal, 40)
+
                 Spacer()
             }
         }

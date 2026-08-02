@@ -215,10 +215,16 @@ actor VlogServerService {
         // 2) 클립 업로드 (0.05 → 0.45) — 이미 올린 클립은 건너뛴다
         if !alreadyStarted {
             for (i, clip) in clips.enumerated() {
-                await onProgress(0.05 + 0.40 * Double(i) / Double(clips.count),
-                                 L("vlogserver.uploading", i + 1, clips.count))
+                let base = 0.05 + 0.40 * Double(i) / Double(clips.count)
+                let span = 0.40 / Double(clips.count)
+                let label = L("vlogserver.uploading", i + 1, clips.count)
+                await onProgress(base, label)
                 guard !uploadedOrders.contains(clip.place.order) else { continue }
-                try await uploadClip(jobId: jobId, order: clip.place.order, fileURL: clip.file)
+                // 클립 단위로만 갱신하면 느린 회선에서 몇 분씩 멈춘 것처럼 보인다.
+                // 실제 전송 바이트로 채워 숫자가 계속 움직이게 한다.
+                try await uploadClip(jobId: jobId, order: clip.place.order, fileURL: clip.file) { fraction in
+                    Task { @MainActor in onProgress(base + span * fraction, label) }
+                }
                 uploadedOrders.insert(clip.place.order)
                 savePending(sessionId, PendingJob(jobId: jobId, courseId: course.courseId,
                                                   uploadedOrders: Array(uploadedOrders),
@@ -352,13 +358,38 @@ actor VlogServerService {
         }
     }
 
-    private func uploadClip(jobId: Int, order: Int, fileURL: URL) async throws {
+    private func uploadClip(jobId: Int, order: Int, fileURL: URL,
+                            onBytes: (@Sendable (Double) -> Void)? = nil) async throws {
         try await retrying(3) {
-            try await uploadClipOnce(jobId: jobId, order: order, fileURL: fileURL)
+            try await uploadClipOnce(jobId: jobId, order: order, fileURL: fileURL, onBytes: onBytes)
         }
     }
 
-    private func uploadClipOnce(jobId: Int, order: Int, fileURL: URL) async throws {
+    /// 업로드 바이트 진행률을 받아 넘기는 델리게이트.
+    /// 클립 단위로만 진행률을 갱신하면 느린 회선(해외 로밍)에서 몇 분씩 멈춘 것처럼 보인다.
+    private final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate {
+        let onProgress: @Sendable (Double) -> Void
+        init(onProgress: @escaping @Sendable (Double) -> Void) { self.onProgress = onProgress }
+        func urlSession(_ session: URLSession, task: URLSessionTask,
+                        didSendBodyData bytesSent: Int64,
+                        totalBytesSent: Int64, totalBytesExpectedToSend: Int64) {
+            guard totalBytesExpectedToSend > 0 else { return }
+            onProgress(Double(totalBytesSent) / Double(totalBytesExpectedToSend))
+        }
+    }
+
+    /// 업로드 전용 세션 — waitsForConnectivity로 짧은 끊김에 즉시 실패하지 않는다.
+    /// (URLSession.shared는 이 옵션을 설정할 수 없다)
+    private static let uploadSession: URLSession = {
+        let cfg = URLSessionConfiguration.default
+        cfg.waitsForConnectivity = true
+        cfg.timeoutIntervalForRequest = 300
+        cfg.timeoutIntervalForResource = 1800
+        return URLSession(configuration: cfg)
+    }()
+
+    private func uploadClipOnce(jobId: Int, order: Int, fileURL: URL,
+                                onBytes: (@Sendable (Double) -> Void)? = nil) async throws {
         guard let url = URL(string: "\(baseURL)/jobs/\(jobId)/clips?order=\(order)") else {
             throw ServerVlogError.badResponse("bad url")
         }
@@ -390,7 +421,9 @@ actor VlogServerService {
         try writer.write(contentsOf: suffix.data(using: .utf8)!)
         try writer.close()
 
-        let (data, resp) = try await URLSession.shared.upload(for: req, fromFile: bodyFile)
+        let delegate = onBytes.map { UploadProgressDelegate(onProgress: $0) }
+        let (data, resp) = try await Self.uploadSession.upload(for: req, fromFile: bodyFile,
+                                                              delegate: delegate)
         guard (resp as? HTTPURLResponse)?.statusCode == 200 else {
             let msg = String(data: data, encoding: .utf8) ?? "upload failed"
             throw ServerVlogError.transient("clip \(order): \(msg.prefix(120))")

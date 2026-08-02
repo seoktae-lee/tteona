@@ -14842,6 +14842,29 @@
         }
       }
     },
+    "vlog.keepsRunning": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keeps rendering on our servers even if you close the app"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アプリを閉じてもサーバーで作成が続きます"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "앱을 닫아도 서버에서 계속 만들어져요"
+          }
+        }
+      }
+    },
     "vlog.loginRequired": {
       "extractionState": "manual",
       "localizations": {
