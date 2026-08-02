@@ -12,10 +12,36 @@ class CourseService: ObservableObject {
     private let db = Firestore.firestore()
     private var likedCourseIdsFetched = false
 
-    func fetchCourses(blockedUserIds: [String] = []) async {
+    /// 마지막으로 서버에서 받아온 시각 — 이 안에서는 다시 부르지 않는다
+    private var lastFetchedAt: Date?
+    private static let cacheTTL: TimeInterval = 5 * 60
+
+    /// 지도·탐색 공용 코스 목록.
+    ///
+    /// 같은 데이터를 여러 화면이 각자 부르고(지도/탐색), 뷰가 재생성될 때마다 또 불러
+    /// 진입할 때 300건을 두 번씩 받아오고 있었다. 최근에 받아둔 게 있으면 건너뛴다.
+    /// 당겨서 새로고침처럼 최신본이 꼭 필요할 때만 `force: true`로 강제한다.
+    func fetchCourses(blockedUserIds: [String] = [], force: Bool = false) async {
+        if !force, !courses.isEmpty,
+           let at = lastFetchedAt, Date().timeIntervalSince(at) < Self.cacheTTL {
+            return
+        }
+
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
+
+        // 처음 진입이면 로컬 캐시로 먼저 그린다 — 서버 응답까지 빈 지도를 보여주지 않는다.
+        // (Firestore iOS SDK는 기본적으로 디스크 캐시를 유지한다)
+        if courses.isEmpty {
+            let cachedQuery = db.collection("courses")
+                .order(by: "likeCount", descending: true)
+                .limit(to: 300)
+            if let cached = try? await cachedQuery.getDocuments(source: .cache), !cached.isEmpty {
+                let fromCache = cached.documents.compactMap { try? $0.data(as: Course.self) }
+                self.courses = fromCache.filter { !blockedUserIds.contains($0.authorId) }
+            }
+        }
 
         do {
             // 지도/탐색은 인기순 상위 300개만 로드한다. 코스가 수천 개로 늘어도 진입이
@@ -30,6 +56,7 @@ class CourseService: ObservableObject {
                 try? doc.data(as: Course.self)
             }
             self.courses = fetched.filter { !blockedUserIds.contains($0.authorId) }
+            self.lastFetchedAt = Date()
         } catch {
             self.errorMessage = error.localizedDescription
         }

@@ -9,6 +9,10 @@ struct ProPaywallView: View {
     @ObservedObject private var pro = ProManager.shared
 
     @State private var selectedPackage: Package?
+    /// 결제는 계정에 묶여야 한다. 게스트로 사면 기기를 바꾸거나 앱을 지웠을 때
+    /// 복원할 방법이 없어 "돈은 냈는데 사라졌다"가 된다 — 구매 직전에 가입을 받는다.
+    @EnvironmentObject private var authService: AuthService
+    @State private var showAuthForPurchase = false
     @State private var isPurchasing = false
     @State private var alertMessage: String?
     @State private var appeared = false        // 등장 스태거 트리거
@@ -174,6 +178,11 @@ struct ProPaywallView: View {
     // MARK: - CTA (슈머 스윕 하이라이트)
     private var ctaButton: some View {
         Button {
+            guard authService.isLoggedIn else {
+                Haptics.light()
+                showAuthForPurchase = true
+                return
+            }
             Task { await purchase() }
         } label: {
             ZStack {
@@ -206,6 +215,7 @@ struct ProPaywallView: View {
             .frame(maxWidth: .infinity).frame(height: 56)
         }
         .disabled(isPurchasing || selectedPackage == nil)
+        .fullScreenCover(isPresented: $showAuthForPurchase) { AuthView() }
     }
 
     private func featureRow(icon: String, title: String, subtitle: String) -> some View {

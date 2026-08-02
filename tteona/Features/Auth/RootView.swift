@@ -50,11 +50,14 @@ struct RootView: View {
 
     @ViewBuilder
     private var rootContent: some View {
+            // 로그인은 더 이상 앱을 여는 조건이 아니다.
+            // 촬영·브이로그 합성·앨범 저장은 전부 기기 안에서 끝나므로 게스트로 완주할 수 있고,
+            // 계정은 그룹·코스·발자취처럼 서버가 필요한 순간에만 요구한다.
             if authService.isInitializing {
                 SplashView()
-            } else if !authService.isLoggedIn || authService.verificationEmailSent {
-                AuthView()
-            } else if !authService.onboardingComplete {
+            } else if authService.verificationEmailSent {
+                AuthView()   // 이메일 인증 대기 중에는 그 화면을 지킨다
+            } else if authService.isLoggedIn && !authService.onboardingComplete {
                 OnboardingView()
             } else {
                 MainTabView()

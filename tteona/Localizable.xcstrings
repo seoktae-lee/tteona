@@ -5550,6 +5550,190 @@
         }
       }
     },
+    "guest.captureStillFree": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recording and making vlogs stay free without an account"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "撮影とブイログ作成はアカウントなしでも使えます"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "촬영과 브이로그 만들기는 가입 없이도 계속 쓸 수 있어요"
+          }
+        }
+      }
+    },
+    "guest.chat.message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign up to create groups and share\ntoday’s moments with friends and family."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "登録するとグループを作って今日の記録を\n友だちや家族と共有できます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "가입하면 그룹을 만들어 오늘의 기록을\n친구·가족과 나눌 수 있어요."
+          }
+        }
+      }
+    },
+    "guest.chat.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Record together with friends"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "友だちと一緒に記録しよう"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "친구와 함께 기록해요"
+          }
+        }
+      }
+    },
+    "guest.discover.message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign up to browse travel courses on the map\nand follow them on your own trip."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "登録すると世界の旅コースを地図と一覧で\n見て、そのまま出かけられます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "가입하면 전 세계 여행 코스를 지도와 목록으로\n둘러보고 따라 떠날 수 있어요."
+          }
+        }
+      }
+    },
+    "guest.discover.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Discover courses from others"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ほかの人のコースを見てみよう"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "다른 사람들의 코스를 만나보세요"
+          }
+        }
+      }
+    },
+    "guest.profile.message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your records live only on this device.\nSign up to build your footprint map and stats."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "今の記録はこの端末にだけあります。\n登録すると足あと地図と統計が貯まります。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지금 기록은 이 기기에만 있어요.\n가입하면 발자취 지도와 여행 통계가 쌓입니다."
+          }
+        }
+      }
+    },
+    "guest.profile.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep your records safe"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "機種を変えても残しましょう"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "기기를 바꿔도 남게 하세요"
+          }
+        }
+      }
+    },
+    "guest.signUp": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign up to continue"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "登録して始める"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "가입하고 시작하기"
+          }
+        }
+      }
+    },
     "impromptu.archiving": {
       "extractionState": "manual",
       "localizations": {

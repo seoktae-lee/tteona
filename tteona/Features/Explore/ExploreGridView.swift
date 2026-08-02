@@ -130,7 +130,7 @@ struct ExploreGridView: View {
         }
         // 당김 제스처가 끝나면 SwiftUI가 refreshable 태스크를 취소해 조회들이 중도 실패한다.
         // 비구조화 Task로 감싸 취소 전파를 끊고 끝까지 완주시킨다.
-        .refreshable { await Task { await loadAll() }.value }
+        .refreshable { await Task { await loadAll(force: true) }.value }
         .onChange(of: locationService.currentLocation) { _, loc in
             // 위치를 처음 확보하면 위치 기반으로 추천 1회 재조회
             guard !didRefetchWithLocation, loc != nil else { return }
@@ -274,11 +274,11 @@ struct ExploreGridView: View {
 
     // MARK: - Load
 
-    private func loadAll() async {
+    private func loadAll(force: Bool = false) async {
         isLoading = true
         let blocked = userService.currentUser?.blockedUserIds ?? []
         let coord = locationService.currentLocation?.coordinate
-        async let coursesTask: Void = courseService.fetchCourses(blockedUserIds: blocked)
+        async let coursesTask: Void = courseService.fetchCourses(blockedUserIds: blocked, force: force)
         async let thumbsTask = CourseThumbnailService.shared.fetchAllThumbnails()
         async let recTask = RecommendationService.shared.fetchRecommended(
             userId: authService.currentUser?.uid,

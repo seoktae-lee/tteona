@@ -101,11 +101,14 @@ struct ImpromptuSessionView: View {
             locationService.startContinuousUpdates()
             activityManager.start()
             activeRoomIds = selectedRoomIds
-            // uid가 준비될 때까지 대기 (최대 3초)
-            var waited = 0
-            while uid.isEmpty && waited < 30 {
-                try? await Task.sleep(nanoseconds: 100_000_000)
-                waited += 1
+            // 로그인 유저는 uid가 채워질 때까지 잠깐 기다린다(최대 3초).
+            // 게스트는 uid가 끝내 없으므로 기다리면 3초를 그냥 버린다 — 건너뛴다.
+            if authService.isLoggedIn {
+                var waited = 0
+                while uid.isEmpty && waited < 30 {
+                    try? await Task.sleep(nanoseconds: 100_000_000)
+                    waited += 1
+                }
             }
 
             // 촬영 탭에서 '마치기'로 들어온 경우 — 진행 중인 세션을 들고 온 것이므로

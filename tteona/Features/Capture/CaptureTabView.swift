@@ -113,6 +113,9 @@ struct CaptureTabView: View {
                 .transition(.opacity)
             }
         }
+        // 탭바 숨김은 이 화면 안에서 선언한다. TabView 자체에 걸면 자식 상태 변화가
+        // 상위 레이아웃을 계속 흔들어 SwiftUI 갱신 사이클이 깨진다.
+        .toolbar(isRecording ? .hidden : .visible, for: .tabBar)
         .onChange(of: exposureBiasD) { _, v in exposureBias = Float(v) }
         .animation(.easeInOut(duration: 0.2), value: isRecording)
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: savedToast)

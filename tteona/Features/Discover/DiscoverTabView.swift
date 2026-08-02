@@ -4,16 +4,12 @@ import SwiftUI
 ///
 /// 둘 다 코스를 "찾는" 화면이라 탭을 나눠 둘 이유가 없었다. 상단 토글로 전환한다.
 ///
-/// 전환 시 두 화면을 파괴하지 않고 opacity로 감춘다 — 재생성하면 `.task`가 다시 돌아
-/// 코스를 재조회하고 지도 카메라가 초기 위치로 튄다. 대신 목록은 처음 켤 때까지
-/// 만들지 않아(`gridActivated`) 지도만 쓰는 유저는 그리드 로딩 비용을 내지 않는다.
+/// 전환할 때 활성인 쪽만 그린다. 둘 다 살려두고 opacity로 감추는 방식은 전환이 빠른 대신
+/// 감춘 화면이 터치를 가로채고 SwiftUI 갱신 사이클을 깨뜨렸다 — 재조회 비용이 훨씬 싸다.
 struct DiscoverTabView: View {
     enum Mode: String { case map, grid }
 
     @AppStorage("discover.mode") private var modeRaw = Mode.map.rawValue
-    /// 목록을 한 번이라도 열었는가 — 열기 전엔 뷰 자체를 만들지 않는다
-    @State private var gridActivated = false
-
     private var mode: Mode { Mode(rawValue: modeRaw) ?? .map }
 
     /// 토글이 차지하는 높이 — 두 화면의 상단 콘텐츠를 이만큼 내려 겹치지 않게 한다
@@ -22,22 +18,20 @@ struct DiscoverTabView: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            MainView()
-                .opacity(mode == .map ? 1 : 0)
-                .allowsHitTesting(mode == .map)
-
-            if gridActivated {
+            // 활성인 쪽만 그린다.
+            //
+            // 처음엔 전환 시 상태를 잃지 않으려고 둘 다 살려두고 opacity로 감췄는데,
+            // 그 구조가 버그를 두 개 만들었다 — 감춘 쪽이 터치를 가로챘고(필터 버튼 먹통),
+            // SwiftUI 갱신 사이클이 깨져 지도 마커가 영영 갱신되지 않았다.
+            // 전환할 때 다시 불러오는 비용이 그 대가보다 훨씬 싸다.
+            if mode == .map {
+                MainView()
+            } else {
                 ExploreGridView(topInset: 8)
-                    .opacity(mode == .grid ? 1 : 0)
-                    .allowsHitTesting(mode == .grid)
             }
 
             // 지도를 가리지 않도록 하단 플로팅 — '나의 오늘' CTA가 촬영 탭으로 가며 빈 자리다
             modeToggle
-        }
-        .onAppear {
-            // 마지막에 목록을 보고 있었다면 복귀 시 바로 만들어 둔다
-            if mode == .grid { gridActivated = true }
         }
     }
 
@@ -60,7 +54,6 @@ struct DiscoverTabView: View {
         return Button {
             guard !selected else { return }
             Haptics.light()
-            if target == .grid { gridActivated = true }
             withAnimation(.easeInOut(duration: 0.2)) { modeRaw = target.rawValue }
         } label: {
             HStack(spacing: 6) {

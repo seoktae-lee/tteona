@@ -122,27 +122,25 @@ struct MainTabView: View {
                 .tag(Tab.capture)
 
             // 지도 + 탐색 — 둘 다 "코스를 찾는" 화면이라 한 탭에 묶고 토글로 전환한다
-            DiscoverTabView()
+            DiscoverTab()
                 .tabItem {
                     Label(L("tab.discover"), systemImage: "map.fill")
                 }
                 .tag(Tab.discover)
 
-            FeedTabView()
+            ChatTab()
                 .tabItem {
                     Label(L("tab.chat"), systemImage: "bubble.left.and.bubble.right.fill")
                 }
                 .badge(roomService.unreadRoomIds.count)
                 .tag(Tab.chat)
 
-            ProfileTabView()
+            ProfileTab()
                 .tabItem {
                     Label(L("tab.profile"), systemImage: "person.crop.circle.fill")
                 }
                 .tag(Tab.profile)
         }
-        // 촬영 중에는 탭바를 감춰 화면을 비운다 — 5초뿐이라 길을 잃지 않는다
-        .toolbar(isRecordingClip ? .hidden : .visible, for: .tabBar)
         .tint(.tteOrange)
         .environmentObject(userService)
         .environmentObject(roomService)
@@ -181,6 +179,18 @@ struct MainTabView: View {
                 roomService.blockedUserIds = Set(userService.currentUser?.blockedUserIds ?? [])
                 roomService.startListeningMyRooms(userId: uid)
             }
+
+            // 발견 탭을 누르기 전에 지도와 코스를 미리 준비한다.
+            //
+            // 지도가 첫 탭이던 시절엔 이 둘이 앱 실행 중에 이미 끝나 있어서 핀이 바로 보였다.
+            // 촬영 탭이 첫 화면이 되며 준비가 '발견을 누른 순간'으로 밀렸고, 그 대기가
+            // 고스란히 노출됐다. 화면 순서는 그대로 두고 준비 시점만 예전으로 되돌린다.
+            //
+            // 차단 목록을 받은 뒤에 조회해야 차단한 사용자의 코스가 잠깐이라도 뜨지 않는다.
+            MapWarmUp.run()
+            await courseService.fetchCourses(
+                blockedUserIds: userService.currentUser?.blockedUserIds ?? []
+            )
         }
         .onChange(of: userService.currentUser?.blockedUserIds) { _, blocked in
             // 차단/해제 즉시 피드·댓글 필터에 반영
@@ -267,6 +277,53 @@ struct MainTabView: View {
             deepLinkedRoomCode = code
             showJoinRoomFromDeepLink = true
             deepLinkHandler.clearPendingRoom()
+        }
+    }
+}
+
+
+// MARK: - 게스트 게이팅 래퍼
+//
+// TabView의 자식을 `Group { if ... }`로 감싸면 조건에 따라 타입이 달라지는 뷰가 되고,
+// 거기에 .tag()를 붙이면 SwiftUI 갱신 사이클이 깨진다(AttributeGraph cycle).
+// 지도 마커가 갱신되지 않고 상단 필터 버튼이 먹통이 된 원인이 이것이었다.
+// 탭의 자식은 항상 같은 타입으로 두고, 분기는 그 안에서 한다.
+
+private struct DiscoverTab: View {
+    @EnvironmentObject private var authService: AuthService
+    var body: some View {
+        if authService.isLoggedIn {
+            DiscoverTabView()
+        } else {
+            GuestGateView(icon: "map.fill",
+                          title: L("guest.discover.title"),
+                          message: L("guest.discover.message"))
+        }
+    }
+}
+
+private struct ChatTab: View {
+    @EnvironmentObject private var authService: AuthService
+    var body: some View {
+        if authService.isLoggedIn {
+            FeedTabView()
+        } else {
+            GuestGateView(icon: "bubble.left.and.bubble.right.fill",
+                          title: L("guest.chat.title"),
+                          message: L("guest.chat.message"))
+        }
+    }
+}
+
+private struct ProfileTab: View {
+    @EnvironmentObject private var authService: AuthService
+    var body: some View {
+        if authService.isLoggedIn {
+            ProfileTabView()
+        } else {
+            GuestGateView(icon: "person.crop.circle.fill",
+                          title: L("guest.profile.title"),
+                          message: L("guest.profile.message"))
         }
     }
 }
