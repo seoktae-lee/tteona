@@ -11,12 +11,20 @@ struct VlogGenerationView: View {
     var thumbnailCourseId: String? = nil
     // 세션 시작 때 위치를 공유한 방들 — 공유 설정이 켜져 있으면 완성본이 이 방들에 자동 공유된다
     var shareRoomIds: Set<String> = []
+    /// 브이로그가 실제로 완성돼 앨범까지 저장된 순간에 불린다.
+    /// 세션 만료 같은 '되돌릴 수 없는 정리'는 나가는 버튼이 아니라 여기에 매달아야 한다 —
+    /// 버튼에 매달면 다른 경로로 화면을 빠져나갔을 때 정리가 통째로 누락된다.
+    var onVlogCompleted: (() -> Void)? = nil
     var onDismissToHome: (() -> Void)? = nil
     // 방 선택 화면의 "완성된 브이로그도 공유" 토글과 같은 저장소를 본다
     @AppStorage("vlog.shareToRooms") private var shareVlogPref = true
     // 장소 자막 서체·크기 — 다음 생성에도 기억된다 (기본: 고운바탕·보통)
     @AppStorage("vlog.font") private var vlogFont = VlogFont.gowun.rawValue
     @AppStorage("vlog.fontScale") private var vlogFontScale = VlogFontScale.medium.rawValue
+    @AppStorage("vlog.subtitleFields") private var vlogFields = VlogSubtitleFields.both.rawValue
+    @AppStorage("vlog.subtitleColor") private var vlogColor = VlogSubtitleColor.orange.rawValue
+    /// 캡션만 저장하지 않는다 — 이번 여행에 붙이는 문구라, 다음 브이로그에 지난 글이 남으면 안 된다.
+    @State private var caption = ""
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var pro = ProManager.shared
     @ObservedObject private var tutorial = VlogTutorial.shared
@@ -433,6 +441,12 @@ struct VlogGenerationView: View {
 
     private var selectedFont: VlogFont { VlogFont(rawValue: vlogFont) ?? .gowun }
     private var selectedScale: VlogFontScale { VlogFontScale(rawValue: vlogFontScale) ?? .medium }
+    private var selectedFields: VlogSubtitleFields { VlogSubtitleFields(rawValue: vlogFields) ?? .both }
+    private var selectedColor: VlogSubtitleColor { VlogSubtitleColor(rawValue: vlogColor) ?? .orange }
+    private var subtitleStyle: VlogSubtitleStyle {
+        VlogSubtitleStyle(font: selectedFont, scale: selectedScale,
+                          fields: selectedFields, color: selectedColor, caption: caption)
+    }
     /// 미리보기에 쓸 실제 첫 장소명 (없으면 샘플)
     private var previewPlaceName: String {
         course.places.first?.placeName ?? L("vlog.font.sampleName")
@@ -487,11 +501,38 @@ struct VlogGenerationView: View {
                                 sizePill(scale)
                             }
                         }
+
+                        // 표시 항목 — 장소·시각 중 무엇을 남길지
+                        Text(L("vlog.textSheet.fieldsLabel"))
+                            .font(.tte(13, .semibold))
+                            .foregroundColor(.white.opacity(0.75))
+                        HStack(spacing: 10) {
+                            ForEach(VlogSubtitleFields.allCases) { fields in
+                                fieldsPill(fields)
+                            }
+                        }
+
+                        // 강조색 — 첫 줄에 적용된다(렌더러와 같은 규칙)
+                        Text(L("vlog.textSheet.colorLabel"))
+                            .font(.tte(13, .semibold))
+                            .foregroundColor(.white.opacity(0.75))
+                        HStack(spacing: 12) {
+                            ForEach(VlogSubtitleColor.allCases) { c in
+                                colorDot(c)
+                            }
+                        }
+
+                        // 한 줄 문구
+                        Text(L("vlog.textSheet.captionLabel"))
+                            .font(.tte(13, .semibold))
+                            .foregroundColor(.white.opacity(0.75))
+                        captionField
                     }
                     .padding(.horizontal, 24)
                     .padding(.top, 22)
                     .padding(.bottom, 12)
                 }
+                .scrollDismissesKeyboard(.interactively)
 
                 Button {
                     phase = .generating
@@ -524,19 +565,29 @@ struct VlogGenerationView: View {
                                             Color(red: 0.30, green: 0.16, blue: 0.08)],
                                    startPoint: .topLeading, endPoint: .bottomTrailing)
                 )
-            VStack(spacing: 6) {
-                Text(previewPlaceName)
-                    .font(.custom(selectedFont.postScriptName, size: 30 * selectedScale.multiplier))
-                    .foregroundColor(.tteOrange)
-                    .shadow(color: .black.opacity(0.35), radius: 2, x: 2, y: 2)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.5)
-                Text(Self.previewDateString)
-                    .font(.custom(selectedFont.postScriptName, size: 30 * selectedScale.multiplier * 0.62))
-                    .foregroundColor(.white)
-                    .shadow(color: .black.opacity(0.35), radius: 2, x: 2, y: 2)
+            // 카드 폭을 알아야 실제 렌더와 같은 규칙으로 크기를 정할 수 있다
+            GeometryReader { geo in
+                let inner = Double(geo.size.width) - 32   // 아래 .padding(.horizontal, 16)
+                let base = Double(30 * selectedScale.multiplier)
+                VStack(spacing: 6) {
+                    if selectedFields.showsPlace {
+                        previewLine(previewPlaceName, wanted: base, width: inner,
+                                    color: selectedColor.color)
+                    }
+                    if selectedFields.showsTime {
+                        // 강조색은 첫 줄에만 — 장소를 껐다면 시각이 첫 줄이 된다
+                        previewLine(Self.previewDateString, wanted: base * 0.62, width: inner,
+                                    color: selectedFields.showsPlace ? .white : selectedColor.color)
+                    }
+                    if !subtitleStyle.sanitizedCaption.isEmpty {
+                        previewLine(subtitleStyle.sanitizedCaption, wanted: base * 0.62,
+                                    width: inner, color: .white)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .frame(width: geo.size.width, height: geo.size.height)
+                .animation(.easeInOut(duration: 0.18), value: selectedFields)
             }
-            .padding(.horizontal, 16)
         }
         .frame(height: 150)
         .overlay(
@@ -562,6 +613,103 @@ struct VlogGenerationView: View {
                     RoundedRectangle(cornerRadius: 14)
                         .stroke(isOn ? Color.tteOrange : Color.clear, lineWidth: 1.5)
                 )
+        }
+    }
+
+    /// 미리보기 한 줄 — 실제 렌더와 **같은 규칙**으로 크기를 낮추고 말줄임한다.
+    ///
+    /// 예전엔 여기에만 `.minimumScaleFactor(0.5)`가 걸려 있어 SwiftUI가 몰래 글씨를 줄였다.
+    /// 그 탓에 한글 9자만 넘어도 '보통'과 '크게'가 똑같은 크기로 그려져 단계 차이가 사라졌고,
+    /// 정작 실제 영상은 줄이지 않고 화면 밖으로 흘려보냈다 — 미리보기가 결과와 어긋난 셈이다.
+    private func previewLine(_ text: String, wanted: Double, width: Double,
+                             color: Color) -> some View {
+        let fitted = VlogSubtitleFit.fit(text, wanted: wanted, frameWidth: width)
+        return Text(fitted.text)
+            .font(.custom(selectedFont.postScriptName, size: fitted.size))
+            .foregroundColor(color)
+            .shadow(color: .black.opacity(0.35), radius: 2, x: 2, y: 2)
+            .lineLimit(1)
+            .minimumScaleFactor(0.9)   // 글자폭 어림값 오차만 흡수한다 (축소는 위 규칙이 담당)
+    }
+
+    private func fieldsPill(_ fields: VlogSubtitleFields) -> some View {
+        let isOn = selectedFields == fields
+        return Button {
+            vlogFields = fields.rawValue
+            Haptics.light()
+        } label: {
+            Text(fields.displayName)
+                .font(.tte(14, isOn ? .bold : .regular))
+                .foregroundColor(isOn ? .white : .white.opacity(0.7))
+                .frame(maxWidth: .infinity).frame(height: 46)
+                .background(
+                    RoundedRectangle(cornerRadius: 14)
+                        .fill(Color.white.opacity(isOn ? 0.14 : 0.06))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(isOn ? Color.tteOrange : Color.clear, lineWidth: 1.5)
+                )
+        }
+    }
+
+    private func colorDot(_ c: VlogSubtitleColor) -> some View {
+        let isOn = selectedColor == c
+        return Button {
+            vlogColor = c.rawValue
+            Haptics.light()
+        } label: {
+            Circle()
+                .fill(c.color)
+                .frame(width: 34, height: 34)
+                .overlay(Circle().stroke(Color.white.opacity(0.25), lineWidth: 1))
+                .overlay(
+                    Circle()
+                        .stroke(Color.white, lineWidth: 2)
+                        .padding(-4)
+                        .opacity(isOn ? 1 : 0)
+                )
+        }
+        .accessibilityLabel(c.displayName)
+        .accessibilityAddTraits(isOn ? [.isSelected] : [])
+    }
+
+    /// 캡션 입력을 한 곳으로 모은 바인딩.
+    ///
+    /// 자르기와 햅틱을 `onChange`에 두면, 길이를 잘라 값을 되돌려 쓸 때 다시 불려
+    /// 한 번의 입력에 햅틱이 두 번 울린다. setter 한 곳으로 모으면 그럴 일이 없다.
+    private var captionBinding: Binding<String> {
+        Binding(
+            get: { caption },
+            set: { raw in
+                // '한 줄 · 글자수' 약속을 입력하는 순간에 지킨다. 렌더러와 서버도 한 번 더 자른다.
+                let oneLine = raw.components(separatedBy: .newlines).joined(separator: " ")
+                let clamped = String(oneLine.prefix(VlogSubtitleStyle.captionMaxLength))
+                if clamped == caption {
+                    // 한도에 막혀 글자가 늘지 않았다 — 무반응이면 고장으로 읽힌다
+                    if raw != caption { Haptics.limitReached() }
+                } else {
+                    Haptics.typing()
+                }
+                caption = clamped
+            }
+        )
+    }
+
+    private var captionField: some View {
+        VStack(alignment: .trailing, spacing: 6) {
+            TextField("", text: captionBinding,
+                      prompt: Text(L("vlog.textSheet.captionPlaceholder"))
+                        .foregroundColor(.white.opacity(0.35)))
+                .font(.tte(15))
+                .foregroundColor(.white)
+                .submitLabel(.done)
+                .padding(.horizontal, 14)
+                .frame(height: 48)
+                .background(RoundedRectangle(cornerRadius: 14).fill(Color.white.opacity(0.06)))
+            Text("\(caption.count)/\(VlogSubtitleStyle.captionMaxLength)")
+                .font(.tte(11))
+                .foregroundColor(.white.opacity(0.4))
         }
     }
 
@@ -659,7 +807,7 @@ struct VlogGenerationView: View {
                         watermark: !pro.isPro,   // PRO 유저만 워터마크 제거
                         priority: pro.isPro,     // PRO 유저 우선 렌더링
                         shareRoomIds: shareVlogPref ? Array(shareRoomIds) : [],
-                        font: vlogFont, fontScale: vlogFontScale,
+                        style: subtitleStyle,
                         onProgress: { p, stage in
                             progress = p
                             stageText = stage
@@ -691,7 +839,7 @@ struct VlogGenerationView: View {
                     progress = 0.05
                     mainURL = try await vlogService.generateVlog(
                         course: course, sessionId: sessionId,
-                        font: selectedFont, fontScale: selectedScale,
+                        style: subtitleStyle,
                         onProgress: { p in Task { @MainActor in progress = p } }
                     )
                 }
@@ -699,7 +847,7 @@ struct VlogGenerationView: View {
                 didFallback = forceLocal
                 mainURL = try await vlogService.generateVlog(
                     course: course, sessionId: sessionId,
-                    font: selectedFont, fontScale: selectedScale,
+                    style: subtitleStyle,
                     onProgress: { p in Task { @MainActor in progress = p } }
                 )
             }
@@ -727,6 +875,7 @@ struct VlogGenerationView: View {
             }
             savedFormatsCount = saved
             vlogURL = mainURL
+            onVlogCompleted?()
             Haptics.success()
             // 발자취 적재 — 브이로그가 완성된 여행만 지도에 칠해진다 (실패해도 흐름 방해 없음)
             if let uid = Auth.auth().currentUser?.uid {

@@ -152,17 +152,7 @@ struct ImpromptuSessionView: View {
             cameraCommand = GMSCameraPosition(latitude: loc.coordinate.latitude,
                                               longitude: loc.coordinate.longitude, zoom: 15)
         }
-        .fullScreenCover(item: $fullCover, onDismiss: {
-            // 카메라를 닫은 경우에만 후처리 — 브이로그는 스스로 dismiss까지 한다
-            guard lastCover == .camera else { lastCover = nil; return }
-            lastCover = nil
-            guard cameraResult else {
-                discardPendingClip()   // 촬영을 취소했다
-                return
-            }
-            cameraResult = false
-            activeSheet = .placePicker     // 찍었으니 이제 장소를 고른다
-        }) { cover in
+        .fullScreenCover(item: $fullCover, onDismiss: handleCoverDismiss) { cover in
             switch cover {
             case .camera:
                 if let fileName = pendingClipFileName {
@@ -179,10 +169,12 @@ struct ImpromptuSessionView: View {
                         course: course,
                         sessionId: sessionId,
                         thumbnailCourseId: courseSavedToFirestore ? course.courseId : nil,
-                        shareRoomIds: activeRoomIds
+                        shareRoomIds: activeRoomIds,
+                        // 브이로그를 손에 넣은 그 순간 오늘 세션은 만료한다.
+                        // 예전엔 이 정리를 '나가기' 버튼에 매달아 뒀는데, 그러면 다른 경로로
+                        // 화면을 벗어났을 때 세션이 살아남아 촬영 탭 칩이 그대로 남았다.
+                        onVlogCompleted: { sessionStore.clear() }
                     ) {
-                        // 브이로그를 손에 넣은 뒤에야 오늘 기록을 정리한다
-                        sessionStore.clear()
                         dismiss()
                     }
                 }
@@ -537,6 +529,7 @@ struct ImpromptuSessionView: View {
 
                 // 계속 기록
                 Button {
+                    // 마침 모드였다면 handleSheetDismiss가 이어서 화면째 닫는다
                     activeSheet = nil
                 } label: {
                     Text(L("impromptu.keepRecording"))
@@ -870,6 +863,33 @@ struct ImpromptuSessionView: View {
         }
     }
 
+    /// 어떤 커버가 닫혔는지에 따른 후처리. .fullScreenCover(item:)의 onDismiss도 닫힌 대상을
+    /// 알려주지 않으므로 직전에 떠 있던 값(lastCover)을 보고 분기한다.
+    private func handleCoverDismiss() {
+        let closed = lastCover
+        lastCover = nil
+        if closed == .camera {
+            if cameraResult {
+                cameraResult = false
+                activeSheet = .placePicker     // 찍었으니 이제 장소를 고른다
+            } else {
+                discardPendingClip()           // 촬영을 취소했다
+            }
+        }
+
+        // 브이로그 화면은 '완성 후 나가기'일 때만 스스로 여기까지 닫는다.
+        // 포맷 선택의 '닫기'나 실패 화면의 '돌아가기'로 물러나면 커버만 사라져,
+        // 마침 모드의 빈 화면이 그대로 드러난다 — 시트와 같은 규칙으로 화면째 닫는다.
+        dismissIfFinishModeIsEmpty()
+    }
+
+    /// 마침 모드(촬영 탭 ✓로 열림)는 시트·커버를 얹으려고만 존재하는 화면이라 그 아래엔
+    /// 지도도 UI도 없다. 위에 아무것도 남지 않으면 빈 화면에 갇히므로 화면째 물러난다.
+    private func dismissIfFinishModeIsEmpty() {
+        guard startInFinishMode, activeSheet == nil, fullCover == nil else { return }
+        dismiss()
+    }
+
     /// 어떤 시트가 닫혔는지에 따른 후처리. .sheet(item:)의 onDismiss는 닫힌 대상을
     /// 알려주지 않으므로 직전에 떠 있던 값(lastSheet)을 보고 분기한다.
     private func handleSheetDismiss() {
@@ -893,6 +913,10 @@ struct ImpromptuSessionView: View {
         default:
             break
         }
+
+        // 다음 단계로 이어지지 않은 채 시트가 닫혔다면 빈 화면이 드러난다.
+        // '계속 기록' 버튼이든, 시트를 쓸어내렸든, 코스 저장을 취소했든 경로를 가리지 않는다.
+        dismissIfFinishModeIsEmpty()
         lastSheet = nil
     }
 

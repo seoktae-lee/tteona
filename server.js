@@ -1428,6 +1428,62 @@ function resolveVlogFont(key) {
 // 자막 크기 배율 — 앱과 공유(job options.fontScale). 기본(medium)은 기존 동작과 동일.
 const VLOG_FONT_SCALE = { small: 1.0, medium: 1.28, large: 1.64 };
 
+// 자막 강조색 — 앱은 키만 보내고 실제 색값은 여기서 찾는다.
+// 색값을 그대로 받아 쓰면 사용자 입력이 drawtext 인자로 흘러들어(`:`나 `,` 한 글자로
+// 필터 체인을 조작할 수 있다) 인젝션 통로가 된다. 표에 없는 키는 전부 기본색.
+const VLOG_SUBTITLE_COLORS = {
+  orange: '0xFF6B35', white: '0xFFFFFF', yellow: '0xFFD400',
+  mint: '0x3DDC97', sky: '0x4FC3F7', pink: '0xFF7AB6', ink: '0x1A1A1F',
+};
+// 자막에 무엇을 보여줄지 — 앱과 공유(job options.subtitleFields)
+const VLOG_SUBTITLE_FIELDS = ['both', 'place', 'time'];
+
+// 자막이 화면 폭을 넘지 않게 크기를 낮추고, 그래도 넘치면 말줄임으로 자른다.
+//
+// drawtext는 줄바꿈도 축소도 하지 않는다. x=(w-text_w)/2로 가운데를 맞추므로 글자 폭이
+// 화면보다 크면 x가 음수가 되어 양쪽 끝이 그대로 잘려 나간다. 그래서 미리 계산해 낮춘다.
+// iOS 쪽 같은 구현은 VlogTextStyle.swift `VlogSubtitleFit` — 규칙이 어긋나면
+// 미리보기에서 본 모습과 결과물이 달라진다.
+const SUB_USABLE_RATIO = 0.90;   // 가장자리 여백
+const SUB_FLOOR_RATIO = 0.72;    // 여기까지만 줄인다(한 단계 분량) — 바닥이 없으면
+                                 // 긴 이름에서 '보통'과 '크게'가 같은 크기로 수렴한다
+// 한글·한자·가나는 한 칸(1em), 나머지는 대략 절반. 폰트별 실제 자폭이 달라 보수적 추정이다.
+function subtitleEm(text) {
+  let em = 0;
+  for (const ch of String(text)) {
+    const c = ch.codePointAt(0);
+    const wide = (c >= 0x1100 && c <= 0x11FF) || (c >= 0x3040 && c <= 0x30FF) ||
+                 (c >= 0x3130 && c <= 0x318F) || (c >= 0x4E00 && c <= 0x9FFF) ||
+                 (c >= 0xAC00 && c <= 0xD7A3) || (c >= 0xFF00 && c <= 0xFF60);
+    em += wide ? 1.0 : 0.55;
+  }
+  return em;
+}
+/// 담기는 크기와 (필요하면 잘린) 글자를 돌려준다. 넘치지 않으면 고른 크기 그대로다.
+function fitSubtitle(text, wanted, frameWidth) {
+  const str = String(text ?? '');
+  const maxW = frameWidth * SUB_USABLE_RATIO;
+  if (!str || !(wanted > 0) || !(maxW > 0)) return { size: wanted, text: str };
+
+  const needed = subtitleEm(str) * wanted;
+  if (needed <= maxW) return { size: wanted, text: str };
+
+  const size = Math.max(wanted * maxW / needed, wanted * SUB_FLOOR_RATIO);
+  if (subtitleEm(str) * size <= maxW) return { size: Math.round(size), text: str };
+
+  // 바닥까지 줄여도 넘친다 — 말줄임으로 자른다
+  const chars = [...str];
+  while (chars.length > 0 && subtitleEm(chars.join('') + '…') * size > maxW) chars.pop();
+  return { size: Math.round(size), text: chars.length ? chars.join('') + '…' : '…' };
+}
+const VLOG_CAPTION_MAX = 20;
+// '한 줄' 약속을 서버에서 다시 지킨다 — 앱이 이미 잘랐더라도 클라이언트를 믿지 않는다.
+// 본문은 textfile로 넘어가 필터 인자로 파싱되지 않지만, 줄바꿈은 자막을 여러 줄로 무너뜨린다.
+function sanitizeCaption(v) {
+  if (typeof v !== 'string') return '';
+  return v.replace(/[\r\n\t\u0000-\u001F\u007F]/g, ' ').trim().slice(0, VLOG_CAPTION_MAX);
+}
+
 // 클립 업로드용 multer — 영상은 크므로 디스크에 바로 저장 (개당 최대 300MB)
 const vlogUpload = multer({
   storage: multer.diskStorage({
@@ -1454,7 +1510,8 @@ const vlogUpload = multer({
 //                   bgm?: 'auto'|'none'|'mood/파일명',
 //                   places: [{order, placeName, shotAt?}] }  (shotAt: 클립 촬영시각 표시 문자열)
 app.post('/api/vlog/jobs', requireAuth, vlogJobLimiter, async (req, res) => {
-  const { courseId, courseName, tag, formats, bgm, places, watermark, priority, shareRoomIds, font, fontScale } = req.body || {};
+  const { courseId, courseName, tag, formats, bgm, places, watermark, priority, shareRoomIds, font, fontScale,
+          subtitleFields, subtitleColor, caption } = req.body || {};
   const userId = req.uid || req.body?.userId; // 검증된 uid 우선
   if (!userId || !Array.isArray(places) || places.length === 0) {
     return res.status(400).json({ error: 'userId and places required' });
@@ -1486,6 +1543,10 @@ app.post('/api/vlog/jobs', requireAuth, vlogJobLimiter, async (req, res) => {
                         // 자막 서체·크기 — 미지정/미지원 값은 렌더 시 기본(고운바탕·medium)으로 폴백
                         font: VLOG_FONT_FILES[font] ? font : null,
                         fontScale: VLOG_FONT_SCALE[fontScale] ? fontScale : null,
+                        // 표시 항목·강조색·한 줄 문구 — 화이트리스트 밖은 렌더 시 기본값으로 폴백
+                        subtitleFields: VLOG_SUBTITLE_FIELDS.includes(subtitleFields) ? subtitleFields : null,
+                        subtitleColor: VLOG_SUBTITLE_COLORS[subtitleColor] ? subtitleColor : null,
+                        caption: sanitizeCaption(caption) || null,
                         shareRoomIds: shareRooms,
                         shareToken: shareRooms.length > 0 ? randomBytes(16).toString('hex') : null })]
     );
@@ -1690,6 +1751,9 @@ async function composeVlog(job) {
   // 유저가 고른 자막 서체·크기 (미지정이면 기본 고운바탕·medium)
   const subFont = resolveVlogFont(opts.font);
   const fontScale = VLOG_FONT_SCALE[opts.fontScale] || 1.0;
+  const subFields = VLOG_SUBTITLE_FIELDS.includes(opts.subtitleFields) ? opts.subtitleFields : 'both';
+  const subColor = VLOG_SUBTITLE_COLORS[opts.subtitleColor] || VLOG_SUBTITLE_COLORS.orange;
+  const subCaption = sanitizeCaption(opts.caption);
   await setProgress(4);
 
   const enc = ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21', '-pix_fmt', 'yuv420p',
@@ -1751,7 +1815,6 @@ async function composeVlog(job) {
     const clipSegs = await mapLimit(clips, CLIP_CONCURRENCY, async (c, i) => {
       const info = c.info;
       const segOut = path.join(fmtDir, `seg_${String(i + 1).padStart(3, '0')}.mp4`);
-      const subTxt = writeTextFile(workDir, `sub_${i}.txt`, c.placeName || '');
       const isLast = i === clips.length - 1;
       const D = Math.max(info.duration, 0.8);
 
@@ -1775,15 +1838,29 @@ async function composeVlog(job) {
           `[fga]scale=${W}:${H}:force_original_aspect_ratio=decrease[fgs];` +
           `[bgb][fgs]overlay=(W-w)/2:(H-h)/2,setsar=1`;
 
-      const overlays = [
-        // 장소명 — 오렌지(#FF6B35), 화면 세로 중앙 바로 위 (유저 선택 서체)
-        `drawtext=fontfile=${subFont}:textfile=${subTxt}:fontcolor=0xFF6B35:fontsize=${placeSize}:x=(w-text_w)/2:y=(h/2)-${Math.round(placeSize * 1.3)}:${shadow}:alpha=${alpha}`,
-      ];
-      // 촬영 시각 — 흰색, 장소명 아래 (iOS가 shotAt 전달 시)
-      if (c.shotAt) {
-        const dateTxt = writeTextFile(workDir, `date_${i}.txt`, String(c.shotAt));
-        overlays.push(`drawtext=fontfile=${subFont}:textfile=${dateTxt}:fontcolor=white:fontsize=${dateSize2}:x=(w-text_w)/2:y=(h/2)+${Math.round(dateSize2 * 0.3)}:${shadow}:alpha=${alpha}`);
-      }
+      // 자막 줄을 위에서 아래 순서로 모은다 — 유저가 꺼 둔 항목은 자리도 차지하지 않는다.
+      // advance 값은 '둘 다'일 때 기존 위치(장소 -1.3P / 시각 +0.3S)가 그대로 재현되도록 맞췄다.
+      // 고른 크기는 '원하는 크기'다 — 화면 폭을 넘길 것 같으면 그만큼만 물러선다
+      const pushLine = (name, text, wanted, advanceRatio) => {
+        const f = fitSubtitle(text, wanted, W);
+        lines.push({ file: writeTextFile(workDir, `${name}_${i}.txt`, f.text),
+                     size: f.size, advance: f.size * advanceRatio });
+      };
+      const lines = [];
+      if (subFields !== 'time' && c.placeName) pushLine('sub', c.placeName, placeSize, 1.486);
+      if (subFields !== 'place' && c.shotAt)   pushLine('date', String(c.shotAt), dateSize2, 1.8);
+      if (subCaption)                          pushLine('cap', subCaption, dateSize2, 1.8);
+      // 화면 세로 중앙을 기준으로 전체 묶음을 가운데 맞춘다
+      const totalTextH = lines.reduce((a, l) => a + l.advance, 0);
+      let cursor = 0;
+      const overlays = lines.map((l, idx) => {
+        // 강조색은 첫 줄에만 — 장소를 끄고 시각만 남겨도 색 선택이 눈에 보이도록
+        const color = idx === 0 ? subColor : 'white';
+        const off = Math.round(cursor - totalTextH / 2);
+        cursor += l.advance;
+        const y = off >= 0 ? `(h/2)+${off}` : `(h/2)-${-off}`;
+        return `drawtext=fontfile=${subFont}:textfile=${l.file}:fontcolor=${color}:fontsize=${l.size}:x=(w-text_w)/2:y=${y}:${shadow}:alpha=${alpha}`;
+      });
       const fades = ['fade=t=in:st=0:d=0.4'];
       if (!isLast) fades.push(`fade=t=out:st=${Math.max(0, D - 0.4).toFixed(2)}:d=0.4`);
 
@@ -1805,7 +1882,8 @@ async function composeVlog(job) {
         const wmW = Math.round(Math.min(W, H) * 0.20);
         const wmM = Math.round(Math.min(W, H) * 0.035);
         args.push('-i', VLOG_LOGO, '-filter_complex',
-          `[0:v]${fitChain},${overlays.join(',')}[base];` +
+          // 자막을 전부 끄면 overlays가 비어 `fitChain,[base]`처럼 쉼표가 남아 필터가 깨진다
+          `[0:v]${[fitChain, ...overlays].join(',')}[base];` +
           `[${wmIdx}:v]scale=${wmW}:-1,format=rgba,colorchannelmixer=aa=0.55[wm];` +
           `[base][wm]overlay=W-w-${wmM}:${wmM},${fades.join(',')}[v]`,
           '-map', '[v]', '-map', info.hasAudio ? '0:a' : '1:a');

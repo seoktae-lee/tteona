@@ -32,6 +32,8 @@ struct CaptureTabView: View {
     @State private var fullCover: FullCover?
     @State private var resolvedLocation: CLLocation?
     @State private var isResolvingLocation = false
+    /// 권한 거부는 재시도해도 소용없다 — 실패와 구분해 설정으로 안내한다
+    @State private var locationDenied = false
     @State private var locationTask: Task<Void, Never>?
     /// 방금 기록된 장소 안내 — 칩 숫자만 바뀌면 찍혔는지 확신이 안 선다
     @State private var savedToast: String?
@@ -121,15 +123,7 @@ struct CaptureTabView: View {
         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: savedToast)
         .onAppear {
             // 세션이 다른 화면에서 비워졌을 수 있다(새로하기·브이로그 완성) — 진입할 때마다 맞춘다
-            places = sessionStore.loadTodaySession()?.places ?? []
-            if places.isEmpty {
-                // 기록은 없는데 클립 파일만 남으면 예산이 찬 채로 촬영도 삭제도 못 하게 갇힌다.
-                // 세션이 비어 있으면 남은 파일도 함께 정리해 그 상태를 원천 차단한다.
-                let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-                    .appendingPathComponent("Tteona/Sessions/\(sessionId)")
-                try? FileManager.default.removeItem(at: dir)
-                usedSeconds = 0
-            }
+            syncSessionState()
             // 위치 권한을 여기서 요청하면 카메라 권한 팝업과 앱 실행 직후 겹쳐 뜬다.
             // 위치는 실제로 촬영을 시작할 때(onRecordingChanged) 요청한다.
         }
@@ -146,8 +140,9 @@ struct CaptureTabView: View {
                 .presentationDragIndicator(.hidden)
         }
         .fullScreenCover(item: $fullCover, onDismiss: {
-            // 마무리에서 브이로그까지 갔으면 세션이 비워져 있다
-            places = sessionStore.loadTodaySession()?.places ?? []
+            // 마무리에서 브이로그까지 갔으면 세션이 비워져 있다.
+            // places만 다시 읽으면 촬영 예산과 남은 클립 파일이 그대로 남는다 — 통째로 맞춘다.
+            syncSessionState()
         }) { cover in
             switch cover {
             case .paywall:
@@ -406,13 +401,23 @@ struct CaptureTabView: View {
                     Image(systemName: "location.slash")
                         .font(.tte(32))
                         .foregroundColor(.tteMediumGray)
-                    Text(L("impromptu.locationFailed"))
+                    Text(L(locationDenied ? "impromptu.locationDenied" : "impromptu.locationFailed"))
                         .font(.tte(14))
                         .foregroundColor(.tteMediumGray)
                         .multilineTextAlignment(.center)
-                    Button(L("common.retry")) { requestLocation() }
+                    if locationDenied {
+                        Button(L("camera.openSettings")) {
+                            if let url = URL(string: UIApplication.openSettingsURLString) {
+                                UIApplication.shared.open(url)
+                            }
+                        }
                         .font(.tte(15, .semibold))
                         .foregroundColor(.tteOrange)
+                    } else {
+                        Button(L("common.retry")) { requestLocation() }
+                            .font(.tte(15, .semibold))
+                            .foregroundColor(.tteOrange)
+                    }
                 }
             }
             .padding(32)
@@ -436,10 +441,31 @@ struct CaptureTabView: View {
         locationService.requestPermission()
         locationTask?.cancel()
         isResolvingLocation = true
+        locationDenied = false
         locationTask = Task {
-            defer { isResolvingLocation = false }
-            resolvedLocation = try? await locationService.requestOneTimeLocation()
+            do {
+                resolvedLocation = try await locationService.requestOneTimeLocation()
+            } catch LocationError.superseded {
+                // 더 새로운 요청이 이어받았다 — 이 결과로 화면을 되돌리지 않는다
+                return
+            } catch {
+                resolvedLocation = nil
+                locationDenied = (error as? LocationError) == .denied
+            }
+            isResolvingLocation = false
         }
+    }
+
+    /// 세션 상태를 저장소와 다시 맞춘다.
+    /// 세션이 비었다면 남은 클립 파일과 촬영 예산까지 함께 되돌린다 — 기록은 없는데 파일만
+    /// 남으면 예산이 찬 채로 촬영도 삭제도 못 하는 상태에 갇힌다.
+    private func syncSessionState() {
+        places = sessionStore.loadTodaySession()?.places ?? []
+        guard places.isEmpty else { return }
+        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Tteona/Sessions/\(sessionId)")
+        try? FileManager.default.removeItem(at: dir)
+        usedSeconds = 0
     }
 
     private func appendPlace(name: String, location: CLLocation) {

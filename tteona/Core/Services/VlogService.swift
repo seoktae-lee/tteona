@@ -6,7 +6,7 @@ class VlogService {
 
     // MARK: - Public
     func generateVlog(course: Course, sessionId: String,
-                      font: VlogFont = .gowun, fontScale: VlogFontScale = .medium,
+                      style: VlogSubtitleStyle = .default,
                       onProgress: @escaping (Double) -> Void) async throws -> URL {
         let places = course.places
 
@@ -24,8 +24,8 @@ class VlogService {
 
         await MainActor.run { onProgress(0.1) }
 
-        let outURL = try await buildComposition(segments: segments, font: font,
-                                                fontScale: fontScale, onProgress: onProgress)
+        let outURL = try await buildComposition(segments: segments, style: style,
+                                                onProgress: onProgress)
 
         await MainActor.run { onProgress(1.0) }
         dlog("[Vlog] done: \(outURL.lastPathComponent)")
@@ -47,8 +47,7 @@ class VlogService {
     // MARK: - Composition + CALayer 오버레이 + 페이드 전환
     private func buildComposition(
         segments: [(asset: AVURLAsset, placeName: String, date: Date)],
-        font: VlogFont = .gowun,
-        fontScale: VlogFontScale = .medium,
+        style: VlogSubtitleStyle = .default,
         onProgress: @escaping (Double) -> Void
     ) async throws -> URL {
 
@@ -197,8 +196,7 @@ class VlogService {
                 placeName: info.placeName,
                 dateStr: Self.fmt(info.date),
                 size: outputSize,
-                font: font,
-                fontScale: fontScale,
+                style: style,
                 startSec: startSec,
                 clipDuration: durSec,
                 totalDuration: totalSec
@@ -296,8 +294,7 @@ class VlogService {
         placeName: String,
         dateStr: String,
         size: CGSize,
-        font: VlogFont,
-        fontScale: VlogFontScale,
+        style: VlogSubtitleStyle,
         startSec: Double,
         clipDuration: Double,
         totalDuration: Double
@@ -310,35 +307,58 @@ class VlogService {
         let cY = H / 2
 
         // 유저 선택 서체·크기 (medium = 기존 80/52pt). 로드 실패 시 시스템 폰트 폴백.
-        let placeSize = 80 * fontScale.multiplier
-        let dateSize = 52 * fontScale.multiplier
-        let placeFont = UIFont(name: font.postScriptName, size: placeSize)
-            ?? UIFont.systemFont(ofSize: placeSize, weight: .bold)
-        let smallFont = UIFont(name: font.postScriptName, size: dateSize)
-            ?? UIFont.systemFont(ofSize: dateSize, weight: .regular)
-        // 큰 글씨는 기준 프레임(높이 100/65)을 넘칠 수 있어 배율만큼 프레임도 키운다
-        let placeH = 100 * fontScale.multiplier
-        let dateH = 65 * fontScale.multiplier
+        let placeSize = 80 * style.scale.multiplier
+        let subSize = 52 * style.scale.multiplier
 
-        let placeLayer = CATextLayer()
-        placeLayer.string = placeName
-        placeLayer.font = placeFont
-        placeLayer.fontSize = placeSize
-        placeLayer.foregroundColor = UIColor(red: 1, green: 0.42, blue: 0.21, alpha: 1).cgColor
-        placeLayer.alignmentMode = .center
-        placeLayer.contentsScale = UIScreen.main.scale
-        placeLayer.frame = CGRect(x: 60, y: cY - placeH, width: W - 120, height: placeH)
-        container.addSublayer(placeLayer)
+        // 고른 크기는 '원하는 크기'다. 화면 폭을 넘길 것 같으면 그만큼만 물러선다
+        // (서버·미리보기와 같은 규칙 — VlogSubtitleFit).
+        func makeLine(_ text: String, wanted: CGFloat, advanceRatio: CGFloat,
+                      weight: UIFont.Weight) -> (String, UIFont, CGFloat, CGFloat, UIColor) {
+            let fitted = VlogSubtitleFit.fit(text, wanted: Double(wanted), frameWidth: Double(W))
+            let size = CGFloat(fitted.size)
+            let font = UIFont(name: style.font.postScriptName, size: size)
+                ?? UIFont.systemFont(ofSize: size, weight: weight)
+            return (fitted.text, font, size, size * advanceRatio, .white)
+        }
 
-        let dateLayer = CATextLayer()
-        dateLayer.string = dateStr
-        dateLayer.font = smallFont
-        dateLayer.fontSize = dateSize
-        dateLayer.foregroundColor = UIColor.white.cgColor
-        dateLayer.alignmentMode = .center
-        dateLayer.contentsScale = UIScreen.main.scale
-        dateLayer.frame = CGRect(x: 60, y: cY + 10, width: W - 120, height: dateH)
-        container.addSublayer(dateLayer)
+        // 그릴 줄을 위에서 아래 순서로 모은다 — 꺼 둔 항목은 자리도 차지하지 않는다.
+        // 줄 간격(advance)은 '둘 다'일 때 기존 위치가 그대로 재현되도록 맞춘 값이다.
+        var lines: [(text: String, font: UIFont, size: CGFloat, advance: CGFloat, color: UIColor)] = []
+        if style.fields.showsPlace, !placeName.isEmpty {
+            lines.append(makeLine(placeName, wanted: placeSize, advanceRatio: 1.486, weight: .bold))
+        }
+        if style.fields.showsTime, !dateStr.isEmpty {
+            lines.append(makeLine(dateStr, wanted: subSize, advanceRatio: 1.8, weight: .regular))
+        }
+        let caption = style.sanitizedCaption
+        if !caption.isEmpty {
+            lines.append(makeLine(caption, wanted: subSize, advanceRatio: 1.8, weight: .regular))
+        }
+        guard !lines.isEmpty else { return container }
+        // 강조색은 첫 줄에만. 장소를 끄고 시각만 보는 사람에게도 색 선택이 보여야 한다.
+        lines[0].color = style.color.uiColor
+
+        // 영상 합성용 레이어 트리는 원점이 좌하단이라 y가 위로 자란다.
+        // '위에서 아래로' 쌓으려면 중앙 위쪽에서 누적분을 빼며 내려가야 한다.
+        let totalH = lines.reduce(0) { $0 + $1.advance }
+        var cursor: CGFloat = 0
+        for line in lines {
+            let layer = CATextLayer()
+            layer.string = line.text
+            layer.font = line.font
+            layer.fontSize = line.size
+            layer.foregroundColor = line.color.cgColor
+            layer.alignmentMode = .center
+            layer.isWrapped = false
+            layer.truncationMode = .end
+            layer.contentsScale = UIScreen.main.scale
+            layer.frame = CGRect(x: 60,
+                                 y: cY + totalH / 2 - cursor - line.advance,
+                                 width: W - 120,
+                                 height: line.advance)
+            container.addSublayer(layer)
+            cursor += line.advance
+        }
 
         // CoreAnimation 타임라인 기준 애니메이션 (beginTime = composition 시간)
         // 텍스트는 클립 시작 후 2.5초만 표시, fade in 0.4s / fade out 0.4s
