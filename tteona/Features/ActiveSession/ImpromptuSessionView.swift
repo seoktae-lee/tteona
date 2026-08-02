@@ -6,6 +6,9 @@ import AVFoundation
 struct ImpromptuSessionView: View {
     var selectedRoomIds: Set<String> = []
     var onRestartWithRoomSelect: (() -> Void)? = nil
+    /// 촬영 탭에서 '브이로그 만들기'로 들어온 경우 — 지도를 보여주되 바로 마무리 시트를 띄운다
+    var startInFinishMode = false
+
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var userService: UserService
     @EnvironmentObject private var courseService: CourseService
@@ -25,23 +28,47 @@ struct ImpromptuSessionView: View {
     @State private var resolvedLocation: CLLocation? = nil
     @State private var pendingPlace: Place? = nil
     @State private var locationTask: Task<Void, Never>? = nil
-    @State private var showPlacePicker = false
-    @State private var showCamera = false
-    @State private var showEndAlert = false
-    @State private var showVlog = false
-    @State private var showSaveCourse = false
+    /// 전체화면도 하나로 — .fullScreenCover를 여러 개 붙이면 SwiftUI가 하나만 살린다.
+    /// 카메라와 브이로그를 따로 달았더니 브이로그 쪽이 조용히 버려졌다.
+    enum FullCover: Identifiable, Equatable {
+        case camera, vlog
+        var id: Int { self == .camera ? 0 : 1 }
+    }
+    @State private var fullCover: FullCover?
     @State private var pendingShowVlog = false
     @State private var pendingShowSaveCourse = false
     @State private var courseName = ""
     @State private var selectedTag: CourseTag = .friends
     @State private var generatedCourse: Course? = nil
     @State private var courseSavedToFirestore = false
-    @State private var showResumeSheet = false
+    /// SwiftUI는 한 뷰에 .sheet(isPresented:)를 여러 개 붙이면 하나만 처리하고 나머지를 버린다.
+    /// 예전엔 이어하기·장소·코스저장·마무리가 각각 .sheet로 달려 있어 마지막(마무리)이
+    /// 영영 뜨지 않았다. 하나의 .sheet(item:)으로 합쳐 그 문제를 없앤다.
+    enum ActiveSheet: Identifiable, Equatable {
+        case resume, placePicker, saveCourse, end
+        var id: Int {
+            switch self {
+            case .resume: return 0
+            case .placePicker: return 1
+            case .saveCourse: return 2
+            case .end: return 3
+            }
+        }
+    }
+    @State private var activeSheet: ActiveSheet?
+    /// 직전에 떠 있던 시트 — onDismiss에서 무엇이 닫혔는지 판별하는 데만 쓴다
+    @State private var lastSheet: ActiveSheet?
+    /// 직전에 떠 있던 전체화면 — onDismiss에서 무엇이 닫혔는지 판별용
+    @State private var lastCover: FullCover?
     @State private var savedSession: SavedImpromptuSession? = nil
     @State private var activeRoomIds: Set<String> = []
     @State private var didStartSession = false
     @State private var cameraResult = false
+    /// 촬영 시작 때 미리 정해두는 클립 파일명 — 장소는 촬영이 끝난 뒤에 붙는다
+    @State private var pendingClipFileName: String? = nil
     @State private var showIntegrityAlert = false
+    /// 오늘 기록 버리기 확인 — 되돌릴 수 없어 한 번 더 묻는다
+    @State private var showDiscardConfirm = false
 
     private let sessionStore = ImpromptuSessionStore.shared
 
@@ -51,9 +78,15 @@ struct ImpromptuSessionView: View {
 
     var body: some View {
         ZStack {
-            mapLayer
-            topBar
-            bottomPanel
+            // 마무리 모드는 시트만 띄우면 된다. 지도·상단바·하단패널은 쓰지 않는데도
+            // 그리면 구글 지도 초기화가 메인 스레드를 붙잡아 시트 예약이 실행되지 못한다.
+            if startInFinishMode {
+                Color.black.opacity(0.85).ignoresSafeArea()
+            } else {
+                mapLayer
+                topBar
+                bottomPanel
+            }
             if isSavingClip {
                 savingOverlay
             }
@@ -74,13 +107,34 @@ struct ImpromptuSessionView: View {
                 try? await Task.sleep(nanoseconds: 100_000_000)
                 waited += 1
             }
+
+            // 촬영 탭에서 '마치기'로 들어온 경우 — 진행 중인 세션을 들고 온 것이므로
+            // "이어할까요?"는 묻지 않고 바로 복원한 뒤 마무리 시트로 간다.
+            //
+            // 시트는 반드시 fullScreenCover 전환이 끝난 뒤에 켠다. 등장과 동시에 켜면
+            // (init 초깃값 포함) SwiftUI가 그 요청을 삼킨다 — 이어하기 시트가 예전에
+            // 떴던 것도 .task 안에서 늦게 켜졌기 때문이다.
+            if startInFinishMode {
+                if let saved = sessionStore.loadTodaySession() { resumeSession(saved) }
+                return   // 시트는 아래 onAppear가 띄운다 (.task는 취소될 수 있다)
+            }
+
             // 이전 세션 복원 여부 확인
             if let saved = sessionStore.loadTodaySession(), !saved.places.isEmpty {
                 savedSession = saved
-                showResumeSheet = true
+                activeSheet = .resume
             } else {
                 sessionStore.clear()
                 startNewSession()
+            }
+        }
+        // 마무리 시트는 .task가 아니라 여기서 띄운다.
+        // .task는 뷰가 잠깐이라도 재구성되면 취소돼 대기 이후 코드가 실행되지 않는다
+        // (실제로 로그가 'task 진입'에서 끊겼다). asyncAfter는 그 영향을 받지 않는다.
+        .onAppear {
+            guard startInFinishMode, activeSheet == nil else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                activeSheet = .end
             }
         }
         .onDisappear {
@@ -95,76 +149,75 @@ struct ImpromptuSessionView: View {
             cameraCommand = GMSCameraPosition(latitude: loc.coordinate.latitude,
                                               longitude: loc.coordinate.longitude, zoom: 15)
         }
-        .sheet(isPresented: $showResumeSheet) {
-            resumeSheet
-        }
-        // 1단계: 장소 선택
-        .sheet(isPresented: $showPlacePicker, onDismiss: {
-            guard pendingPlace != nil else { return }
-            showCamera = true
-        }) {
-            if let loc = resolvedLocation {
-                PlacePickerView(location: loc) { name in
-                    pendingPlace = Place(
-                        order: capturedPlaces.count + 1,
-                        placeName: name,
-                        latitude: loc.coordinate.latitude,
-                        longitude: loc.coordinate.longitude,
-                        clipFileName: "\(UUID().uuidString).mp4"
+        .fullScreenCover(item: $fullCover, onDismiss: {
+            // 카메라를 닫은 경우에만 후처리 — 브이로그는 스스로 dismiss까지 한다
+            guard lastCover == .camera else { lastCover = nil; return }
+            lastCover = nil
+            guard cameraResult else {
+                discardPendingClip()   // 촬영을 취소했다
+                return
+            }
+            cameraResult = false
+            activeSheet = .placePicker     // 찍었으니 이제 장소를 고른다
+        }) { cover in
+            switch cover {
+            case .camera:
+                if let fileName = pendingClipFileName {
+                    CameraView(
+                        clipURL: clipURL(for: fileName),
+                        sessionId: sessionId,
+                        onSaved: { cameraResult = true },
+                        onClose: { cameraResult = false }
                     )
-                    showPlacePicker = false
                 }
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.hidden)
-            }
-        }
-        // 2단계: 카메라
-        .fullScreenCover(isPresented: $showCamera, onDismiss: {
-            if cameraResult {
-                handleCameraSaved()
-                cameraResult = false
-            }
-        }) {
-            if let place = pendingPlace {
-                CameraView(
-                    place: place,
-                    sessionId: sessionId,
-                    onSaved: {
-                        cameraResult = true
-                    },
-                    onClose: {
-                        cameraResult = false
-                        pendingPlace = nil
+            case .vlog:
+                if let course = generatedCourse {
+                    VlogGenerationView(
+                        course: course,
+                        sessionId: sessionId,
+                        thumbnailCourseId: courseSavedToFirestore ? course.courseId : nil,
+                        shareRoomIds: activeRoomIds
+                    ) {
+                        // 브이로그를 손에 넣은 뒤에야 오늘 기록을 정리한다
+                        sessionStore.clear()
+                        dismiss()
                     }
-                )
-            }
-        }
-        .fullScreenCover(isPresented: $showVlog) {
-            if let course = generatedCourse {
-                VlogGenerationView(
-                    course: course,
-                    sessionId: sessionId,
-                    thumbnailCourseId: courseSavedToFirestore ? course.courseId : nil,
-                    shareRoomIds: activeRoomIds
-                ) {
-                    dismiss()
                 }
             }
         }
-        .sheet(isPresented: $showSaveCourse) {
-            saveCourseSheet
+        // 시트는 반드시 하나로 — .sheet를 여러 개 붙이면 SwiftUI가 하나만 살리고 나머지를 버린다
+        .onChange(of: activeSheet) { _, new in
+            if let new { lastSheet = new }
         }
-        .sheet(isPresented: $showEndAlert, onDismiss: {
-            // 종료 시트에서 고른 다음 단계를 닫힘 완료 후 실행
-            if pendingShowVlog {
-                pendingShowVlog = false
-                showVlog = true
-            } else if pendingShowSaveCourse {
-                pendingShowSaveCourse = false
-                showSaveCourse = true
+        .onChange(of: fullCover) { _, new in
+            if let new { lastCover = new }
+        }
+        .sheet(item: $activeSheet, onDismiss: handleSheetDismiss) { sheet in
+            switch sheet {
+            case .resume:
+                resumeSheet
+            case .placePicker:
+                placePickerSheet
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.hidden)
+            case .saveCourse:
+                saveCourseSheet
+            case .end:
+                endSheet
             }
-        }) {
-            endSheet
+        }
+        .alert(L("impromptu.discardToday"), isPresented: $showDiscardConfirm) {
+            Button(L("common.cancel"), role: .cancel) {}
+            Button(L("impromptu.discardToday"), role: .destructive) {
+                deleteAllClips()
+                sessionStore.clear()
+                capturedPlaces = []
+                recordedSeconds = 0
+                activeSheet = nil
+                dismiss()
+            }
+        } message: {
+            Text(L("impromptu.discardToday.message"))
         }
         .alert(L("session.integrity.title"), isPresented: $showIntegrityAlert) {
             Button(L("common.ok"), role: .cancel) { }
@@ -239,7 +292,10 @@ struct ImpromptuSessionView: View {
                     // 그룹에는 시작/종료 활동만 공유하므로 "위치 공유 중" 배지는 표시하지 않는다.
                 }
                 Spacer()
-                Text(L("main.placesCount", capturedPlaces.count))
+                // 이어하기 결정 전에는 capturedPlaces가 아직 비어 있다 —
+                // 그대로 두면 시트는 "3곳", 배지는 "0곳"으로 어긋나 보인다
+                Text(L("main.placesCount",
+                       activeSheet == .resume ? (savedSession?.places.count ?? 0) : capturedPlaces.count))
                     .font(.tte(14, .bold))
                     .foregroundColor(.white)
                     .frame(width: 52, height: 40)
@@ -322,7 +378,7 @@ struct ImpromptuSessionView: View {
                     .tutorialGlow(tutorial.isOn(.captureHere), cornerRadius: 14)
 
                     if !capturedPlaces.isEmpty {
-                        Button { showEndAlert = true } label: {
+                        Button { activeSheet = .end } label: {
                             Text(L("impromptu.endToday"))
                                 .font(.tte(16, .semibold))
                                 .foregroundColor(.tteOrange)
@@ -450,7 +506,7 @@ struct ImpromptuSessionView: View {
                         tutorial.advance(to: .chooseFormat)
                         buildCourseAndEnd(saveToFirestore: false)
                         pendingShowVlog = true
-                        showEndAlert = false
+                        activeSheet = nil
                     }
                     .tutorialGlow(tutorial.isOn(.chooseVlogOnly), cornerRadius: 20)
 
@@ -461,7 +517,7 @@ struct ImpromptuSessionView: View {
                         isPrimary: false
                     ) {
                         pendingShowSaveCourse = true
-                        showEndAlert = false
+                        activeSheet = nil
                     }
                 }
 
@@ -478,7 +534,7 @@ struct ImpromptuSessionView: View {
 
                 // 계속 기록
                 Button {
-                    showEndAlert = false
+                    activeSheet = nil
                 } label: {
                     Text(L("impromptu.keepRecording"))
                         .font(.tte(15, .medium))
@@ -487,6 +543,18 @@ struct ImpromptuSessionView: View {
                         .frame(height: 48)
                         .background(RoundedRectangle(cornerRadius: 14)
                             .stroke(Color.tteOrange.opacity(0.4), lineWidth: 1))
+                }
+
+                // 탈출구 — 브이로그 생성이 실패하면 예산이 찬 채로 아무것도 못 하게 갇힌다.
+                // 오늘 기록을 버리고 처음부터 시작할 길을 항상 열어 둔다.
+                Button(role: .destructive) {
+                    showDiscardConfirm = true
+                } label: {
+                    Text(L("impromptu.discardToday"))
+                        .font(.tte(13))
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 40)
                 }
             }
             .padding(.horizontal, 20)
@@ -578,8 +646,8 @@ struct ImpromptuSessionView: View {
                 Button {
                     tutorial.advance(to: .chooseFormat)
                     buildCourseAndEnd(saveToFirestore: true)
-                    showSaveCourse = false
-                    showVlog = true
+                    activeSheet = nil
+                    fullCover = .vlog
                 } label: {
                     Text(L("impromptu.saveAndVlog"))
                         .font(.tte(17, .semibold)).foregroundColor(.white)
@@ -596,7 +664,7 @@ struct ImpromptuSessionView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button(L("common.cancel")) { showSaveCourse = false }.foregroundColor(.tteDarkGray)
+                    Button(L("common.cancel")) { activeSheet = nil }.foregroundColor(.tteDarkGray)
                 }
             }
         }
@@ -604,18 +672,82 @@ struct ImpromptuSessionView: View {
 
     // MARK: - Capture Flow
 
+    /// 촬영을 먼저 연다. GPS·장소 확정을 앞에 두면 유저가 아무것도 못 하고 기다리게 된다.
+    /// 클립 경로는 파일명으로 미리 고정하고, 장소는 촬영이 끝난 뒤 붙인다.
     private func startCapture() {
-        guard !isResolvingLocation else { return }
+        guard pendingClipFileName == nil else { return }
+        pendingPlace = nil
+        pendingClipFileName = "\(UUID().uuidString).mp4"
+        fullCover = .camera
+
+        // 찍는 동안 백그라운드로 위치를 확보해 둔다 — 촬영이 끝났을 땐 이미 준비돼 있게
         locationTask?.cancel()
+        resolvedLocation = nil
         isResolvingLocation = true
         locationTask = Task {
             defer { isResolvingLocation = false }
-            do {
-                let location = try await locationService.requestOneTimeLocation()
-                guard !Task.isCancelled else { return }
-                resolvedLocation = location
-                showPlacePicker = true
-            } catch {}
+            resolvedLocation = try? await locationService.requestOneTimeLocation()
+        }
+    }
+
+    /// 세션 폴더 안의 클립 경로 (VlogService.clipURL과 같은 규약)
+    private func clipURL(for fileName: String) -> URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Tteona/Sessions/\(sessionId)/\(fileName)")
+    }
+
+    /// 장소가 붙지 않은 클립은 브이로그 합성에서 영영 안 쓰이므로 파일째 지운다
+    private func discardPendingClip() {
+        if let fileName = pendingClipFileName {
+            try? FileManager.default.removeItem(at: clipURL(for: fileName))
+        }
+        pendingClipFileName = nil
+        pendingPlace = nil
+        locationTask?.cancel()
+    }
+
+    /// 촬영 후 장소 선택 시트 — 위치가 아직이면 기다리고, 실패하면 다시 시도하게 한다
+    @ViewBuilder
+    private var placePickerSheet: some View {
+        if let loc = resolvedLocation {
+            PlacePickerView(location: loc) { name in
+                pendingPlace = Place(
+                    order: capturedPlaces.count + 1,
+                    placeName: name,
+                    latitude: loc.coordinate.latitude,
+                    longitude: loc.coordinate.longitude,
+                    clipFileName: pendingClipFileName
+                )
+                activeSheet = nil
+            }
+        } else {
+            VStack(spacing: 16) {
+                if isResolvingLocation {
+                    ProgressView()
+                    Text(L("impromptu.locating"))
+                        .font(.tte(14))
+                        .foregroundColor(.tteMediumGray)
+                } else {
+                    Image(systemName: "location.slash")
+                        .font(.tte(32))
+                        .foregroundColor(.tteMediumGray)
+                    Text(L("impromptu.locationFailed"))
+                        .font(.tte(14))
+                        .foregroundColor(.tteMediumGray)
+                        .multilineTextAlignment(.center)
+                    Button(L("common.retry")) {
+                        locationTask?.cancel()
+                        isResolvingLocation = true
+                        locationTask = Task {
+                            defer { isResolvingLocation = false }
+                            resolvedLocation = try? await locationService.requestOneTimeLocation()
+                        }
+                    }
+                    .font(.tte(15, .semibold))
+                    .foregroundColor(.tteOrange)
+                }
+            }
+            .padding(32)
         }
     }
 
@@ -643,6 +775,7 @@ struct ImpromptuSessionView: View {
                                  longitude: place.longitude)
         }
         pendingPlace = nil
+        pendingClipFileName = nil
     }
 
     private func removePlace(_ place: Place) {
@@ -710,7 +843,9 @@ struct ImpromptuSessionView: View {
         )
         generatedCourse = course
         courseSavedToFirestore = saveToFirestore
-        sessionStore.clear()
+        // ⚠️ 여기서 세션을 지우면 안 된다. 브이로그 화면이 뜨지 못하면 기록만 사라지고
+        //    유저는 되돌아갈 방법이 없다(실제로 그렇게 하루치가 날아갔다).
+        //    정리는 브이로그를 실제로 받은 뒤에 한다.
         if saveToFirestore { Task { try? await courseService.saveCourse(course) } }
         postEndFeed(toRoomIds: Array(activeRoomIds), count: capturedPlaces.count)
     }
@@ -730,6 +865,32 @@ struct ImpromptuSessionView: View {
                                  courseId: "free",
                                  courseName: L("impromptu.placesVisited", count))
         }
+    }
+
+    /// 어떤 시트가 닫혔는지에 따른 후처리. .sheet(item:)의 onDismiss는 닫힌 대상을
+    /// 알려주지 않으므로 직전에 떠 있던 값(lastSheet)을 보고 분기한다.
+    private func handleSheetDismiss() {
+        switch lastSheet {
+        case .placePicker:
+            if pendingPlace != nil {
+                handleCameraSaved()
+            } else {
+                // 장소를 정하지 않고 닫았다 — 고아 클립을 남기지 않는다
+                discardPendingClip()
+            }
+        case .end:
+            // 종료 시트에서 고른 다음 단계를 닫힘 완료 후 실행
+            if pendingShowVlog {
+                pendingShowVlog = false
+                fullCover = .vlog
+            } else if pendingShowSaveCourse {
+                pendingShowSaveCourse = false
+                activeSheet = .saveCourse
+            }
+        default:
+            break
+        }
+        lastSheet = nil
     }
 
     private func startNewSession() {
@@ -824,7 +985,7 @@ struct ImpromptuSessionView: View {
                 // 이어서 기록하기
                 Button {
                     if let saved = savedSession { resumeSession(saved) }
-                    showResumeSheet = false
+                    activeSheet = nil
                 } label: {
                     HStack(spacing: 10) {
                         Image(systemName: "play.fill")
@@ -842,7 +1003,7 @@ struct ImpromptuSessionView: View {
                 Button {
                     deleteAllClips()
                     sessionStore.clear()
-                    showResumeSheet = false
+                    activeSheet = nil
                     if let restart = onRestartWithRoomSelect {
                         // 부모가 이 화면을 닫고 onDismiss에서 방 선택을 다시 연다
                         restart()

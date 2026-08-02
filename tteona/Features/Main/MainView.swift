@@ -3,6 +3,9 @@ import MapKit
 import GoogleMaps
 
 struct MainView: View {
+    /// DiscoverTabView의 지도/목록 토글이 차지하는 높이 — 상단 검색바를 그만큼 내린다
+    var topInset: CGFloat = 0
+
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var courseService: CourseService
     @EnvironmentObject private var userService: UserService
@@ -10,7 +13,6 @@ struct MainView: View {
     @EnvironmentObject private var notificationManager: AppNotificationManager
     @StateObject private var locationService = LocationService()
     @ObservedObject private var activeSessionStore = ActiveSessionStore.shared
-    @ObservedObject private var impromptuSessionStore = ImpromptuSessionStore.shared
     @ObservedObject private var tutorial = VlogTutorial.shared
     @State private var selectedCourse: Course?
     @State private var pendingSessionInfo: CourseSessionInfo? = nil
@@ -333,7 +335,7 @@ struct MainView: View {
                 .padding(.horizontal, 16)
             }
             .frame(height: 40)
-            .padding(.top, topSafeInset + 8)
+            .padding(.top, topSafeInset + 8 + topInset)
 
             // 검색 제안 카드 — "타이핑=코스 필터 / 지도 이동=명시적 선택"으로 이중 역할 분리
             if searchFocused && !searchText.isEmpty {
@@ -555,14 +557,9 @@ struct MainView: View {
                 // 보조 버튼 — 좌: 이어하기 도크(세로 스택 → 중앙 CTA와 겹침 방지), 우: 현재 위치
                 HStack(alignment: .bottom) {
                     VStack(spacing: 10) {
-                        // 나의 오늘 이어하기
-                        if impromptuSessionStore.hasTodaySession,
-                           let saved = ImpromptuSessionStore.shared.loadTodaySession() {
-                            miniDockButton(icon: "figure.walk", label: L("main.resume")) {
-                                courseSessionInfo = nil
-                                impromptuRoomIds = Set(saved.roomIds)
-                            }
-                        }
+                        // '나의 오늘 이어하기'는 촬영 탭이 가져갔다 — 세션의 주인이 둘이면
+                        // 상태가 어긋나 한쪽 버튼이 안 사라지는 문제가 생긴다.
+                        // 진행 중인 세션은 촬영 탭 상단 칩에서 확인·마무리한다.
 
                         // 코스 이어하기
                         if activeSessionStore.hasTodaySession {
@@ -585,30 +582,8 @@ struct MainView: View {
                     .padding(.trailing, 24)
                 }
 
-                // 나의 오늘 — 정중앙 고정 CTA
-                Button {
-                    Haptics.light()
-                    handleImpromptuTap()
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "figure.walk")
-                            .font(.tte(17, .semibold))
-                        Text(L("main.myToday"))
-                            .font(.tte(17, .bold))
-                    }
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 32)
-                    .padding(.vertical, 16)
-                    .background(
-                        Capsule()
-                            .fill(Color.tteOrange)
-                            .shadow(color: .tteOrange.opacity(0.45), radius: 12, y: 4)
-                    )
-                }
-                .tutorialGlow(tutorial.isOn(.tapMyToday), cornerRadius: 27)
-                .overlay {
-                    if tutorial.isOn(.tapMyToday) { TutorialSparkles() }
-                }
+                // '나의 오늘' CTA는 촬영 탭으로 옮겨졌다 — 이 자리는 지도/탐색 토글이 쓴다
+                // (토글 자체는 DiscoverTabView가 그린다)
             }
             .padding(.bottom, 104)
         }

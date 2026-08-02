@@ -34,10 +34,30 @@ class CameraService: NSObject {
     var onRecordingFinished: ((URL?) -> Void)?
 
     // MARK: - Setup
+    /// 세션 구성·시작·중지를 모두 이 직렬 큐에서만 한다.
+    /// 여러 스레드에서 건드리면 beginConfiguration 도중 startRunning이 끼어들어
+    /// "startRunning may not be called between beginConfiguration and commitConfiguration"으로 크래시한다.
+    private let sessionQueue = DispatchQueue(label: "kr.tteona.camera.session")
+
+    /// 세션을 한 번이라도 구성했는가 — 재진입 시 재구성 대신 재개하면 되는지 판단한다
+    private(set) var didConfigure = false
+
     func configure() {
+        didConfigure = true
         registerInterruptionObservers()
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        sessionQueue.async { [weak self] in
             self?.setupSession()
+        }
+    }
+
+    /// 이미 구성된 세션을 다시 켠다. 탭을 떠나며 멈춘 세션을 복귀할 때 쓴다 —
+    /// setupSession을 다시 부르면 입력이 중복 추가되므로 startRunning만 한다.
+    /// 직렬 큐에 넣으므로 구성이 끝난 뒤에 실행된다.
+    func resumeSession() {
+        guard didConfigure else { return }
+        sessionQueue.async { [weak self] in
+            guard let self, !self.captureSession.isRunning else { return }
+            self.captureSession.startRunning()
         }
     }
 
@@ -62,10 +82,7 @@ class CameraService: NSObject {
 
     @objc private func sessionInterruptionEnded(_ note: Notification) {
         // 인터럽션이 끝났는데 세션이 멈춰 있으면 프리뷰가 검게 굳으므로 재개한다.
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self, !self.captureSession.isRunning else { return }
-            self.captureSession.startRunning()
-        }
+        resumeSession()
     }
 
     private func setupSession() {
@@ -118,12 +135,21 @@ class CameraService: NSObject {
     }
 
     func stopSession() {
-        captureSession.stopRunning()
+        // 메인 스레드에서 곧장 멈추면 구성 중인 세션과 부딪힌다 — 같은 직렬 큐로 보낸다
+        sessionQueue.async { [weak self] in
+            guard let self, self.captureSession.isRunning else { return }
+            self.captureSession.stopRunning()
+        }
     }
 
     // MARK: - 전면/후면 전환
     func flipCamera() {
         guard !isRecording else { return }
+        // 재구성이므로 세션 큐에서 — 전환 도중 resumeSession이 끼어들면 크래시한다
+        sessionQueue.async { [weak self] in self?.performFlip() }
+    }
+
+    private func performFlip() {
         let newPosition: AVCaptureDevice.Position = currentCameraPosition == .back ? .front : .back
         // 후면은 가상 멀티렌즈, 전면은 광각. (전/후면 전환은 사용자의 명시적 동작이라 재구성이 불가피)
         guard let newDevice = bestVideoDevice(position: newPosition),
@@ -201,6 +227,16 @@ class CameraService: NSObject {
     }
 
     /// 프리뷰에서 탭한 지점(0~1로 정규화된 기기 좌표)에 초점·노출을 맞춘다.
+    /// 노출 보정(EV). -2…+2 범위를 기기가 지원하는 범위로 클램프해 적용한다.
+    /// 역광에서 얼굴이 까맣게 나오는 걸 유저가 직접 잡을 수 있게 하는 용도.
+    func setExposureBias(_ ev: Float) {
+        guard let d = videoDevice else { return }
+        guard (try? d.lockForConfiguration()) != nil else { return }
+        let clamped = min(max(ev, d.minExposureTargetBias), d.maxExposureTargetBias)
+        d.setExposureTargetBias(clamped, completionHandler: nil)
+        d.unlockForConfiguration()
+    }
+
     func focus(at devicePoint: CGPoint) {
         guard let d = videoDevice else { return }
         guard (try? d.lockForConfiguration()) != nil else { return }
@@ -224,6 +260,21 @@ class CameraService: NSObject {
         return factors
     }
 
+    /// 현재 줌을 UI 배율(1x 기준)로 환산한 값 — 핀치 결과를 슬라이더에 반영할 때 쓴다
+    var currentZoomUI: Double {
+        guard zoomBaseFor1x > 0 else { return 1 }
+        return Double(videoDevice?.videoZoomFactor ?? zoomBaseFor1x) / Double(zoomBaseFor1x)
+    }
+
+    /// 슬라이더가 쓸 UI 배율 하한·상한 (초광각이 없는 기기는 1x부터)
+    var minZoomUI: Double { hasUltraWide ? 0.5 : 1.0 }
+    var maxZoomUI: Double { 5.0 }
+
+    /// 슬라이더용 — UI 배율을 램프 없이 즉시 반영한다 (드래그 중 지연이 없어야 한다)
+    func setContinuousZoomUI(_ uiFactor: Double) {
+        setContinuousZoom(Double(zoomBaseFor1x) * uiFactor)
+    }
+
     /// UI 배율(0.5/1/3x)로 부드럽게 줌한다. 렌즈 전환은 videoZoomFactor 변경만으로 시스템이
     /// 광학 처리하므로 세션 재구성이 없다. ramp로 애니메이션(기본 카메라와 유사한 느낌).
     func setZoom(_ uiFactor: Double) {
@@ -236,10 +287,11 @@ class CameraService: NSObject {
     }
 
     // MARK: - Recording
-    func startRecording(place: Place, sessionId: String) {
+    /// 저장 경로를 직접 받는다 — 촬영 시작 시점에 장소가 아직 없을 수 있기 때문이다.
+    /// ('나의 오늘'은 먼저 찍고 장소를 나중에 붙인다. 경로는 clipFileName으로 미리 정해진다.)
+    func startRecording(to url: URL) {
         guard !isRecording else { return }
 
-        let url = videoOutputURL(place: place, sessionId: sessionId)
         createDirectoryIfNeeded(for: url)
         try? FileManager.default.removeItem(at: url)
 
@@ -353,20 +405,6 @@ class CameraService: NSObject {
     }
 
     // MARK: - Helpers
-    private func videoOutputURL(place: Place, sessionId: String) -> URL {
-        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let dir = docs.appendingPathComponent("Tteona/Sessions/\(sessionId)")
-        // clipFileName이 있으면 사용, 없으면 order+장소명 fallback (코스 기반 세션)
-        let name = place.clipFileName ?? {
-            let safeName = place.placeName
-                .replacingOccurrences(of: " ", with: "_")
-                .replacingOccurrences(of: "/", with: "_")
-                .replacingOccurrences(of: ":", with: "_")
-            return "\(place.order)_\(safeName).mp4"
-        }()
-        return dir.appendingPathComponent(name)
-    }
-
     private func createDirectoryIfNeeded(for url: URL) {
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
     }

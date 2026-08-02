@@ -18,7 +18,18 @@ struct MainTabView: View {
     @State private var showJoinRoomFromDeepLink = false
     @State private var courseSessionInfo: CourseSessionInfo? = nil
     @State private var pendingSessionInfo: CourseSessionInfo? = nil
-    @State private var selectedTab: Int = 0
+    /// 탭 인덱스를 숫자로 흩어 두면 탭이 하나 늘 때마다 알림 라우팅이 조용히 어긋난다.
+    /// 여기서만 정의하고 전부 이걸 참조한다.
+    enum Tab {
+        static let capture  = 0
+        static let discover = 1
+        static let chat     = 2
+        static let profile  = 3
+    }
+
+    @State private var selectedTab: Int = Tab.capture
+    /// 촬영 중 여부 — 탭바를 숨기는 데 쓴다
+    @State private var isRecordingClip = false
     @State private var deepLinkTask: Task<Void, Never>? = nil
     @State private var showNavGuide = false
     @State private var notificationVlogURL: IdentifiedURL? = nil
@@ -97,37 +108,41 @@ struct MainTabView: View {
         }
         if notificationManager.shouldOpenProfile {
             notificationManager.shouldOpenProfile = false
-            selectedTab = 3
+            selectedTab = Tab.profile
         }
     }
 
     private var tabContent: some View {
         TabView(selection: $selectedTab) {
-            MainView()
+            // 앱의 1번 기능 — 켜자마자 뷰파인더가 보이도록 기본 탭으로 둔다
+            CaptureTabView(isRecording: $isRecordingClip)
                 .tabItem {
-                    Label(L("tab.home"), systemImage: "map.fill")
+                    Label(L("tab.capture"), systemImage: "camera.fill")
                 }
-                .tag(0)
+                .tag(Tab.capture)
 
-            ExploreGridView()
+            // 지도 + 탐색 — 둘 다 "코스를 찾는" 화면이라 한 탭에 묶고 토글로 전환한다
+            DiscoverTabView()
                 .tabItem {
-                    Label(L("tab.explore"), systemImage: "square.grid.2x2.fill")
+                    Label(L("tab.discover"), systemImage: "map.fill")
                 }
-                .tag(1)
+                .tag(Tab.discover)
 
             FeedTabView()
                 .tabItem {
                     Label(L("tab.chat"), systemImage: "bubble.left.and.bubble.right.fill")
                 }
                 .badge(roomService.unreadRoomIds.count)
-                .tag(2)
+                .tag(Tab.chat)
 
             ProfileTabView()
                 .tabItem {
                     Label(L("tab.profile"), systemImage: "person.crop.circle.fill")
                 }
-                .tag(3)
+                .tag(Tab.profile)
         }
+        // 촬영 중에는 탭바를 감춰 화면을 비운다 — 5초뿐이라 길을 잃지 않는다
+        .toolbar(isRecordingClip ? .hidden : .visible, for: .tabBar)
         .tint(.tteOrange)
         .environmentObject(userService)
         .environmentObject(roomService)
@@ -187,13 +202,13 @@ struct MainTabView: View {
         }
         .onChange(of: notificationManager.pendingChatRoom) { _, pending in
             guard pending != nil else { return }
-            selectedTab = 2
+            selectedTab = Tab.chat
         }
         .onAppear {
             #if DEBUG
             // 시각 검증용: 프로필 탭 바로 진입
             if ProcessInfo.processInfo.arguments.contains("-previewProfileTab") {
-                selectedTab = 3
+                selectedTab = Tab.profile
             }
             if ProcessInfo.processInfo.arguments.contains("-previewNavGuide") {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {

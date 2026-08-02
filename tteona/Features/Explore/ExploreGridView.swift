@@ -2,6 +2,9 @@ import SwiftUI
 import CoreLocation
 
 struct ExploreGridView: View {
+    /// DiscoverTabView의 지도/목록 토글이 차지하는 높이 — 정렬칩을 그만큼 내린다
+    var topInset: CGFloat = 0
+
     @EnvironmentObject private var authService: AuthService
     @EnvironmentObject private var courseService: CourseService
     @EnvironmentObject private var userService: UserService
@@ -72,6 +75,7 @@ struct ExploreGridView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                Color.clear.frame(height: topInset)
                 sortChips
                 if isLoading && courseService.courses.isEmpty {
                     skeletonGrid
@@ -98,8 +102,8 @@ struct ExploreGridView: View {
                     }
                 }
             }
-            .navigationTitle(L("tab.explore"))
-            .navigationBarTitleDisplayMode(.inline)
+            // 상단 제목줄은 DiscoverTabView의 지도/목록 토글이 대신한다 — 헤더 중복 방지
+            .toolbar(.hidden, for: .navigationBar)
         }
         .fullScreenCover(item: $selectedCourse, onDismiss: {
             openingCourseId = nil

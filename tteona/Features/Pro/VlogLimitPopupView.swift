@@ -6,6 +6,10 @@ struct VlogLimitPopupView: View {
     let isPro: Bool
     var onUpgrade: () -> Void = {}
     var onDismiss: () -> Void = {}
+    /// 오늘 기록을 버리고 예산을 되돌린다. 예산이 찬 상태에서 브이로그 생성이 실패하면
+    /// 유저는 촬영도 못 하고 지울 수도 없이 갇힌다 — 막는 화면이 곧 탈출구여야 한다.
+    var onDiscardToday: (() -> Void)? = nil
+    @State private var showDiscardConfirm = false
 
     @State private var appeared = false
 
@@ -90,8 +94,28 @@ struct VlogLimitPopupView: View {
                         .frame(height: 44)
                 }
                 .padding(.top, isPro ? 20 : 6)
-                .padding(.bottom, 14)
                 .padding(.horizontal, 20)
+                .padding(.bottom, onDiscardToday == nil ? 14 : 0)
+
+                if let discard = onDiscardToday {
+                    Button(role: .destructive) {
+                        showDiscardConfirm = true
+                    } label: {
+                        Text(L("impromptu.discardToday"))
+                            .font(.tte(13))
+                            .foregroundColor(.white.opacity(0.45))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 36)
+                    }
+                    .alert(L("impromptu.discardToday"), isPresented: $showDiscardConfirm) {
+                        Button(L("common.cancel"), role: .cancel) {}
+                        Button(L("impromptu.discardToday"), role: .destructive) { discard() }
+                    } message: {
+                        Text(L("impromptu.discardToday.message"))
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 14)
+                }
             }
             .frame(maxWidth: 330)
             .background(

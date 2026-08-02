@@ -34,22 +34,23 @@ struct NavGuideOverlay: View {
             tabIndex: nil
         ),
         GuideStep(
+            mascot: "tteoni-fighting",
+            title: L("navguide.step3.title"),
+            message: L("navguide.step3.message"),
+            tabIndex: MainTabView.Tab.capture
+        ),
+        // 지도·탐색이 '발견' 한 탭으로 합쳐졌다
+        GuideStep(
             mascot: "tteoni-travel",
             title: L("navguide.step2.title"),
             message: L("navguide.step2.message"),
-            tabIndex: 0
-        ),
-        GuideStep(
-            mascot: "tteoni-wink",
-            title: L("navguide.step3.title"),
-            message: L("navguide.step3.message"),
-            tabIndex: 1
+            tabIndex: MainTabView.Tab.discover
         ),
         GuideStep(
             mascot: "tteoni-jump",
             title: L("navguide.step4.title"),
             message: L("navguide.step4.message"),
-            tabIndex: 2
+            tabIndex: MainTabView.Tab.chat
         ),
         GuideStep(
             mascot: "tteoni-thumbsup",
@@ -68,11 +69,14 @@ struct NavGuideOverlay: View {
     /// 탭 아이템 중심 X.
     /// iOS 26 플로팅(리퀴드 글래스) 탭바는 아이템이 중앙으로 모여 있어
     /// 화면 4등분 좌표가 실제 아이콘과 어긋난다 — 실측 기반 간격(폭×0.21) 사용.
+    /// 탭 4개(촬영·발견·채팅·프로필) 기준 스포트라이트 중심 x좌표.
+    /// 탭 수가 바뀌면 tabCount와 iOS 26 분기의 간격 계수를 함께 손봐야 한다.
     private func tabCenterX(_ tab: Int, width: CGFloat) -> CGFloat {
+        let tabCount: CGFloat = 4
         if #available(iOS 26.0, *) {
-            return width / 2 + (CGFloat(tab) - 1.5) * width * 0.21
+            return width / 2 + (CGFloat(tab) - (tabCount - 1) / 2) * width * 0.21
         } else {
-            return (CGFloat(tab) + 0.5) * width / 4
+            return (CGFloat(tab) + 0.5) * width / tabCount
         }
     }
 

@@ -21,8 +21,24 @@ final class ProManager: ObservableObject {
     /// 브이로그 촬영 총 길이 예산 (초) — 무료 30초, PRO 5분
     var vlogBudgetSeconds: Double { isPro ? 300 : 30 }
 
-    /// 한 장소(클립)당 최대 촬영 길이 (초) — 무료 5초, PRO는 제한 없음(총 예산 내)
-    var vlogClipMaxSeconds: Double? { isPro ? nil : 5 }
+    /// 유저가 고른 한 장소당 촬영 길이. PRO 전용을 고른 채 구독이 끝나면 무료 기본값으로 되돌린다.
+    @Published var clipLength: VlogClipLength = {
+        let raw = UserDefaults.standard.string(forKey: "vlog.clipLength") ?? ""
+        return VlogClipLength(rawValue: raw) ?? .freeDefault
+    }() {
+        didSet { UserDefaults.standard.set(clipLength.rawValue, forKey: "vlog.clipLength") }
+    }
+
+    /// 실제로 적용되는 길이 — 권한 없는 선택은 무료 기본값으로 강등한다
+    var effectiveClipLength: VlogClipLength {
+        (clipLength.requiresPro && !isPro) ? .freeDefault : clipLength
+    }
+
+    /// 이 길이를 지금 쓸 수 있는가 (칩 잠금 표시용)
+    func canUse(_ length: VlogClipLength) -> Bool { isPro || !length.requiresPro }
+
+    /// 한 장소(클립)당 최대 촬영 길이 (초). nil = 수동 종료(무제한, PRO)
+    var vlogClipMaxSeconds: Double? { effectiveClipLength.seconds }
 
     /// 세션 예산을 클립 단위로 나눈 칸 수 — 무료는 6칸(30÷5) 분절 링,
     /// PRO는 클립 제한이 없어 분절이 의미 없으므로 nil(연속 링)을 반환한다.

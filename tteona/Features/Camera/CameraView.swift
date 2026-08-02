@@ -3,45 +3,149 @@ import AVFoundation
 import UIKit
 
 struct CameraView: View {
-    let place: Place
+    /// 클립이 저장될 경로 — 촬영 시점에 장소가 없어도 되도록 URL을 직접 받는다
+    let clipURL: URL
     let sessionId: String
+    /// 상단에 표시할 장소명. 아직 정해지지 않았으면(나의 오늘) nil — 레이블을 숨긴다
+    var title: String? = nil
     var onSaved: () -> Void = {}
     var onClose: (() -> Void)? = nil
+    /// 탭에 상주시킬 때 true — 닫기 버튼을 감추고 저장 후 스스로 닫지 않는다
+    var isEmbedded = false
+    var onRecordingChanged: ((Bool) -> Void)? = nil
+    var onUsedSecondsChanged: ((Double) -> Void)? = nil
+    /// 노출 보정(EV) — 촬영 탭의 슬라이더가 값을 내려보낸다
+    var exposureBias: Float = 0
+    /// 줌 UI 배율 — 좌측 세로 슬라이더가 값을 내려보낸다
+    var zoomUI: Double = 1
+    /// 핀치로 줌이 바뀌면 슬라이더를 맞추기 위해 올려보낸다
+    var onZoomUIChanged: ((Double) -> Void)? = nil
+    /// UIKit이 잡은 하단 UI 좌표 — SwiftUI 오버레이가 겹치지 않게 자리를 잡는 데 쓴다
+    var onLayoutMetricsChanged: ((CameraLayoutMetrics) -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
 
+    /// 장소가 이미 확정된 세션(코스 따라가기)용 편의 생성자
+    init(place: Place, sessionId: String,
+         onSaved: @escaping () -> Void = {}, onClose: (() -> Void)? = nil) {
+        self.clipURL = VlogService.clipURL(place: place, sessionId: sessionId)
+        self.sessionId = sessionId
+        self.title = place.placeName
+        self.onSaved = onSaved
+        self.onClose = onClose
+    }
+
+    init(clipURL: URL, sessionId: String, title: String? = nil,
+         isEmbedded: Bool = false,
+         onRecordingChanged: ((Bool) -> Void)? = nil,
+         onUsedSecondsChanged: ((Double) -> Void)? = nil,
+         exposureBias: Float = 0,
+         zoomUI: Double = 1,
+         onZoomUIChanged: ((Double) -> Void)? = nil,
+         onLayoutMetricsChanged: ((CameraLayoutMetrics) -> Void)? = nil,
+         onSaved: @escaping () -> Void = {}, onClose: (() -> Void)? = nil) {
+        self.clipURL = clipURL
+        self.sessionId = sessionId
+        self.title = title
+        self.isEmbedded = isEmbedded
+        self.onRecordingChanged = onRecordingChanged
+        self.onUsedSecondsChanged = onUsedSecondsChanged
+        self.exposureBias = exposureBias
+        self.zoomUI = zoomUI
+        self.onZoomUIChanged = onZoomUIChanged
+        self.onLayoutMetricsChanged = onLayoutMetricsChanged
+        self.onSaved = onSaved
+        self.onClose = onClose
+    }
+
     var body: some View {
-        CameraViewControllerWrapper(place: place, sessionId: sessionId) {
+        CameraViewControllerWrapper(
+            clipURL: clipURL, sessionId: sessionId, title: title,
+            isEmbedded: isEmbedded, onRecordingChanged: onRecordingChanged,
+            onUsedSecondsChanged: onUsedSecondsChanged,
+            exposureBias: exposureBias, zoomUI: zoomUI,
+            onZoomUIChanged: onZoomUIChanged,
+            onLayoutMetricsChanged: onLayoutMetricsChanged
+        ) {
             onSaved()
         } onClose: {
             onClose?()
-            dismiss()
+            if !isEmbedded { dismiss() }
         }
         .ignoresSafeArea()
     }
 }
 
 struct CameraViewControllerWrapper: UIViewControllerRepresentable {
-    let place: Place
+    let clipURL: URL
     let sessionId: String
+    let title: String?
+    var isEmbedded = false
+    var onRecordingChanged: ((Bool) -> Void)? = nil
+    var onUsedSecondsChanged: ((Double) -> Void)? = nil
+    var exposureBias: Float = 0
+    var zoomUI: Double = 1
+    var onZoomUIChanged: ((Double) -> Void)? = nil
+    var onLayoutMetricsChanged: ((CameraLayoutMetrics) -> Void)? = nil
     let onSaved: () -> Void
     let onClose: () -> Void
 
     func makeUIViewController(context: Context) -> CameraViewController {
-        let vc = CameraViewController(place: place, sessionId: sessionId)
+        let vc = CameraViewController(clipURL: clipURL, sessionId: sessionId, placeTitle: title)
+        vc.isEmbedded = isEmbedded
         vc.onSaved = onSaved
         vc.onClose = onClose
+        vc.onRecordingChanged = onRecordingChanged
+        vc.onUsedSecondsChanged = onUsedSecondsChanged
+        vc.onLayoutMetricsChanged = onLayoutMetricsChanged
+        vc.onZoomUIChanged = onZoomUIChanged
         return vc
     }
-    func updateUIViewController(_ vc: CameraViewController, context: Context) {}
+
+    func updateUIViewController(_ vc: CameraViewController, context: Context) {
+        // 임베드 모드에서는 촬영마다 저장 경로가 바뀐다 — 뷰를 새로 만들지 않고 갈아끼운다
+        vc.clipURL = clipURL
+        vc.applyExposureBias(exposureBias)
+        vc.applyZoomUI(zoomUI)
+        vc.onSaved = onSaved
+        vc.onClose = onClose
+        vc.onRecordingChanged = onRecordingChanged
+        vc.onUsedSecondsChanged = onUsedSecondsChanged
+        vc.onLayoutMetricsChanged = onLayoutMetricsChanged
+        vc.onZoomUIChanged = onZoomUIChanged
+    }
+}
+
+/// UIKit 카메라가 실제로 잡은 하단 UI 위치. SwiftUI 오버레이가 이 값을 기준으로 자리를 잡아
+/// 기기 크기·세이프에어리어가 달라도 셔터·줌바와 겹치지 않게 한다.
+/// (좌표를 상수로 박아두면 SE와 Pro Max에서 반드시 어긋난다.)
+struct CameraLayoutMetrics: Equatable {
+    /// 셔터 중심의 화면 하단으로부터의 거리
+    var shutterCenterFromBottom: CGFloat = 0
+    /// 이 높이 위로는 UIKit이 아무것도 그리지 않는다 — SwiftUI가 써도 되는 경계
+    var contentTopFromBottom: CGFloat = 0
 }
 
 // MARK: - CameraViewController
 final class CameraViewController: UIViewController {
+    /// 하단 UI 좌표가 바뀔 때만 알린다 (레이아웃 → 상태 변경 → 재레이아웃 루프 방지)
+    var onLayoutMetricsChanged: ((CameraLayoutMetrics) -> Void)?
+    private var lastMetrics = CameraLayoutMetrics()
     var onSaved: (() -> Void)?
     var onClose: (() -> Void)?
+    /// 녹화 시작/종료 알림 — 촬영 중에는 탭바를 숨기는 데 쓴다
+    var onRecordingChanged: ((Bool) -> Void)?
+    /// 세션 누적 촬영 시간(초) — 촬영 탭의 예산 진행 바에 쓴다
+    var onUsedSecondsChanged: ((Double) -> Void)?
+    /// 핀치로 바뀐 줌 배율 — 좌측 슬라이더를 따라오게 한다
+    var onZoomUIChanged: ((Double) -> Void)?
 
-    private let place: Place
+    /// 탭에 상주하는 모드. 스스로 닫지 않고, 저장 후 다음 촬영을 받을 준비만 한다.
+    var isEmbedded = false
+    /// 다음 클립 경로 — 임베드 모드에서는 촬영마다 부모가 갈아끼운다
+    var clipURL: URL
     private let sessionId: String
+    /// UIViewController.title과 이름이 겹치지 않게 placeTitle로 둔다
+    private let placeTitle: String?
     private let service = CameraService()
 
     private let previewLayer = AVCaptureVideoPreviewLayer()
@@ -67,15 +171,41 @@ final class CameraViewController: UIViewController {
 
     // 무료(5초 고정 자동 촬영)와 PRO(탭으로 종료)는 안내 문구가 다르다
     private var isAutoClip: Bool { ProManager.shared.vlogClipMaxSeconds != nil }
-    private var idleHint: String { isAutoClip ? L("camera.hintAuto") : L("camera.hint") }
+    /// 선택한 클립 길이를 문구에 반영한다 (칩을 바꾸면 아래 안내도 같이 바뀌어야 한다)
+    /// 실제로 찍히게 될 시간 — 남은 예산이 선택한 길이보다 짧으면 그만큼만 찍힌다.
+    /// 문구가 "5초"라고 해놓고 2초만 찍히면 유저는 고장으로 받아들인다.
+    private var clipSecondsInt: Int {
+        guard let picked = ProManager.shared.vlogClipMaxSeconds else { return 0 }
+        let effective = Int(min(picked, max(0, budgetSeconds - usedSeconds)).rounded())
+        return effective > 0 ? effective : Int(picked.rounded())
+    }
+    private var idleHint: String {
+        isAutoClip ? L("camera.hintAuto", clipSecondsInt) : L("camera.hint")
+    }
     private var recordingHint: String { isAutoClip ? L("camera.recordingHintAuto") : L("camera.recordingHint") }
 
-    init(place: Place, sessionId: String) {
-        self.place = place
+    init(clipURL: URL, sessionId: String, placeTitle: String?) {
+        self.clipURL = clipURL
         self.sessionId = sessionId
+        self.placeTitle = placeTitle
         super.init(nibName: nil, bundle: nil)
     }
     required init?(coder: NSCoder) { fatalError() }
+
+    /// 노출 보정 적용 — 같은 값이 반복 전달되면(SwiftUI 재평가) 건너뛴다
+    private var appliedExposureBias: Float = .nan
+    private var appliedZoomUI: Double = .nan
+    func applyZoomUI(_ f: Double) {
+        guard f != appliedZoomUI else { return }
+        appliedZoomUI = f
+        service.setContinuousZoomUI(f)
+    }
+
+    func applyExposureBias(_ ev: Float) {
+        guard ev != appliedExposureBias else { return }
+        appliedExposureBias = ev
+        service.setExposureBias(ev)
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -100,8 +230,19 @@ final class CameraViewController: UIViewController {
         previewLayer.frame = view.bounds
         layoutBottomUI()
         layoutTipChip()
-        // 전환 버튼 위치 갱신
-        view.viewWithTag(902)?.frame = CGRect(x: view.bounds.width - 64, y: 60, width: 44, height: 44)
+        // 전환 버튼 위치는 layoutBottomUI가 셔터 기준으로 잡는다
+    }
+
+    /// 탭에 상주하면 viewDidLoad가 한 번만 돌기 때문에, 다른 탭에 갔다 오면
+    /// viewDidDisappear에서 멈춘 세션이 그대로 멈춰 있어 화면이 얼어붙는다.
+    /// 돌아올 때마다 다시 켠다 (아직 구성 전이면 그때 구성한다).
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        if service.didConfigure {
+            service.resumeSession()
+        } else {
+            checkAndStartCamera()
+        }
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -132,11 +273,14 @@ final class CameraViewController: UIViewController {
         closeBtn.layer.cornerRadius = 22
         closeBtn.frame = CGRect(x: 20, y: 60, width: 44, height: 44)
         closeBtn.addTarget(self, action: #selector(closeTapped), for: .touchUpInside)
+        // 탭에 상주할 때는 닫을 대상이 없다 — 탭바로 나가면 된다
+        closeBtn.isHidden = isEmbedded
         view.addSubview(closeBtn)
 
-        // 장소명 레이블
+        // 장소명 레이블 — '나의 오늘'은 촬영 후에 장소를 정하므로 그때는 표시하지 않는다
         let placeL = UILabel()
-        placeL.text = place.placeName
+        placeL.text = placeTitle ?? ""
+        placeL.isHidden = (placeTitle?.isEmpty ?? true)
         placeL.textColor = .white
         placeL.font = .systemFont(ofSize: 15, weight: .semibold)
         placeL.textAlignment = .center
@@ -150,6 +294,7 @@ final class CameraViewController: UIViewController {
 
         // 힌트
         hintLabel.text = idleHint
+        hintLabel.isHidden = isEmbedded
         hintLabel.textColor = UIColor.white.withAlphaComponent(0.8)
         hintLabel.font = .systemFont(ofSize: 13)
         hintLabel.textAlignment = .center
@@ -188,6 +333,9 @@ final class CameraViewController: UIViewController {
             zoomBar.addArrangedSubview(b)
         }
         setZoomSelected(1.0)
+        // 촬영 탭은 좌측 세로 슬라이더로 줌하므로 프리셋 바를 쓰지 않는다.
+        // (flipCamera 쪽에서도 같은 조건으로 다시 잡아준다)
+        zoomBar.isHidden = isEmbedded
 
         buildRecordButton()
         buildTipChip()
@@ -216,6 +364,11 @@ final class CameraViewController: UIViewController {
         case .changed, .ended:
             service.setContinuousZoom(zoomBaseFactor * Double(g.scale))
             setZoomSelected(-1)   // 커스텀 줌 중에는 프리셋 강조 해제
+            // 슬라이더가 핀치를 따라오게 현재 배율을 올려보낸다.
+            // appliedZoomUI를 먼저 맞춰 두지 않으면 그 값이 다시 내려와 줌을 덮어써 떨린다.
+            let ui = service.currentZoomUI
+            appliedZoomUI = ui
+            onZoomUIChanged?(ui)
         default:
             break
         }
@@ -304,7 +457,13 @@ final class CameraViewController: UIViewController {
         ])
     }
 
+    /// 권한 요청이 떠 있는 동안 viewWillAppear가 한 번 더 부르면 requestAccess가 중첩돼
+    /// 콜백이 돌아오지 않고 앱이 멈춘다. 진행 중일 때는 다시 들어가지 않는다.
+    private var isStartingCamera = false
+
     private func checkAndStartCamera() {
+        guard !isStartingCamera else { return }
+        isStartingCamera = true
         let videoStatus = AVCaptureDevice.authorizationStatus(for: .video)
 
         func startIfPossible() {
@@ -332,13 +491,16 @@ final class CameraViewController: UIViewController {
                     if granted {
                         startIfPossible()
                     } else {
+                        self?.isStartingCamera = false   // 설정에서 허용 후 재진입 시 다시 시도
                         self?.showPermissionOverlay()
                     }
                 }
             }
         case .denied, .restricted:
+            isStartingCamera = false
             showPermissionOverlay()
         @unknown default:
+            isStartingCamera = false
             showPermissionOverlay()
         }
     }
@@ -419,7 +581,7 @@ final class CameraViewController: UIViewController {
     private func refreshUsedSeconds() {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let dir = docs.appendingPathComponent("Tteona/Sessions/\(sessionId)")
-        let currentClipURL = VlogService.clipURL(place: place, sessionId: sessionId)
+        let currentClipURL = clipURL
         Task { [weak self] in
             guard let self else { return }
             var total: Double = 0
@@ -434,6 +596,7 @@ final class CameraViewController: UIViewController {
             }
             self.usedSeconds = total
             self.currentPlaceClipSeconds = currentClip
+            self.onUsedSecondsChanged?(total)
         }
     }
 
@@ -462,6 +625,20 @@ final class CameraViewController: UIViewController {
         CATransaction.commit()
     }
 
+    /// 오늘 세션 폴더의 클립을 전부 지우고 기록도 비운다 — 예산이 0으로 돌아간다.
+    /// 세션 기록이 이미 사라진 뒤에도(클립만 남은 상태) 여기서 빠져나올 수 있어야 한다.
+    private func discardTodaySession() {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let dir = docs.appendingPathComponent("Tteona/Sessions/\(sessionId)")
+        try? FileManager.default.removeItem(at: dir)
+        ImpromptuSessionStore.shared.clear()
+        usedSeconds = 0
+        currentPlaceClipSeconds = 0
+        onUsedSecondsChanged?(0)
+        presentedViewController?.dismiss(animated: true)
+        refreshUsedSeconds()
+    }
+
     private func showBudgetAlert() {
         let popup = VlogLimitPopupView(
             isPro: ProManager.shared.isPro,
@@ -474,6 +651,10 @@ final class CameraViewController: UIViewController {
             },
             onDismiss: { [weak self] in
                 self?.presentedViewController?.dismiss(animated: true)
+            },
+            // 예산이 찼는데 브이로그를 못 만들면 갇힌다 — 여기서 오늘 기록을 버리고 빠져나온다
+            onDiscardToday: { [weak self] in
+                self?.discardTodaySession()
             }
         )
         let host = UIHostingController(rootView: popup)
@@ -512,7 +693,10 @@ final class CameraViewController: UIViewController {
         recordBtn.layer.addSublayer(innerDot)
 
         // 버튼 아래 힌트 — 이번 장소의 클립 상한
-        clipHint.text = ProManager.shared.isPro ? L("camera.clipHintPro") : L("camera.clipHintFree")
+        // 촬영 탭에서는 길이 칩이 같은 정보를 보여준다 — 대기 중엔 비워 중복을 없앤다
+        clipHint.text = isEmbedded ? ""
+            : (ProManager.shared.vlogClipMaxSeconds == nil
+               ? L("camera.clipHintPro") : L("camera.clipHintFree", clipSecondsInt))
         clipHint.textColor = UIColor.white.withAlphaComponent(0.9)
         clipHint.font = .systemFont(ofSize: 12, weight: .semibold)
         clipHint.textAlignment = .center
@@ -571,13 +755,31 @@ final class CameraViewController: UIViewController {
             y: hintLabel.frame.minY - 44 - 12,
             width: zoomW, height: 44
         )
+        // 촬영 탭은 줌바를 쓰지 않는다 — 그만큼 셔터를 아래로 내려 화면을 넓게 쓴다
+        let bottomAnchor = isEmbedded ? hintLabel.frame.minY : zoomBar.frame.minY
         // 버튼 바로 아래 클립 힌트
         clipHint.sizeToFit()
         clipHint.frame.origin = CGPoint(
             x: (w - clipHint.frame.width) / 2,
-            y: zoomBar.frame.minY - clipHint.frame.height - 12
+            y: bottomAnchor - clipHint.frame.height - 12
         )
         recordBtn.center = CGPoint(x: w / 2, y: clipHint.frame.minY - 12 - 40)
+        // 전환 버튼 — 셔터와 같은 높이 우측. 상단은 '오늘 마치기'가 쓴다.
+        // 셔터에서 충분히 떨어뜨려 촬영 중 오조작을 막는다.
+        view.viewWithTag(902)?.center = CGPoint(x: w - 46, y: recordBtn.center.y)
+
+        // SwiftUI 오버레이에 실제 좌표를 알려준다 — 값이 바뀔 때만
+        let h = view.bounds.height
+        let metrics = CameraLayoutMetrics(
+            shutterCenterFromBottom: h - recordBtn.center.y,
+            contentTopFromBottom: h - recordBtn.frame.minY + 16
+        )
+        if metrics != lastMetrics {
+            lastMetrics = metrics
+            DispatchQueue.main.async { [weak self] in
+                self?.onLayoutMetricsChanged?(metrics)
+            }
+        }
     }
 
     // MARK: - Actions
@@ -586,7 +788,7 @@ final class CameraViewController: UIViewController {
     @objc private func flipTapped() {
         service.flipCamera()
         let isFront = service.currentCameraPosition == .front
-        zoomBar.isHidden = isFront
+        zoomBar.isHidden = isFront || isEmbedded
         if let flipBtn = view.viewWithTag(902) as? UIButton {
             UIView.animate(withDuration: 0.15, animations: {
                 flipBtn.transform = CGAffineTransform(scaleX: 0.85, y: 0.85)
@@ -628,7 +830,7 @@ final class CameraViewController: UIViewController {
         // 링 채우기 애니메이션도 그 콜백에서 시작해 첫 프레임 시점에 정확히 맞춘다.
         // 카메라 워밍업 지연 동안 벽시계가 앞서 달려 첫 촬영이 짧게 잘리는 문제 방지.
         recordStart = nil
-        service.startRecording(place: place, sessionId: sessionId)
+        service.startRecording(to: clipURL)
         setInnerDot(recording: true)
         hintLabel.text = recordingHint
         progressTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
@@ -667,7 +869,10 @@ final class CameraViewController: UIViewController {
         recordStart = nil
         refreshUsedSeconds()   // 파일 기준으로 재계산 (재촬영 덮어쓰기 반영)
         resetClipRing()
-        clipHint.text = ProManager.shared.isPro ? L("camera.clipHintPro") : L("camera.clipHintFree")
+        // 촬영 탭에서는 길이 칩이 같은 정보를 보여준다 — 대기 중엔 비워 중복을 없앤다
+        clipHint.text = isEmbedded ? ""
+            : (ProManager.shared.vlogClipMaxSeconds == nil
+               ? L("camera.clipHintPro") : L("camera.clipHintFree", clipSecondsInt))
         hintLabel.text = idleHint
         setInnerDot(recording: false)
         
@@ -691,14 +896,22 @@ final class CameraViewController: UIViewController {
             label.text = L("camera.saveSuccess")
         }
         // 성공 햅틱은 세션 화면의 onSaved 핸들러가 울린다 (여기서 울리면 두 번 진동)
-        // 1.2초 대기 후 자동 닫기
+        // 1.2초 대기 후 자동 닫기 (임베드 모드는 닫지 않고 다음 촬영을 받을 준비만 한다)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
-            self?.onSaved?()
-            self?.dismiss(animated: true)
+            guard let self else { return }
+            self.onSaved?()
+            if self.isEmbedded {
+                self.savingOverlay?.isHidden = true
+                self.view.isUserInteractionEnabled = true
+                self.refreshUsedSeconds()
+            } else {
+                self.dismiss(animated: true)
+            }
         }
     }
 
     private func setInnerDot(recording: Bool) {
+        onRecordingChanged?(recording)
         let c = CGPoint(x: 40, y: 40)
         let to: CGPath = recording
             ? UIBezierPath(roundedRect: CGRect(x: 24, y: 24, width: 32, height: 32),
