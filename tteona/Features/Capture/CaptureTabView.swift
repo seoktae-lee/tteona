@@ -72,7 +72,16 @@ struct CaptureTabView: View {
                 onRecordingChanged: { recording in
                     withAnimation(.easeInOut(duration: 0.2)) { isRecording = recording }
                     // 찍는 동안 위치를 확보해 둔다 — 촬영이 끝났을 땐 이미 준비돼 있게
-                    if recording { requestLocation() }
+                    // 이미 권한이 정해진 경우에만 미리 받아 둔다.
+                    //
+                    // 아직 물어본 적이 없다면 여기서 요청하지 않는다 — 첫 촬영 도중에
+                    // 시스템 팝업이 화면을 덮어버린다. 앱을 처음 쓰는 사람의 가장 중요한
+                    // 순간이 바로 그 첫 촬영인데, 거기를 대화상자로 끊는 셈이다.
+                    // 촬영 자체는 위치가 필요 없다. 실제로 쓰이는 곳은 촬영 뒤
+                    // '어디서 찍으셨나요?' 시트이고, 거기서 물으면 이유가 화면에 보인다.
+                    if recording, locationService.authorizationStatus != .notDetermined {
+                        requestLocation()
+                    }
                 },
                 onUsedSecondsChanged: { seconds in
                     DispatchQueue.main.async { usedSeconds = seconds }
@@ -84,6 +93,9 @@ struct CaptureTabView: View {
                 onLayoutMetricsChanged: { layoutMetrics = $0 },
                 onSaved: {
                     showPlacePicker = true
+                    // 위치가 실제로 필요한 시점 — 처음이라면 여기서 권한을 묻는다.
+                    // "어디서 찍으셨나요?"가 떠 있는 상태라 왜 필요한지가 보인다.
+                    requestLocation()
                     tutorial.advance(to: .pickPlace)   // 이제 장소를 고를 차례
                 }
             )
