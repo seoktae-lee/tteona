@@ -195,6 +195,29 @@ struct GuestTermsGate: View {
     }
 }
 
+/// 게스트가 만든 브이로그 수. **기기 단위**로 센다.
+///
+/// 서버도 uid 기준으로 막지만(GUEST_VLOG_LIMIT), 통신이 끊기면 로컬 합성으로 떨어지므로
+/// 앱에서도 세어야 한다 — 안 그러면 비행기 모드가 무제한 우회로가 된다.
+/// 경로(서버/로컬)를 가리지 않고 **완성된 것만** 센다.
+enum GuestVlogQuota {
+    private static let key = "guestVlogMadeCount"
+    static let limit = 1
+
+    static var made: Int { UserDefaults.standard.integer(forKey: key) }
+    static var isExhausted: Bool { made >= limit }
+
+    static func recordCompletion() {
+        UserDefaults.standard.set(made + 1, forKey: key)
+    }
+
+    /// 회원가입하면 제한이 사라지므로 기록도 지운다 —
+    /// 나중에 로그아웃해 다시 게스트가 됐을 때 옛 기록으로 막히면 안 된다.
+    static func reset() {
+        UserDefaults.standard.removeObject(forKey: key)
+    }
+}
+
 /// 게스트 약관 동의 기록. 기기 단위로 남긴다 —
 /// 익명 uid는 재설치·카카오 로그인 등으로 바뀔 수 있어서 그걸 키로 쓰면 다시 물어보게 된다.
 enum GuestTermsConsent {

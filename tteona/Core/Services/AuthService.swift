@@ -158,6 +158,7 @@ class AuthService: NSObject, ObservableObject {
             // 앱이 계속 게스트로 취급한다 — 화면이 안 넘어가던 원인이었다.
             isGuest = false
             identityUid = result.user.uid
+            GuestVlogQuota.reset()   // 계정이 생겼으니 게스트 제한은 사라진다
             return result
         } catch let error as NSError {
             let code = AuthErrorCode(rawValue: error.code)
@@ -288,6 +289,7 @@ class AuthService: NSObject, ObservableObject {
                 // 이메일은 인증 전까지 로그인으로 치지 않으므로 currentUser는 비워 둔다.
                 isGuest = false
                 identityUid = result.user.uid
+                GuestVlogQuota.reset()
                 currentUser = nil
             } else {
                 result = try await Auth.auth().createUser(withEmail: email, password: password)
@@ -461,7 +463,10 @@ class AuthService: NSObject, ObservableObject {
             #if DEBUG
             dlog("[Kakao] signIn success uid=\(result.user.uid)")
             #endif
-            if let guestUid { migrateGuestSession(from: guestUid, to: result.user.uid) }
+            if let guestUid {
+                migrateGuestSession(from: guestUid, to: result.user.uid)
+                GuestVlogQuota.reset()
+            }
             // authStateListener가 호출 안 될 경우를 대비해 직접 설정
             verificationEmailSent = false
             isGuest = false

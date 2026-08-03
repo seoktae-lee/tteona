@@ -15394,6 +15394,98 @@
         }
       }
     },
+    "vlog.guestLimit.later": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Maybe later"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "あとで"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "나중에 할게요"
+          }
+        }
+      }
+    },
+    "vlog.guestLimit.message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That was the one vlog you can make without an account.\nSign up to keep making them and build your footprint map."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "登録なしで作れるブイログはここまでです。\n登録すると作り続けられ、足あとマップにも残ります。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "회원가입 없이 만들 수 있는 브이로그는 여기까지예요.\n회원가입하면 계속 만들 수 있고, 발자취 지도에도 쌓여요."
+          }
+        }
+      }
+    },
+    "vlog.guestLimit.signUp": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign up and keep going"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "登録して続ける"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "회원가입하고 계속 만들기"
+          }
+        }
+      }
+    },
+    "vlog.guestLimit.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "How was your first vlog?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最初のブイログはいかがでしたか？"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "첫 브이로그는 어떠셨나요?"
+          }
+        }
+      }
+    },
     "vlog.keepsRunning": {
       "extractionState": "manual",
       "localizations": {

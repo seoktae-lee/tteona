@@ -98,6 +98,9 @@ async function verifyBearer(req) {
   if (!header.startsWith('Bearer ')) return null;
   try {
     const decoded = await getAuth().verifyIdToken(header.slice(7));
+    // 게스트(익명) 여부는 토큰이 이미 들고 있다. 클라이언트가 알려주는 값을 믿으면
+    // 무제한 무료 렌더의 통로가 되므로, 반드시 여기서 판정한다.
+    req.isGuest = decoded.firebase?.sign_in_provider === 'anonymous';
     return decoded.uid;
   } catch {
     return undefined; // 토큰이 왔는데 무효 — 완화 모드에서도 거부
@@ -1477,6 +1480,20 @@ function fitSubtitle(text, wanted, frameWidth) {
   return { size: Math.round(size), text: chars.length ? chars.join('') + '…' : '…' };
 }
 const VLOG_CAPTION_MAX = 20;
+
+// 게스트(익명)에게 허용하는 완성 브이로그 수.
+// "첫 브이로그는 회원가입 없이"라는 약속을 서버에서도 지킨다 — 앱만 막으면
+// 재설치나 요청 조작으로 우회되고, 서버 렌더는 실제 비용이 드는 작업이다.
+// **완성된 것만** 센다. 실패한 시도로 체험이 소진되면 아무것도 못 받고 가입을 요구받는다.
+const GUEST_VLOG_LIMIT = 1;
+
+async function guestVlogCount(userId) {
+  const r = await pgPool.query(
+    `SELECT COUNT(*)::int AS n FROM vlog_jobs WHERE user_id = $1 AND status = 'completed'`,
+    [userId]
+  );
+  return r.rows[0]?.n ?? 0;
+}
 // '한 줄' 약속을 서버에서 다시 지킨다 — 앱이 이미 잘랐더라도 클라이언트를 믿지 않는다.
 // 본문은 textfile로 넘어가 필터 인자로 파싱되지 않지만, 줄바꿈은 자막을 여러 줄로 무너뜨린다.
 function sanitizeCaption(v) {
@@ -1524,6 +1541,14 @@ app.post('/api/vlog/jobs', requireAuth, vlogJobLimiter, async (req, res) => {
       console.error(`[Vlog] ⚠️ 디스크 여유 ${free}MB — 잡 생성 거절`);
       return res.status(503).json({ error: '서버 저장 공간이 부족합니다. 잠시 후 다시 시도해주세요.' });
     }
+    // 게스트는 첫 브이로그 하나까지. 두 번째부터는 회원가입이 필요하다.
+    if (req.isGuest) {
+      const made = await guestVlogCount(userId);
+      if (made >= GUEST_VLOG_LIMIT) {
+        return res.status(403).json({ error: 'guest_limit', made, limit: GUEST_VLOG_LIMIT });
+      }
+    }
+
     const wanted = Array.isArray(formats)
       ? formats.filter(f => ['reels', 'youtube', 'insta'].includes(f)) : [];
     // 완성 시 자동 공유할 방 — 세션 시작 때 고른 방들. 토큰은 방 멤버의 무인증 재생용

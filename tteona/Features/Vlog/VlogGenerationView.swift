@@ -29,8 +29,10 @@ struct VlogGenerationView: View {
     @ObservedObject private var pro = ProManager.shared
     @ObservedObject private var tutorial = VlogTutorial.shared
     @State private var showPaywall = false
+    @State private var showAuthForGuestLimit = false
 
     @State private var phase: Phase = .chooseFormat
+    @State private var didCheckGuestQuota = false
     @State private var vlogURL: URL?
     @State private var errorMessage: String?
     @State private var progress: Double = 0
@@ -58,11 +60,24 @@ struct VlogGenerationView: View {
 
     private let vlogService = VlogService()
 
-    enum Phase { case chooseFormat, chooseBgm, chooseText, generating, preview, error }
+    enum Phase { case chooseFormat, chooseBgm, chooseText, generating, preview, error, guestLimit }
+
+    /// 게스트가 이미 첫 브이로그를 받았는가. 판정은 **진입할 때** 한다 —
+    /// 포맷·음악·자막까지 다 고르게 해 놓고 마지막에 막으면 헛수고를 시키는 셈이다.
+    private var guestQuotaExhausted: Bool {
+        Auth.auth().currentUser?.isAnonymous == true && GuestVlogQuota.isExhausted
+    }
 
     var body: some View {
         switch phase {
-        case .chooseFormat: chooseFormatView
+        case .guestLimit: guestLimitView
+        case .chooseFormat:
+            chooseFormatView
+                .onAppear {
+                    guard !didCheckGuestQuota else { return }
+                    didCheckGuestQuota = true
+                    if guestQuotaExhausted { phase = .guestLimit }
+                }
         case .chooseBgm: chooseBgmView
         case .chooseText: chooseTextView
         case .generating: generatingView
@@ -458,6 +473,59 @@ struct VlogGenerationView: View {
         df.locale = Locale(identifier: "en_US_POSIX")
         df.dateFormat = "yyyy.MM.dd  HH:mm"
         return df.string(from: Date())
+    }
+
+    /// 두 번째 브이로그부터 — 약속했던 대로 회원가입을 요청한다.
+    /// 막는 화면이 아니라 **첫 브이로그가 어땠는지 묻고 이어가자고 권하는** 화면이어야 한다.
+    private var guestLimitView: some View {
+        ZStack {
+            VlogAuroraBackground()
+            VStack(spacing: 0) {
+                Spacer()
+                Image("tteoni-thumbsup")
+                    .resizable().scaledToFit()
+                    .frame(width: 150, height: 150)
+                    .floating(amplitude: 6, speed: 1.3)
+
+                VStack(spacing: 10) {
+                    Text(L("vlog.guestLimit.title"))
+                        .font(.tte(23, .bold))
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.center)
+                    Text(L("vlog.guestLimit.message"))
+                        .font(.tte(15))
+                        .foregroundColor(.white.opacity(0.75))
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(4)
+                }
+                .padding(.horizontal, 36)
+                .padding(.top, 24)
+
+                Spacer()
+
+                Button {
+                    Haptics.light()
+                    showAuthForGuestLimit = true
+                } label: {
+                    Text(L("vlog.guestLimit.signUp"))
+                        .font(.tte(17, .bold))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity).frame(height: 56)
+                        .background(RoundedRectangle(cornerRadius: 16).fill(Color.tteOrange))
+                }
+                .padding(.horizontal, 24)
+
+                Button(L("vlog.guestLimit.later")) {
+                    tutorial.handleVlogExit()
+                    dismiss()
+                }
+                .font(.tte(14))
+                .foregroundColor(.white.opacity(0.6))
+                .padding(.top, 14)
+                .padding(.bottom, 36)
+            }
+        }
+        .fullScreenCover(isPresented: $showAuthForGuestLimit) { AuthView() }
     }
 
     private var chooseTextView: some View {
@@ -877,6 +945,10 @@ struct VlogGenerationView: View {
             }
             savedFormatsCount = saved
             vlogURL = mainURL
+            // 게스트가 첫 브이로그를 손에 넣었다 — 서버든 로컬이든 한 번은 한 번이다
+            if Auth.auth().currentUser?.isAnonymous == true {
+                GuestVlogQuota.recordCompletion()
+            }
             onVlogCompleted?()
             Haptics.success()
             // 발자취 적재 — 브이로그가 완성된 여행만 지도에 칠해진다 (실패해도 흐름 방해 없음).
