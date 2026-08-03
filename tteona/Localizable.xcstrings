@@ -5775,7 +5775,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "촬영과 첫 브이로그는 가입 없이도 만들 수 있어요"
+            "value": "촬영과 첫 브이로그는 회원가입 없이도 만들 수 있어요"
           }
         }
       }
@@ -5798,7 +5798,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "가입하면 그룹을 만들어 오늘의 기록을\n친구·가족과 나눌 수 있어요."
+            "value": "회원가입하면 그룹을 만들어 오늘의 기록을\n친구·가족과 나눌 수 있어요."
           }
         }
       }
@@ -5844,7 +5844,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "가입하면 전 세계 여행 코스를 지도와 탐색으로\n둘러보고 따라 떠날 수 있어요."
+            "value": "회원가입하면 전 세계 여행 코스를 지도와 탐색으로\n둘러보고 따라 떠날 수 있어요."
           }
         }
       }
@@ -5890,7 +5890,7 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "지금 기록은 이 기기에만 있어요.\n가입하면 발자취 지도와 여행 통계가 쌓입니다."
+            "value": "지금 기록은 이 기기에만 있어요.\n회원가입하면 발자취 지도와 여행 통계가 쌓입니다."
           }
         }
       }
@@ -5936,7 +5936,122 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "가입하고 시작하기"
+            "value": "회원가입하고 시작하기"
+          }
+        }
+      }
+    },
+    "guestTerms.badge": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "First vlog, no account"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "登録なしで最初のブイログ"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "회원가입 없이 첫 브이로그"
+          }
+        }
+      }
+    },
+    "guestTerms.consentNote": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Just one thing before we start."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "はじめる前に、ひとつだけ確認してください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "시작 전에 이것만 확인해주세요"
+          }
+        }
+      }
+    },
+    "guestTerms.start": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agree and start"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同意して始める"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "동의하고 시작하기"
+          }
+        }
+      }
+    },
+    "guestTerms.subtitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn today into a vlog.\nSign up later only if you like it."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "今日一日をブイログにしてみましょう。\n気に入ったら、そのとき登録すればOKです。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "오늘 하루를 브이로그로 만들어보세요.\n마음에 들면 그때 회원가입하셔도 돼요."
+          }
+        }
+      }
+    },
+    "guestTerms.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Welcome to tteona!"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "tteonaへようこそ！"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "떠나에 오신 걸\n환영해요!"
           }
         }
       }
@@ -14194,6 +14309,29 @@
           "stringUnit": {
             "state": "translated",
             "value": "여행의 하이라이트, 브이로그를 같이 만들어봐요!\n촬영 탭에서 셔터만 누르면 시작이에요"
+          }
+        }
+      }
+    },
+    "tutorial.pickPlace.text": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pick where you are from the list!\nNot there? Tap \"Enter manually\" to type it in."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "今いる場所をここから選んでください！\nなければ「直接入力」で書けます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "방금 찍은 곳을 여기서 골라봐요!\n목록에 없으면 '직접 입력하기'로 적을 수 있어요"
           }
         }
       }

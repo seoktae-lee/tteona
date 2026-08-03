@@ -82,7 +82,10 @@ struct CaptureTabView: View {
                 // 핀치로 줌하면 슬라이더도 같이 움직인다
                 onZoomUIChanged: { zoomUI = min(max($0, 1), 5) },
                 onLayoutMetricsChanged: { layoutMetrics = $0 },
-                onSaved: { showPlacePicker = true }
+                onSaved: {
+                    showPlacePicker = true
+                    tutorial.advance(to: .pickPlace)   // 이제 장소를 고를 차례
+                }
             )
             .ignoresSafeArea()
 
@@ -91,24 +94,24 @@ struct CaptureTabView: View {
             // 줌·밝기·격자는 촬영 중에도 조작할 수 있어야 한다. 숨기는 건 탭바뿐.
             cameraControls
 
+            // 첫 브이로그 안내 — 말풍선 꼬리가 가리킬 대상 바로 옆에 붙어야 어색하지 않다.
+            // 셔터 안내는 클립 길이 칩 위, 종료 안내는 우상단 ✓ 아래.
+            if tutorial.isOn(.captureHere), !isRecording, layoutMetrics.contentTopFromBottom > 0 {
+                VStack {
+                    Spacer()
+                    TutorialBubble(mascot: "tteoni-travel", text: L("tutorial.capture.text")) {
+                        tutorial.finish()
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, layoutMetrics.contentTopFromBottom + 58)
+                }
+                .ignoresSafeArea()
+            }
+
             VStack(spacing: 8) {
                 if !places.isEmpty && !isRecording {
                     sessionChip
                         .transition(.opacity)
-                }
-                // 첫 브이로그 안내 — 촬영이 이 탭으로 옮겨오면서 말풍선도 따라왔다
-                if !isRecording {
-                    if tutorial.isOn(.captureHere) {
-                        TutorialBubble(mascot: "tteoni-travel", text: L("tutorial.capture.text")) {
-                            tutorial.finish()
-                        }
-                        .padding(.horizontal, 28)
-                    } else if tutorial.isOn(.endToday) {
-                        TutorialBubble(mascot: "tteoni-wink", text: L("tutorial.endToday.text")) {
-                            tutorial.finish()
-                        }
-                        .padding(.horizontal, 28)
-                    }
                 }
                 if let toast = savedToast, !isRecording {
                     savedToastView(toast)
@@ -116,6 +119,16 @@ struct CaptureTabView: View {
                 }
             }
             .padding(.top, 8)
+        }
+        .overlay(alignment: .top) {
+            if tutorial.isOn(.endToday), !isRecording {
+                TutorialBubble(mascot: "tteoni-wink", text: L("tutorial.endToday.text"),
+                               tailEdge: .top, tailAlignment: .trailing, tailOffset: -22) {
+                    tutorial.finish()
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 62)   // 칩·✓ 아래로 내려 꼬리가 ✓를 향하게
+            }
         }
         // 오늘 마치기 — 우측 상단. 셔터에서 멀리 떨어뜨려 오조작을 막는다
         .overlay(alignment: .topTrailing) {
@@ -164,6 +177,16 @@ struct CaptureTabView: View {
             }
         }) {
             placePickerSheet
+                .overlay(alignment: .top) {
+                    if tutorial.isOn(.pickPlace) {
+                        TutorialBubble(mascot: "tteoni-guide", text: L("tutorial.pickPlace.text"),
+                                       tailEdge: .bottom) {
+                            tutorial.finish()
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 8)
+                    }
+                }
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.hidden)
         }

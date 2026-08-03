@@ -73,6 +73,34 @@ struct NavGuideOverlay: View {
         ),
     ]
 
+    private var languagePicker: some View {
+        Menu {
+            ForEach(AppLanguage.allCases) { language in
+                Button {
+                    guard language != LanguageManager.shared.language else { return }
+                    Haptics.light()
+                    LanguageManager.shared.setLanguage(language)
+                } label: {
+                    if language == LanguageManager.shared.language {
+                        Label("\(language.flag) \(language.nativeName)", systemImage: "checkmark")
+                    } else {
+                        Text("\(language.flag) \(language.nativeName)")
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "globe").font(.tte(12, .medium))
+                Text(LanguageManager.shared.language.nativeName).font(.tte(12, .medium))
+                Image(systemName: "chevron.down").font(.tte(9, .semibold))
+            }
+            .foregroundColor(.tteMediumGray)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(Capsule().fill(Color(UIColor.secondarySystemBackground)))
+        }
+    }
+
     private var step: GuideStep { steps[stepIndex] }
     private var isLast: Bool { stepIndex == steps.count - 1 }
 
@@ -154,6 +182,11 @@ struct NavGuideOverlay: View {
                     .frame(width: step.tabIndex == nil ? 150 : 100,
                            height: step.tabIndex == nil ? 150 : 100)
                     .floating(amplitude: 6, speed: 1.3)
+
+                // 첫 카드에서 언어를 바꿀 수 있게 — 이후 화면은 전부 그 언어로 이어진다
+                if stepIndex == 0 {
+                    languagePicker
+                }
 
                 VStack(spacing: 8) {
                     Text(step.title)

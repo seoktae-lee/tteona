@@ -6,6 +6,8 @@ struct RootView: View {
     @EnvironmentObject private var notificationManager: AppNotificationManager
     @StateObject private var courseService = CourseService()
     @StateObject private var network = NetworkMonitor.shared
+    /// 게스트 약관 동의 여부 — UserDefaults 직접 읽기로는 화면이 갱신되지 않아 상태로 들고 있는다
+    @State private var guestTermsAgreed = GuestTermsConsent.isAgreed
 
     var body: some View {
         content
@@ -59,6 +61,14 @@ struct RootView: View {
                 AuthView()   // 이메일 인증 대기 중에는 그 화면을 지킨다
             } else if authService.isLoggedIn && !authService.onboardingComplete {
                 OnboardingView()
+            } else if !authService.isLoggedIn && !guestTermsAgreed {
+                // 계정 온보딩은 가입한 사람만 거치는데 그 안에 약관 동의가 들어 있다.
+                // 게스트도 촬영·브이로그·앨범 저장까지 서비스를 온전히 쓰므로 동의를 받는다.
+                // 넘어갈 수 없는 화면이어야 해서 내비 가이드의 한 단계로 넣지 않았다.
+                GuestTermsGate {
+                    GuestTermsConsent.record()
+                    withAnimation(.easeInOut(duration: 0.3)) { guestTermsAgreed = true }
+                }
             } else {
                 MainTabView()
                     .environmentObject(courseService)

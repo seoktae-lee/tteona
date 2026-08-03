@@ -17,8 +17,9 @@ final class VlogTutorial: ObservableObject {
 
     enum Step: Int, Comparable {
         case tapMyToday      // 메인: '나의 오늘' 누르기
-        case captureHere     // 세션: '여기서 촬영' (5초 클립)
-        case endToday        // 칩 1개 확인 → '오늘 종료'
+        case captureHere     // 촬영 탭: 셔터 누르기
+        case pickPlace       // 촬영 직후: 장소 선택 시트
+        case endToday        // 칩 1개 확인 → 우상단 ✓
         case chooseVlogOnly  // 종료 시트: '브이로그만 생성하기'
         case chooseFormat    // 포맷 선택
         case chooseBgm       // BGM 선택
@@ -84,10 +85,30 @@ final class VlogTutorial: ObservableObject {
 struct TutorialBubble: View {
     var mascot: String = "tteoni-guide"
     let text: String
+    /// 꼬리가 붙는 쪽 — 말풍선이 대상 위에 있으면 .bottom, 아래에 있으면 .top
+    var tailEdge: VerticalEdge = .bottom
+    /// 꼬리의 가로 위치 — 가리킬 버튼이 화면 구석에 있으면 가운데로는 못 맞춘다
+    var tailAlignment: HorizontalAlignment = .center
+    /// 꼬리를 그 정렬에서 더 밀어야 할 때 (예: ✓ 버튼이 안전영역 안쪽에 있는 경우)
+    var tailOffset: CGFloat = 0
     let onSkip: () -> Void
+
+    private var tail: some View {
+        HStack(spacing: 0) {
+            if tailAlignment != .leading { Spacer(minLength: 0) }
+            Triangle()
+                .fill(Color.tteBackground)
+                .frame(width: 18, height: 9)
+                .rotationEffect(.degrees(tailEdge == .bottom ? 180 : 0))
+                .offset(x: tailOffset)
+            if tailAlignment != .trailing { Spacer(minLength: 0) }
+        }
+        .padding(tailEdge == .bottom ? .top : .bottom, -1)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
+            if tailEdge == .top { tail }
             HStack(alignment: .center, spacing: 10) {
                 Image(mascot)
                     .resizable()
@@ -129,13 +150,9 @@ struct TutorialBubble: View {
                 .accessibilityLabel(L("tutorial.skip"))
             }
 
-            Triangle()
-                .fill(Color.tteBackground)
-                .frame(width: 18, height: 9)
-                .rotationEffect(.degrees(180))
-                .padding(.top, -1)
+            if tailEdge == .bottom { tail }
         }
-        .transition(.opacity.combined(with: .move(edge: .bottom)).combined(with: .scale(scale: 0.94)))
+        .transition(.opacity.combined(with: .scale(scale: 0.94)))
     }
 }
 
