@@ -12,6 +12,8 @@ struct CameraView: View {
     var onClose: (() -> Void)? = nil
     /// 탭에 상주시킬 때 true — 닫기 버튼을 감추고 저장 후 스스로 닫지 않는다
     var isEmbedded = false
+    /// 바깥에서 클립을 지웠을 때 예산 재계산을 요청하는 신호
+    var budgetRefreshToken: Int = 0
     var onRecordingChanged: ((Bool) -> Void)? = nil
     var onUsedSecondsChanged: ((Double) -> Void)? = nil
     /// 노출 보정(EV) — 촬영 탭의 슬라이더가 값을 내려보낸다
@@ -35,6 +37,7 @@ struct CameraView: View {
     }
 
     init(clipURL: URL, sessionId: String, title: String? = nil,
+         budgetRefreshToken: Int = 0,
          isEmbedded: Bool = false,
          onRecordingChanged: ((Bool) -> Void)? = nil,
          onUsedSecondsChanged: ((Double) -> Void)? = nil,
@@ -46,6 +49,7 @@ struct CameraView: View {
         self.clipURL = clipURL
         self.sessionId = sessionId
         self.title = title
+        self.budgetRefreshToken = budgetRefreshToken
         self.isEmbedded = isEmbedded
         self.onRecordingChanged = onRecordingChanged
         self.onUsedSecondsChanged = onUsedSecondsChanged
@@ -59,7 +63,8 @@ struct CameraView: View {
 
     var body: some View {
         CameraViewControllerWrapper(
-            clipURL: clipURL, sessionId: sessionId, title: title,
+            clipURL: clipURL, sessionId: sessionId,
+            budgetRefreshToken: budgetRefreshToken, title: title,
             isEmbedded: isEmbedded, onRecordingChanged: onRecordingChanged,
             onUsedSecondsChanged: onUsedSecondsChanged,
             exposureBias: exposureBias, zoomUI: zoomUI,
@@ -78,6 +83,8 @@ struct CameraView: View {
 struct CameraViewControllerWrapper: UIViewControllerRepresentable {
     let clipURL: URL
     let sessionId: String
+    /// 바깥에서 클립을 지웠을 때 예산 재계산을 요청하는 신호
+    var budgetRefreshToken: Int = 0
     let title: String?
     var isEmbedded = false
     var onRecordingChanged: ((Bool) -> Void)? = nil
@@ -104,6 +111,8 @@ struct CameraViewControllerWrapper: UIViewControllerRepresentable {
     func updateUIViewController(_ vc: CameraViewController, context: Context) {
         // 임베드 모드에서는 촬영마다 저장 경로가 바뀐다 — 뷰를 새로 만들지 않고 갈아끼운다
         vc.clipURL = clipURL
+        vc.sessionId = sessionId   // 신원이 늦게 정해지면 세션 폴더도 따라 바뀐다
+        vc.budgetRefreshToken = budgetRefreshToken
         vc.applyExposureBias(exposureBias)
         vc.applyZoomUI(zoomUI)
         vc.onSaved = onSaved
@@ -142,8 +151,35 @@ final class CameraViewController: UIViewController {
     /// 탭에 상주하는 모드. 스스로 닫지 않고, 저장 후 다음 촬영을 받을 준비만 한다.
     var isEmbedded = false
     /// 다음 클립 경로 — 임베드 모드에서는 촬영마다 부모가 갈아끼운다
-    var clipURL: URL
-    private let sessionId: String
+    /// 이번 촬영이 저장될 경로. 임베드 모드에서는 촬영마다 새 파일명으로 갈아끼워진다.
+    ///
+    /// 경로가 바뀌면 재촬영 환불분을 반드시 비운다. 환불은 **같은 파일을 덮어쓸 때만**
+    /// 유효한데, 촬영 탭은 매번 새 파일명을 쓰므로 직전 클립 길이가 그대로 남아 있으면
+    /// 다음 촬영에서 예산을 부당하게 돌려받는다 — 30초를 넘겨도 계속 찍히던 원인이다.
+    var clipURL: URL {
+        didSet {
+            guard clipURL != oldValue else { return }
+            currentPlaceClipSeconds = 0
+        }
+    }
+    /// 세션 폴더 이름. **let이 아니다** — 앱 실행 직후엔 신원(uid)이 아직 없어 `free_`로
+    /// 만들어졌다가, 게스트 로그인이 끝나면 `free_{uid}`로 바뀐다. 여기서 갱신하지 않으면
+    /// 저장 경로(clipURL)만 옮겨가고 촬영 예산 계산은 계속 빈 폴더를 세서 0초에 머문다.
+    var sessionId: String {
+        didSet {
+            guard sessionId != oldValue else { return }
+            refreshUsedSeconds()
+        }
+    }
+
+    /// 바깥에서 클립을 지웠을 때 예산을 다시 세게 하는 신호.
+    /// 값이 바뀌면 폴더를 다시 훑는다 — 지운 만큼 예산이 즉시 돌아온다.
+    var budgetRefreshToken: Int = 0 {
+        didSet {
+            guard budgetRefreshToken != oldValue else { return }
+            refreshUsedSeconds()
+        }
+    }
     /// UIViewController.title과 이름이 겹치지 않게 placeTitle로 둔다
     private let placeTitle: String?
     private let service = CameraService()
@@ -597,6 +633,7 @@ final class CameraViewController: UIViewController {
             self.usedSeconds = total
             self.currentPlaceClipSeconds = currentClip
             self.onUsedSecondsChanged?(total)
+            self.updateShutterAvailability()
         }
     }
 
@@ -849,6 +886,14 @@ final class CameraViewController: UIViewController {
         }
     }
 
+    /// 예산이 다 찼으면 셔터를 눌리지 않게 하고 흐리게 표시한다.
+    /// 눌러도 알림만 뜨면 "왜 안 찍히지?"가 되므로, 버튼 자체가 상태를 말하게 한다.
+    private func updateShutterAvailability() {
+        let full = (budgetSeconds - usedSeconds) < 1
+        recordBtn.isEnabled = !full
+        recordBtn.alpha = full ? 0.35 : 1.0
+    }
+
     private func stopRecordingUI() {
         progressTimer?.invalidate()
         progressTimer = nil
@@ -867,6 +912,20 @@ final class CameraViewController: UIViewController {
         progressTimer?.invalidate()
         progressTimer = nil
         recordStart = nil
+
+        // 방금 찍은 만큼을 **즉시** 차감한다.
+        //
+        // refreshUsedSeconds는 세션 폴더의 파일 길이를 비동기로 읽어 합산하는데, 그 사이에
+        // 다음 촬영이 시작되면 낡은 usedSeconds로 남은 예산을 계산해 예산을 넘겨 찍는다.
+        // (30초 예산에서 35초가 찍힌 원인 — 클립이 늘수록 재계산이 느려져 창이 넓어진다)
+        // 모든 클립은 상한에서 자동 종료되므로 상한만큼 차감하면 실제와 일치하고,
+        // 정확한 값은 뒤이은 재계산이 파일 기준으로 다시 맞춘다.
+        if currentClipLimit > 0 {
+            usedSeconds += currentClipLimit
+            currentClipLimit = 0
+            onUsedSecondsChanged?(usedSeconds)
+            updateShutterAvailability()
+        }
         refreshUsedSeconds()   // 파일 기준으로 재계산 (재촬영 덮어쓰기 반영)
         resetClipRing()
         // 촬영 탭에서는 길이 칩이 같은 정보를 보여준다 — 대기 중엔 비워 중복을 없앤다

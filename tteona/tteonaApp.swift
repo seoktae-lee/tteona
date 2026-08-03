@@ -46,8 +46,11 @@ struct TteonaApp: App {
                     deepLinkHandler.handle(url: url)
                 }
                 .onChange(of: authService.currentUser) { _, user in
-                    notificationManager.currentUserId = user?.uid
-                    guard let uid = user?.uid else {
+                    // 게스트(익명)는 계정이 아니다 — 결제 신원도 푸시 등록도 붙이지 않는다.
+                    // RevenueCat에 익명 uid를 물리면 그 상태로 결제가 이뤄지고,
+                    // 익명 구매는 기기를 바꾸면 복원되지 않는다.
+                    notificationManager.currentUserId = authService.isLoggedIn ? user?.uid : nil
+                    guard authService.isLoggedIn, let uid = user?.uid else {
                         ProManager.shared.logOut()
                         return
                     }
@@ -59,7 +62,7 @@ struct TteonaApp: App {
                     }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: Notification.Name("FCMTokenRefreshed"))) { _ in
-                    guard let uid = authService.currentUser?.uid else { return }
+                    guard authService.isLoggedIn, let uid = authService.currentUser?.uid else { return }
                     let lang = LanguageManager.shared.language.rawValue
                     Task {
                         await FCMService.shared.saveFCMToken(userId: uid, lang: lang)
@@ -68,7 +71,7 @@ struct TteonaApp: App {
                 .onReceive(NotificationCenter.default.publisher(for: .apnsTokenReceived)) { _ in
                     // 로그인 시점에 APNs 토큰이 아직 없어 등록을 건너뛴 경우를 보완 —
                     // 토큰 도착 즉시 WAS에 등록 (좋아요·Vlog 완성·채팅 푸시가 여기에 의존)
-                    guard let uid = authService.currentUser?.uid else { return }
+                    guard authService.isLoggedIn, let uid = authService.currentUser?.uid else { return }
                     let lang = LanguageManager.shared.language.rawValue
                     Task {
                         await PushService.shared.registerDeviceToken(userId: uid, lang: lang)
@@ -76,7 +79,7 @@ struct TteonaApp: App {
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .appLanguageChanged)) { _ in
                     // 앱 언어를 바꾸면 서버에 등록된 lang도 갱신해야 다음 알림부터 새 언어로 온다.
-                    guard let uid = authService.currentUser?.uid else { return }
+                    guard authService.isLoggedIn, let uid = authService.currentUser?.uid else { return }
                     let lang = LanguageManager.shared.language.rawValue
                     Task {
                         await PushService.shared.registerDeviceToken(userId: uid, lang: lang)
@@ -86,7 +89,7 @@ struct TteonaApp: App {
                 .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
                     UNUserNotificationCenter.current().setBadgeCount(0)
                     // 서버 쪽 카운터도 함께 비운다 — 안 그러면 다음 알림이 낡은 숫자를 이어받는다.
-                    guard let uid = authService.currentUser?.uid else { return }
+                    guard authService.isLoggedIn, let uid = authService.currentUser?.uid else { return }
                     Task { await FCMService.shared.clearBadge(userId: uid) }
                 }
         }

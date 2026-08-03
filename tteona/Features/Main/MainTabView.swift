@@ -35,8 +35,13 @@ struct MainTabView: View {
     @State private var notificationVlogURL: IdentifiedURL? = nil
 
     // 내비게이션 가이드는 계정별로 1회 표시 (온보딩이 계정별인 것과 일관되게)
+    /// 게스트용 안내와 가입 후 안내는 내용이 달라 따로 기억한다.
+    /// 하나로 두면 게스트로 짧은 안내를 본 사람이 가입해도 전체 안내를 영영 못 본다
+    /// (link 승계로 uid가 그대로이기 때문).
     private var navGuideSeenKey: String? {
-        authService.currentUser.map { "hasSeenNavGuide_\($0.uid)" }
+        authService.currentUser.map {
+            authService.isLoggedIn ? "hasSeenNavGuide_\($0.uid)" : "hasSeenNavGuideGuest_\($0.uid)"
+        }
     }
 
     private var hasSeenNavGuide: Bool {
@@ -49,7 +54,8 @@ struct MainTabView: View {
             routedTabContent
 
             if showNavGuide {
-                NavGuideOverlay(selectedTab: $selectedTab) {
+                NavGuideOverlay(selectedTab: $selectedTab,
+                                showsAccountTabs: authService.isLoggedIn) {
                     if let key = navGuideSeenKey {
                         UserDefaults.standard.set(true, forKey: key)
                     }
@@ -174,7 +180,9 @@ struct MainTabView: View {
                 .environmentObject(roomService)
         }
         .task {
-            if let uid = authService.currentUser?.uid {
+            // 게스트는 건너뛴다 — Firestore 규칙이 익명을 막으므로 프로필 조회도
+            // 실시간 룸 리스너도 권한 거부만 쌓으며 재시도를 돈다.
+            if authService.isLoggedIn, let uid = authService.currentUser?.uid {
                 await userService.fetchUser(uid: uid)
                 roomService.blockedUserIds = Set(userService.currentUser?.blockedUserIds ?? [])
                 roomService.startListeningMyRooms(userId: uid)
@@ -295,7 +303,7 @@ private struct DiscoverTab: View {
         if authService.isLoggedIn {
             DiscoverTabView()
         } else {
-            GuestGateView(icon: "map.fill",
+            GuestGateView(mascot: "tteoni-travel",
                           title: L("guest.discover.title"),
                           message: L("guest.discover.message"))
         }
@@ -308,7 +316,7 @@ private struct ChatTab: View {
         if authService.isLoggedIn {
             FeedTabView()
         } else {
-            GuestGateView(icon: "bubble.left.and.bubble.right.fill",
+            GuestGateView(mascot: "tteoni-front",
                           title: L("guest.chat.title"),
                           message: L("guest.chat.message"))
         }
@@ -321,9 +329,13 @@ private struct ProfileTab: View {
         if authService.isLoggedIn {
             ProfileTabView()
         } else {
-            GuestGateView(icon: "person.crop.circle.fill",
-                          title: L("guest.profile.title"),
-                          message: L("guest.profile.message"))
+            // 설정으로 가는 유일한 통로가 프로필이라, 게스트도 약관·언어에 닿게 열어 둔다
+            NavigationStack {
+                GuestGateView(mascot: "tteoni-thumbsup",
+                              title: L("guest.profile.title"),
+                              message: L("guest.profile.message"),
+                              showsSettings: true)
+            }
         }
     }
 }

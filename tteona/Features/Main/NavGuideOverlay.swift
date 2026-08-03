@@ -5,12 +5,18 @@ import SwiftUI
 // 스텝이 넘어가면 실제로 해당 탭으로 전환해 화면을 직접 보여준다.
 struct NavGuideOverlay: View {
     @Binding var selectedTab: Int
+    /// 계정이 있어야 열리는 탭(발견·채팅)까지 안내할지.
+    /// 게스트에게는 잠긴 문을 소개하는 꼴이 되고, 첫 실행에 5단계 투어가 가로막아
+    /// "켜자마자 찍는다"는 흐름과도 어긋난다 — 그 탭들이 실제로 열리는 가입 시점에 안내한다.
+    var showsAccountTabs: Bool = true
     let onFinish: () -> Void
 
     @State private var stepIndex = 0
 
-    init(selectedTab: Binding<Int>, onFinish: @escaping () -> Void) {
+    init(selectedTab: Binding<Int>, showsAccountTabs: Bool = true,
+         onFinish: @escaping () -> Void) {
         self._selectedTab = selectedTab
+        self.showsAccountTabs = showsAccountTabs
         self.onFinish = onFinish
         #if DEBUG
         // 시각 검증용: -previewGuideStep N 런치 아규먼트로 특정 스텝 바로 진입
@@ -26,7 +32,14 @@ struct NavGuideOverlay: View {
         let tabIndex: Int?   // nil이면 중앙 카드 (환영/마무리)
     }
 
-    private let steps: [GuideStep] = [
+    private var steps: [GuideStep] { showsAccountTabs ? allSteps : guestSteps }
+
+    /// 게스트용 — 환영 + 촬영만. 바로 셔터로 보낸다.
+    private var guestSteps: [GuideStep] {
+        [allSteps[0], allSteps[1], allSteps[allSteps.count - 1]]
+    }
+
+    private let allSteps: [GuideStep] = [
         GuideStep(
             mascot: "tteoni-guide",
             title: L("navguide.step1.title"),

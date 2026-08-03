@@ -15,6 +15,7 @@ struct CaptureTabView: View {
     @EnvironmentObject private var roomService: RoomService
     @ObservedObject private var sessionStore = ImpromptuSessionStore.shared
     @ObservedObject private var pro = ProManager.shared
+    @ObservedObject private var tutorial = VlogTutorial.shared
     /// 세션 누적 촬영 시간(초) — 카메라가 세션 폴더에서 계산해 올려준다
     @State private var usedSeconds: Double = 0
     @StateObject private var locationService = LocationService()
@@ -47,8 +48,14 @@ struct CaptureTabView: View {
     @State private var zoomUI: Double = 1
     /// UIKit 카메라가 알려준 하단 UI 실측 좌표 — 기기별 겹침을 막는 유일한 기준
     @State private var layoutMetrics = CameraLayoutMetrics()
+    /// 칩을 누르면 올라오는 '오늘 찍은 곳' 목록
+    @State private var showCaptureList = false
+    /// 목록에서 클립을 지우면 값을 올려 카메라가 예산을 다시 세게 한다
+    @State private var budgetRefreshToken = 0
 
-    private var uid: String { authService.currentUser?.uid ?? "" }
+    // 저장 경로는 게이팅 신원(currentUser)이 아니라 저장 신원을 쓴다 —
+    // 인증 대기 같은 과도기에 경로가 바뀌면 찍어둔 클립을 잃는다
+    private var uid: String { authService.identityUid }
     private var sessionId: String { "free_\(uid)" }
     private var clipURL: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -60,6 +67,7 @@ struct CaptureTabView: View {
             CameraView(
                 clipURL: clipURL,
                 sessionId: sessionId,
+                budgetRefreshToken: budgetRefreshToken,
                 isEmbedded: true,
                 onRecordingChanged: { recording in
                     withAnimation(.easeInOut(duration: 0.2)) { isRecording = recording }
@@ -87,6 +95,20 @@ struct CaptureTabView: View {
                 if !places.isEmpty && !isRecording {
                     sessionChip
                         .transition(.opacity)
+                }
+                // 첫 브이로그 안내 — 촬영이 이 탭으로 옮겨오면서 말풍선도 따라왔다
+                if !isRecording {
+                    if tutorial.isOn(.captureHere) {
+                        TutorialBubble(mascot: "tteoni-travel", text: L("tutorial.capture.text")) {
+                            tutorial.finish()
+                        }
+                        .padding(.horizontal, 28)
+                    } else if tutorial.isOn(.endToday) {
+                        TutorialBubble(mascot: "tteoni-wink", text: L("tutorial.endToday.text")) {
+                            tutorial.finish()
+                        }
+                        .padding(.horizontal, 28)
+                    }
                 }
                 if let toast = savedToast, !isRecording {
                     savedToastView(toast)
@@ -128,6 +150,12 @@ struct CaptureTabView: View {
             // 위치는 실제로 촬영을 시작할 때(onRecordingChanged) 요청한다.
         }
         .onDisappear { isRecording = false }
+        .sheet(isPresented: $showCaptureList) {
+            CaptureListSheet(places: places, sessionId: sessionId,
+                             usedSeconds: usedSeconds, budgetSeconds: budgetSeconds,
+                             onDelete: deleteCapture,
+                             onDiscardAll: discardAllCaptures)
+        }
         .sheet(isPresented: $showPlacePicker, onDismiss: {
             // 장소를 정하지 않고 닫으면 고아 클립이 남는다 — 파일째 지운다
             if places.count == (sessionStore.loadTodaySession()?.places.count ?? 0) {
@@ -148,7 +176,9 @@ struct CaptureTabView: View {
             case .paywall:
                 ProPaywallView()
             case .finish:
+                // 커버 자체도 투명해야 아래 카메라가 비친다
                 ImpromptuSessionView(startInFinishMode: true)
+                    .presentationBackground(.clear)
                     .environmentObject(AppNotificationManager.shared)
                     .environmentObject(authService)
                     .environmentObject(userService)
@@ -177,8 +207,11 @@ struct CaptureTabView: View {
 
     private var sessionChip: some View {
         Button {
+            // 칩은 '확인·정리', 우상단 ✓는 '오늘 마치기'.
+            // 예전엔 둘 다 종료로 가서 하는 일이 겹쳤고, 진행바에 달린 >가
+            // "자세히 보기"로 읽히는 것과도 어긋났다.
             Haptics.light()
-            fullCover = .finish
+            showCaptureList = true
         } label: {
             VStack(spacing: 7) {
                 HStack(spacing: 7) {
@@ -339,12 +372,9 @@ struct CaptureTabView: View {
                 .frame(width: 150)
                 .rotationEffect(.degrees(-90))
                 .frame(width: 40, height: 150)
-                // 최솟값일 때는 주황 트랙이 없어 손잡이만 떠 보인다 — 배경으로 축을 그려준다
-                .background(
-                    Capsule()
-                        .fill(Color.black.opacity(0.35))
-                        .frame(width: 30)
-                )
+                // 검은 판을 깔면 화면의 4분의 1이 어두워져 뷰파인더를 가린다.
+                // 슬라이더 자체 트랙만 남기고, 밝은 장면에서 묻히지 않도록 그림자로 띄운다.
+                .shadow(color: .black.opacity(0.35), radius: 3, y: 1)
         }
     }
 
@@ -461,11 +491,51 @@ struct CaptureTabView: View {
     /// 남으면 예산이 찬 채로 촬영도 삭제도 못 하는 상태에 갇힌다.
     private func syncSessionState() {
         places = sessionStore.loadTodaySession()?.places ?? []
+
+        // 카메라는 촬영 예산을 스스로 들고 있어서, 세션이 **바깥에서** 비워진 걸 모른다.
+        // (브이로그 완성·오늘 기록 버리기는 이 탭이나 마무리 화면에서 일어난다)
+        // 그대로 두면 예산이 가득 찬 것으로 알고 셔터가 잠긴 채 남는다 — 다시 세게 한다.
+        budgetRefreshToken += 1
+
         guard places.isEmpty else { return }
         let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Tteona/Sessions/\(sessionId)")
         try? FileManager.default.removeItem(at: dir)
         usedSeconds = 0
+    }
+
+    /// 오늘 기록을 통째로 버린다. 예산이 찬 채로 아무것도 못 하게 갇혔을 때의 탈출구다 —
+    /// 하나씩 지우는 것만으로는 빠져나오기 번거로워 이 길을 함께 열어 둔다.
+    private func discardAllCaptures() {
+        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Tteona/Sessions/\(sessionId)")
+        try? FileManager.default.removeItem(at: dir)
+        sessionStore.clear()
+        places = []
+        usedSeconds = 0
+        budgetRefreshToken += 1
+        Haptics.warning()
+    }
+
+    /// 목록에서 클립 하나를 지운다 — 예산도 그만큼 돌아온다.
+    /// 파일을 먼저 지우고 카메라에 재계산을 요청하는 순서라야 남은 예산이 정확하다.
+    private func deleteCapture(_ place: Place) {
+        if let name = place.clipFileName {
+            let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("Tteona/Sessions/\(sessionId)/\(name)")
+            try? FileManager.default.removeItem(at: url)
+        }
+        // 번호는 1부터 다시 매긴다 — 중간이 비면 브이로그 순서가 어긋난다
+        var remaining = places.filter { $0.id != place.id }
+        for i in remaining.indices { remaining[i].order = i + 1 }
+        places = remaining
+        if remaining.isEmpty {
+            sessionStore.clear()
+        } else {
+            sessionStore.save(places: remaining)
+        }
+        budgetRefreshToken += 1
+        Haptics.light()
     }
 
     private func appendPlace(name: String, location: CLLocation) {
@@ -478,6 +548,7 @@ struct CaptureTabView: View {
         )
         places.append(place)
         sessionStore.save(places: places)
+        tutorial.advance(to: .endToday)   // 첫 장소가 담겼다 → ✓ 를 누르도록 안내
         Haptics.success()
         showSavedToast(placeName: name, index: places.count)
         // 다음 촬영을 위해 새 파일명을 예약한다

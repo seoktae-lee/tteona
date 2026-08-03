@@ -46,7 +46,10 @@ final class VlogTutorial: ObservableObject {
               step == nil else { return }
         UserDefaults.standard.set(true, forKey: "vlogTutorialDone_\(uid)")
         withAnimation(.spring(response: 0.45, dampingFraction: 0.82)) {
-            step = .tapMyToday
+            // 예전엔 지도의 '나의 오늘' 버튼을 누르게 하는 단계로 시작했는데,
+            // 그 버튼이 사라지고 앱이 촬영 탭으로 열리게 되면서 누를 대상이 없어졌다.
+            // 이제 첫 안내는 셔터를 누르라는 말이다.
+            step = .captureHere
         }
     }
 
@@ -62,8 +65,8 @@ final class VlogTutorial: ObservableObject {
         withAnimation(.easeOut(duration: 0.25)) { step = target }
     }
 
-    /// 세션 화면을 브이로그 완성 전에 나감 → 처음부터 다시 안내
-    func handleSessionExit() { regress(to: .tapMyToday) }
+    /// 세션 화면을 브이로그 완성 전에 나감 → 처음(셔터 누르기)부터 다시 안내
+    func handleSessionExit() { regress(to: .captureHere) }
 
     /// 브이로그 생성 화면을 닫음 → 칩은 남아 있으므로 '오늘 종료' 단계로
     func handleVlogExit() { regress(to: .endToday) }

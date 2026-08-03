@@ -18,10 +18,17 @@ struct SettingsView: View {
     var body: some View {
         // 프로필 탭에서 push되므로 자체 NavigationStack 없이 부모 스택을 사용한다
         List {
-            personalSection
+            // 게스트는 계정 항목을 감춘다. 다만 설정 화면 자체는 열어 둔다 —
+            // 언어·이용약관·개인정보처리방침은 계정과 무관하고, 특히 약관·정책은
+            // 가입 안 한 사용자도 볼 수 있어야 한다(스토어 심사 요건).
+            if authService.isLoggedIn {
+                personalSection
+            }
             proSection
             appSection
-            accountSection
+            if authService.isLoggedIn {
+                accountSection
+            }
         }
         .navigationTitle(L("settings.title"))
         .navigationBarTitleDisplayMode(.inline)
@@ -218,6 +225,8 @@ struct SettingsView: View {
                 }
             }
             // 그룹 활동 알림(여행 시작/종료·영상·댓글) 받기 — 시스템 알림 권한과 별개로 앱 차원에서 끌 수 있다.
+            // 게스트는 그룹 자체가 없고 저장 위치(userPrivate)도 규칙이 막으므로 감춘다.
+            if authService.isLoggedIn {
             Toggle(isOn: $groupNotifEnabled) {
                 Label(L("settings.groupNotif"), systemImage: "bell.badge")
                     .foregroundColor(.tteDarkGray)
@@ -229,6 +238,7 @@ struct SettingsView: View {
                     try? await Firestore.firestore().collection("userPrivate").document(uid)
                         .setData(["groupNotifEnabled": enabled], merge: true)
                 }
+            }
             }
             NavigationLink {
                 LanguageSettingsView()

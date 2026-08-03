@@ -5,6 +5,7 @@ import FirebaseAuth
 
 struct AuthView: View {
     @EnvironmentObject private var authService: AuthService
+    @Environment(\.dismiss) private var dismiss
     @State private var isSignUp = false
     @State private var email = ""
     @State private var password = ""
@@ -21,6 +22,19 @@ struct AuthView: View {
     enum AuthField { case email, password, confirm }
 
     var body: some View {
+        content
+            // 로그인이 끝나면 스스로 물러난다.
+            //
+            // 이 화면은 두 가지로 뜬다 — RootView의 분기(그땐 no-op)와, 게스트 게이트·페이월에서
+            // 올리는 fullScreenCover다. 후자일 때 스스로 닫지 않으면, 루트가 아래에서 온보딩이나
+            // 홈으로 바뀌어도 이 커버가 위에 그대로 남아 화면을 가린다.
+            // (앱을 껐다 켜야 비로소 온보딩이 보이던 증상이 이것이었다)
+            .onChange(of: authService.isLoggedIn) { _, loggedIn in
+                if loggedIn { dismiss() }
+            }
+    }
+
+    private var content: some View {
         ZStack {
             TteonaSplashBackground()
 
@@ -227,7 +241,8 @@ struct AuthView: View {
                 await authService.refreshOnboardingStatus(uid: verifiedUser.uid)
                 authService.verificationEmailSent = false
             } else {
-                try? Auth.auth().signOut()
+                // 로그아웃하지 않는다 — 익명 인증이 켜진 뒤로 로그아웃은 곧 '새 게스트 계정'이라
+                // uid가 바뀌며 찍어둔 클립이 끊긴다. 미인증 상태는 리스너가 이미 걸러낸다.
                 authService.errorMessage = L("auth.notVerifiedYet")
             }
         } catch {
@@ -249,7 +264,6 @@ struct AuthView: View {
                 } else if !email.isEmpty, !password.isEmpty {
                     let result = try await Auth.auth().signIn(withEmail: email, password: password)
                     try await result.user.sendEmailVerification()
-                    try? Auth.auth().signOut()
                     await MainActor.run {
                         authService.errorMessage = nil
                         resendMessage = L("auth.resendDone")

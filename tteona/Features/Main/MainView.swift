@@ -544,15 +544,6 @@ struct MainView: View {
         VStack {
             Spacer()
 
-            // 첫 브이로그 튜토리얼 1단계 — '나의 오늘'을 누르도록 유도
-            if tutorial.isOn(.tapMyToday) {
-                TutorialBubble(mascot: "tteoni-guide", text: L("tutorial.myToday.text")) {
-                    tutorial.finish()
-                }
-                .padding(.horizontal, 44)
-                .padding(.bottom, 8)
-            }
-
             ZStack(alignment: .bottom) {
                 // 보조 버튼 — 좌: 이어하기 도크(세로 스택 → 중앙 CTA와 겹침 방지), 우: 현재 위치
                 HStack(alignment: .bottom) {

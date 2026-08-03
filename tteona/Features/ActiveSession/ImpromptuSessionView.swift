@@ -68,11 +68,12 @@ struct ImpromptuSessionView: View {
     @State private var pendingClipFileName: String? = nil
     @State private var showIntegrityAlert = false
     /// 오늘 기록 버리기 확인 — 되돌릴 수 없어 한 번 더 묻는다
-    @State private var showDiscardConfirm = false
 
     private let sessionStore = ImpromptuSessionStore.shared
 
-    private var uid: String { authService.currentUser?.uid ?? "" }
+    // 저장 경로는 게이팅 신원(currentUser)이 아니라 저장 신원을 쓴다 —
+    // 인증 대기 같은 과도기에 경로가 바뀌면 찍어둔 클립을 잃는다
+    private var uid: String { authService.identityUid }
     private var sessionId: String { "free_\(uid)" }
     private var nickname: String { userService.currentUser?.nickname ?? L("session.member") }
 
@@ -81,7 +82,11 @@ struct ImpromptuSessionView: View {
             // 마무리 모드는 시트만 띄우면 된다. 지도·상단바·하단패널은 쓰지 않는데도
             // 그리면 구글 지도 초기화가 메인 스레드를 붙잡아 시트 예약이 실행되지 못한다.
             if startInFinishMode {
-                Color.black.opacity(0.85).ignoresSafeArea()
+                // 투명하게 둔다 — 아래 촬영 화면이 그대로 보이고, 마무리 시트만
+                // 카메라 위로 올라온 것처럼 읽힌다. 검은 판을 깔면 화면이 한 번
+                // 통째로 바뀌었다가 시트가 뜨는 것으로 보여 흐름이 끊긴다.
+                // (시트 자체의 딤 처리는 시스템이 해 준다)
+                Color.clear.ignoresSafeArea()
             } else {
                 mapLayer
                 topBar
@@ -200,19 +205,6 @@ struct ImpromptuSessionView: View {
             case .end:
                 endSheet
             }
-        }
-        .alert(L("impromptu.discardToday"), isPresented: $showDiscardConfirm) {
-            Button(L("common.cancel"), role: .cancel) {}
-            Button(L("impromptu.discardToday"), role: .destructive) {
-                deleteAllClips()
-                sessionStore.clear()
-                capturedPlaces = []
-                recordedSeconds = 0
-                activeSheet = nil
-                dismiss()
-            }
-        } message: {
-            Text(L("impromptu.discardToday.message"))
         }
         .alert(L("session.integrity.title"), isPresented: $showIntegrityAlert) {
             Button(L("common.ok"), role: .cancel) { }
@@ -541,24 +533,17 @@ struct ImpromptuSessionView: View {
                             .stroke(Color.tteOrange.opacity(0.4), lineWidth: 1))
                 }
 
-                // 탈출구 — 브이로그 생성이 실패하면 예산이 찬 채로 아무것도 못 하게 갇힌다.
-                // 오늘 기록을 버리고 처음부터 시작할 길을 항상 열어 둔다.
-                Button(role: .destructive) {
-                    showDiscardConfirm = true
-                } label: {
-                    Text(L("impromptu.discardToday"))
-                        .font(.tte(13))
-                        .foregroundColor(.secondary)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 40)
-                }
+                // '오늘 기록 버리기'는 촬영 탭의 '오늘 찍은 곳' 시트로 옮겼다.
+                // 지우는 일은 한 곳에 모으는 게 찾기 쉽고, '오늘을 마칠까요?'라는
+                // 만드는 화면에서 '계속 기록할게요' 바로 아래에 파괴적인 버튼을 두면
+                // 오조작 위험도 크다. (탈출구 자체는 그쪽에 그대로 살아 있다)
             }
             .padding(.horizontal, 20)
 
             Spacer().frame(height: 36)
         }
         .onAppear { tutorial.advance(to: .chooseVlogOnly) }
-        .presentationDetents([.height(tutorial.isOn(.chooseVlogOnly) ? 466 : 430)])
+        .presentationDetents([.height(tutorial.isOn(.chooseVlogOnly) ? 426 : 390)])
         .presentationDragIndicator(.hidden)
         .presentationCornerRadius(28)
     }
@@ -938,6 +923,20 @@ struct ImpromptuSessionView: View {
 
     private func resumeSession(_ session: SavedImpromptuSession) {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+
+        // 세션 폴더 자체가 없으면 '파일이 사라진 것'이 아니라 엉뚱한 곳을 보고 있을
+        // 가능성이 크다(신원이 아직 안 정해졌거나 경로가 어긋난 상황). 그 상태에서
+        // 목록을 정리하면 멀쩡한 하루치 기록을 지운다 — 손대지 않고 그대로 이어간다.
+        let sessionDir = docs.appendingPathComponent("Tteona/Sessions/\(sessionId)")
+        guard FileManager.default.fileExists(atPath: sessionDir.path) else {
+            capturedPlaces = session.places
+            reorderPlaces()
+            recomputeRecordedSeconds()
+            if !capturedPlaces.isEmpty { tutorial.advance(to: .endToday) }
+            if !session.roomIds.isEmpty { activeRoomIds = Set(session.roomIds) }
+            return
+        }
+
         let validatedPlaces = session.places.filter { place in
             let name: String
             if let clipFileName = place.clipFileName {

@@ -2307,6 +2307,213 @@
         }
       }
     },
+    "capture.list.budget": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$d / %2$d sec used"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$d / %2$d秒 使用"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$d / %2$d초 사용"
+          }
+        }
+      }
+    },
+    "capture.list.count": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$d places"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$d か所"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$d곳"
+          }
+        }
+      }
+    },
+    "capture.list.deleteMessage": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The clip from %1$@ will be removed and its seconds returned to your budget."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ で撮影した動画が削除され、使用時間が戻ります。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@에서 찍은 영상이 지워지고, 사용한 시간이 다시 돌아와요."
+          }
+        }
+      }
+    },
+    "capture.list.deleteTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete this clip?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この動画を削除しますか？"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 영상을 지울까요?"
+          }
+        }
+      }
+    },
+    "capture.list.discardAllMessage": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All clips recorded today will be deleted and your budget will reset."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "今日撮影した動画がすべて削除され、撮影時間がリセットされます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "오늘 찍은 영상이 모두 지워지고 촬영 시간이 처음으로 돌아가요."
+          }
+        }
+      }
+    },
+    "capture.list.empty": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing captured yet"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "まだ撮影がありません"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "아직 찍은 곳이 없어요"
+          }
+        }
+      }
+    },
+    "capture.list.keepShooting": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep shooting"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "撮影を続ける"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "계속 찍기"
+          }
+        }
+      }
+    },
+    "capture.list.seconds": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ sec"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@秒"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@초"
+          }
+        }
+      }
+    },
+    "capture.list.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Today's captures"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "今日の撮影"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "오늘 찍은 곳"
+          }
+        }
+      }
+    },
     "capture.progress": {
       "extractionState": "manual",
       "localizations": {
@@ -5556,19 +5763,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Recording and making vlogs stay free without an account"
+            "value": "Recording and your first vlog work without an account"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "撮影とブイログ作成はアカウントなしでも使えます"
+            "value": "撮影と最初のブイログはアカウントなしで作れます"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "촬영과 브이로그 만들기는 가입 없이도 계속 쓸 수 있어요"
+            "value": "촬영과 첫 브이로그는 가입 없이도 만들 수 있어요"
           }
         }
       }
@@ -5625,19 +5832,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sign up to browse travel courses on the map\nand follow them on your own trip."
+            "value": "Sign up to browse travel courses worldwide on the map and in Explore, then follow them."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "登録すると世界の旅コースを地図と一覧で\n見て、そのまま出かけられます。"
+            "value": "登録すると、世界の旅コースを地図と探索で見て、\nそのまま出かけられます。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "가입하면 전 세계 여행 코스를 지도와 목록으로\n둘러보고 따라 떠날 수 있어요."
+            "value": "가입하면 전 세계 여행 코스를 지도와 탐색으로\n둘러보고 따라 떠날 수 있어요."
           }
         }
       }
@@ -7166,19 +7373,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Browse nearby courses on the map,\nor switch to the list for popular ones"
+            "value": "See nearby courses on the map,\nthen switch to Explore for popular ones."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "地図で近くのコースを見て\n一覧に切り替えて人気コースも探せます"
+            "value": "地図で近くのコースを見て、\n「探索」に切り替えて人気コースもチェック"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "지도에서 주변 코스를 보고\n목록으로 바꿔 인기 코스도 둘러보세요"
+            "value": "지도에서 주변 코스를 보고\n탐색으로 바꿔 인기 코스도 둘러보세요"
           }
         }
       }
@@ -7212,19 +7419,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tap the shutter for a 5-second clip.\nYour vlog builds itself — no editing."
+            "value": "Tap the shutter — it records and stops on its own.\nYour vlog is made without any editing."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "シャッターを押すだけで5秒が記録され\n編集なしでブイログになります"
+            "value": "シャッターを押すだけで自動で撮影・停止。\n編集なしでブイログができます"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "셔터만 누르면 5초가 기록돼요\n편집 없이 브이로그가 만들어져요"
+            "value": "셔터만 누르면 알아서 찍히고 멈춰요\n편집 없이 브이로그가 만들어져요"
           }
         }
       }
@@ -7304,19 +7511,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Now just pick your first course\non the map and set off"
+            "value": "Go anywhere today and just tap the shutter.\nYour day becomes a vlog."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "あとは地図で最初のコースを選んで\n出発するだけです"
+            "value": "今日はどこへでも、シャッターを押すだけ。\n一日がブイログとして残ります"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "이제 지도에서 첫 코스를 골라\n떠나볼 일만 남았어요"
+            "value": "오늘 어디든 가서 셔터만 눌러보세요\n하루가 브이로그로 남아요"
           }
         }
       }
@@ -7695,19 +7902,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Records a 5-second video at each place"
+            "value": "Records a short clip at each place"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "各場所で5秒間の動画を撮影します"
+            "value": "各場所で短い動画を撮影します"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "각 장소에서 5초 영상을 촬영해요"
+            "value": "각 장소에서 짧은 영상을 촬영해요"
           }
         }
       }
@@ -7994,19 +8201,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "See travel courses worldwide at a glance.\nPick one you love and set off right away"
+            "value": "The camera is right there when you open the app.\nTap the shutter — it records and stops on its own."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "世界中の旅行コースを地図でひと目で。\n気に入ったコースへすぐ出発しよう"
+            "value": "アプリを開けばすぐカメラ。\nシャッターを押すだけで自動で撮影・停止します"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "전 세계 여행 코스를 지도에서 한눈에.\n마음에 드는 코스로 바로 떠나보세요"
+            "value": "앱을 열면 바로 카메라예요.\n셔터만 누르면 알아서 찍히고 멈춰요"
           }
         }
       }
@@ -8017,19 +8224,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Discover courses on the map"
+            "value": "Open and shoot"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "地図でコースを発見"
+            "value": "開いてすぐ撮影"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "지도에서 코스 발견"
+            "value": "켜자마자 촬영"
           }
         }
       }
@@ -8040,19 +8247,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Naru lets you know when you arrive.\nJust 5 seconds each captures your whole day"
+            "value": "Pick 2, 3, or 5 seconds per place.\nA few seconds each is enough to keep the day."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "場所に到着するとナルがお知らせ。\n5秒ずつでも一日がしっかり記録されます"
+            "value": "2・3・5秒から選んで撮影。\n数秒ずつでも一日が記録されます"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "장소에 도착하면 나루가 알려드려요.\n5초씩만 담아도 하루가 기록돼요"
+            "value": "2·3·5초 중에 골라 담아요.\n몇 초씩만 모여도 하루가 기록돼요"
           }
         }
       }
@@ -8063,19 +8270,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Arrive, then film just 5 seconds"
+            "value": "A few seconds, many places"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "到着したら、たった5秒撮影"
+            "value": "短く、いくつもの場所で"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "도착하면, 딱 5초 촬영"
+            "value": "여러 곳을 짧게짧게"
           }
         }
       }
@@ -13836,19 +14043,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tap 'Capture here' to record this moment in 5 seconds!\nFree plan fits up to 6 places"
+            "value": "Tap the shutter to capture this moment!\nFree accounts can record up to 30 seconds a day."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "「ここで撮影」をタップして、この瞬間を5秒の動画に！\n無料でも6か所まで残せます"
+            "value": "シャッターを押してこの瞬間を残しましょう！\n無料でも1日30秒まで撮れます"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "'여기서 촬영'을 눌러 이 순간을 5초 영상으로 남겨봐요!\n무료로도 장소 6곳까지 담을 수 있어요"
+            "value": "셔터를 눌러 이 순간을 짧은 영상으로 남겨봐요!\n무료로도 하루 30초까지 담을 수 있어요"
           }
         }
       }
@@ -13882,19 +14089,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "You captured one place this time — but even on the free plan, a single 'My Today' can hold up to 6 places, 5 seconds each. Make your next trip even richer!"
+            "value": "You captured one place this time. Free accounts get 30 seconds a day — pick 2, 3, or 5 seconds and capture more places!"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "今回は1か所だけでしたが、無料でも「私の今日」1回で最大6か所を5秒ずつ残せます。次の旅はもっと豊かに作ってみましょう！"
+            "value": "今回は1か所でしたが、無料でも1日30秒まで撮れます。2・3・5秒から選んでもっと多くの場所を残してみましょう！"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "이번엔 한 곳만 담았지만, 무료로도 '나의 오늘' 한 번에 최대 6곳을 5초씩 담을 수 있어요. 다음 여행은 더 풍성하게 만들어봐요!"
+            "value": "이번엔 한 곳만 담았지만, 무료로도 하루 30초까지 담을 수 있어요. 2·3·5초 중에 골라 여러 곳을 담아보세요!"
           }
         }
       }
@@ -13928,19 +14135,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Your first place chip is in! Now tap 'End today'\nto turn it into a vlog"
+            "value": "Your first place is captured!\nTap ✓ at the top right to turn it into a vlog."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "最初の場所チップができました！「今日を終了」をタップして\nVlogにしてみましょう"
+            "value": "最初の場所が入りました！\n右上の✓を押してブイログにしましょう"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "첫 장소 칩이 생겼어요! 이제 '오늘 종료'를 눌러\n브이로그로 만들어봐요"
+            "value": "첫 장소가 담겼어요!\n오른쪽 위 ✓를 눌러 브이로그로 만들어봐요"
           }
         }
       }
@@ -13974,19 +14181,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Let's make your first travel vlog together!\nTap 'My Today' to begin"
+            "value": "Let's make your first vlog together!\nJust tap the shutter on the Capture tab."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "旅のハイライト、Vlogを一緒に作りましょう！\n「私の今日」をタップしてスタート"
+            "value": "旅のハイライト、ブイログを一緒に作りましょう！\n撮影タブでシャッターを押すだけです"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "여행의 하이라이트, 브이로그를 같이 만들어봐요!\n'나의 오늘'을 눌러 시작해요"
+            "value": "여행의 하이라이트, 브이로그를 같이 만들어봐요!\n촬영 탭에서 셔터만 누르면 시작이에요"
           }
         }
       }
@@ -14020,19 +14227,19 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tap 'Create vlog only'!"
+            "value": "Tap \"Vlog only\"!"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "「Vlogだけ作成」をタップ！"
+            "value": "「Vlogだけ作る」を押してみましょう！"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "'브이로그만 생성하기'를 눌러봐요!"
+            "value": "'Vlog만 만들기'를 눌러봐요!"
           }
         }
       }

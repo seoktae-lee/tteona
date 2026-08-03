@@ -879,8 +879,10 @@ struct VlogGenerationView: View {
             vlogURL = mainURL
             onVlogCompleted?()
             Haptics.success()
-            // 발자취 적재 — 브이로그가 완성된 여행만 지도에 칠해진다 (실패해도 흐름 방해 없음)
-            if let uid = Auth.auth().currentUser?.uid {
+            // 발자취 적재 — 브이로그가 완성된 여행만 지도에 칠해진다 (실패해도 흐름 방해 없음).
+            // 발자취는 계정 기능이라 게스트(익명)는 제외한다 — 규칙이 막으므로 거부만 쌓인다.
+            if let user = Auth.auth().currentUser, !user.isAnonymous {
+                let uid = user.uid
                 let recordCourse = course
                 let recordSessionId = sessionId
                 Task {
