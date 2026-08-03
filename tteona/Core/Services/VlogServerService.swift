@@ -189,7 +189,11 @@ actor VlogServerService {
             df.dateFormat = "yyyy.MM.dd  HH:mm"
             let placesPayload: [[String: Any]] = clips.map { clip in
                 let shot = (try? FileManager.default.attributesOfItem(atPath: clip.file.path)[.creationDate] as? Date) ?? Date()
-                return ["order": clip.place.order, "placeName": clip.place.placeName, "shotAt": df.string(from: shot)]
+                // 장소별 한 줄 문구를 함께 실어 보낸다 — 서체·크기·표시항목은 공통이고 이것만 다르다
+                return ["order": clip.place.order,
+                        "placeName": clip.place.placeName,
+                        "shotAt": df.string(from: shot),
+                        "caption": style.caption(for: clip.place.clipFileName)]
             }
             jobId = try await createJob(
                 userId: userId,
@@ -347,7 +351,9 @@ actor VlogServerService {
                 // 색은 키만 보낸다 — 서버가 자기 표에서 색값을 찾는다(VlogSubtitleColor 주석 참고)
                 "subtitleFields": style.fields.rawValue,
                 "subtitleColor": style.color.rawValue,
-                "caption": style.sanitizedCaption,
+                // 장소별 문구는 places[]에 실린다. 이 전역 값은 구버전 서버 호환용으로만 남긴다.
+                "caption": "",
+                "subtitleHold": style.holdsSubtitle,
                 "places": placesPayload,
             ])
             let (data, resp) = try await URLSession.shared.data(for: req)

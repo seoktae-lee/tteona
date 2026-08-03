@@ -110,8 +110,15 @@ struct VlogSubtitleStyle: Equatable {
     var scale: VlogFontScale = .medium
     var fields: VlogSubtitleFields = .both
     var color: VlogSubtitleColor = .orange
-    /// 유저가 직접 적는 한 줄. 빈 문자열이면 그리지 않는다.
-    var caption: String = ""
+    /// 자막을 클립이 끝날 때까지 띄워 둘지.
+    /// 꺼두면 지금처럼 2.5초만 보이고 사라진다 — 장면을 가리지 않는 대신 놓치기도 쉽다.
+    var holdsSubtitle: Bool = false
+
+    /// 장소별 한 줄 문구. 키는 클립 파일명 — 순번은 재정렬로 바뀔 수 있어 파일명에 묶는다.
+    ///
+    /// 서체·크기·표시항목·색은 브이로그 전체에 공통이고, **이 문구만 장소마다 다르다.**
+    /// (예전엔 한 줄을 브이로그 하나에 하나만 두어 모든 클립에 같은 말이 반복됐다)
+    var captions: [String: String] = [:]
 
     static let `default` = VlogSubtitleStyle()
 
@@ -119,11 +126,18 @@ struct VlogSubtitleStyle: Equatable {
     /// 서버도 같은 상한을 다시 적용한다(클라이언트를 믿지 않는다).
     static let captionMaxLength = 20
 
-    var sanitizedCaption: String {
-        let oneLine = caption
+    /// 한 줄이라는 약속을 지키기 위한 정리 — 줄바꿈·앞뒤 공백을 걷어내고 길이를 자른다.
+    static func sanitize(_ raw: String) -> String {
+        let oneLine = raw
             .components(separatedBy: .newlines).joined(separator: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        return String(oneLine.prefix(Self.captionMaxLength))
+        return String(oneLine.prefix(captionMaxLength))
+    }
+
+    /// 해당 클립에 적힌 문구 (없으면 빈 문자열)
+    func caption(for clipFileName: String?) -> String {
+        guard let clipFileName else { return "" }
+        return Self.sanitize(captions[clipFileName] ?? "")
     }
 }
 

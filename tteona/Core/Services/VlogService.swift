@@ -11,14 +11,15 @@ class VlogService {
                       onProgress: @escaping (Double) -> Void) async throws -> URL {
         let places = course.places
 
-        var segments: [(asset: AVURLAsset, placeName: String, date: Date)] = []
+        var segments: [(asset: AVURLAsset, placeName: String, date: Date, clipFileName: String?)] = []
         for place in places {
             let url = Self.clipURL(place: place, sessionId: sessionId)
             guard FileManager.default.fileExists(atPath: url.path) else {
                 dlog("[Vlog] skip \(place.placeName) — file not found")
                 continue
             }
-            segments.append((AVURLAsset(url: url), place.placeName, creationDate(of: url)))
+            segments.append((AVURLAsset(url: url), place.placeName,
+                             creationDate(of: url), place.clipFileName))
             dlog("[Vlog] found clip: \(url.lastPathComponent)")
         }
         guard !segments.isEmpty else { throw VlogError.noClips }
@@ -47,7 +48,7 @@ class VlogService {
 
     // MARK: - Composition + CALayer 오버레이 + 페이드 전환
     private func buildComposition(
-        segments: [(asset: AVURLAsset, placeName: String, date: Date)],
+        segments: [(asset: AVURLAsset, placeName: String, date: Date, clipFileName: String?)],
         style: VlogSubtitleStyle = .default,
         watermark: Bool = true,
         onProgress: @escaping (Double) -> Void
@@ -65,6 +66,8 @@ class VlogService {
         struct SegInfo {
             let placeName: String
             let date: Date
+            /// 장소별 한 줄 문구를 찾는 키 — 순번은 재정렬로 바뀌므로 파일명에 묶는다
+            let clipFileName: String?
             let startTime: CMTime
             let duration: CMTime
             let size: CGSize            // 회전 반영된 표시 크기 (렌더 크기 결정용)
@@ -107,6 +110,7 @@ class VlogService {
             segInfos.append(SegInfo(
                 placeName: seg.placeName,
                 date: seg.date,
+                clipFileName: seg.clipFileName,
                 startTime: cursor,
                 duration: duration,
                 size: displaySize,
@@ -197,6 +201,7 @@ class VlogService {
             let bandLayer = makeTextLayer(
                 placeName: info.placeName,
                 dateStr: Self.fmt(info.date),
+                clipFileName: info.clipFileName,
                 size: outputSize,
                 style: style,
                 startSec: startSec,
@@ -298,6 +303,7 @@ class VlogService {
     private func makeTextLayer(
         placeName: String,
         dateStr: String,
+        clipFileName: String?,
         size: CGSize,
         style: VlogSubtitleStyle,
         startSec: Double,
@@ -335,7 +341,7 @@ class VlogService {
         if style.fields.showsTime, !dateStr.isEmpty {
             lines.append(makeLine(dateStr, wanted: subSize, advanceRatio: 1.8, weight: .regular))
         }
-        let caption = style.sanitizedCaption
+        let caption = style.caption(for: clipFileName)
         if !caption.isEmpty {
             lines.append(makeLine(caption, wanted: subSize, advanceRatio: 1.8, weight: .regular))
         }
@@ -367,7 +373,8 @@ class VlogService {
 
         // CoreAnimation 타임라인 기준 애니메이션 (beginTime = composition 시간)
         // 텍스트는 클립 시작 후 2.5초만 표시, fade in 0.4s / fade out 0.4s
-        let showDuration = min(2.5, clipDuration)
+        // 유지 옵션을 켜면 클립이 끝날 때까지 자막을 띄운다 (서버와 같은 규칙)
+        let showDuration = style.holdsSubtitle ? clipDuration : min(2.5, clipDuration)
         let fadeIn = 0.4
         let fadeOut = 0.4
 

@@ -102,6 +102,18 @@ struct NavGuideOverlay: View {
     }
 
     private var step: GuideStep { steps[stepIndex] }
+
+    /// 탭 단계의 아이콘·이름 — **탭바와 같은 값**을 쓴다.
+    /// 여기에 따로 적어 두면 탭 구성이 바뀔 때 안내만 조용히 낡는다(실제로 그랬다).
+    private func tabBadge(_ index: Int) -> (icon: String, name: String)? {
+        switch index {
+        case MainTabView.Tab.capture:  return ("camera.fill", L("tab.capture"))
+        case MainTabView.Tab.discover: return ("map.fill", L("tab.discover"))
+        case MainTabView.Tab.chat:     return ("bubble.left.and.bubble.right.fill", L("tab.chat"))
+        case MainTabView.Tab.profile:  return ("person.crop.circle.fill", L("tab.profile"))
+        default: return nil
+        }
+    }
     private var isLast: Bool { stepIndex == steps.count - 1 }
 
     // 스포트라이트 크기 — 탭 아이콘+라벨을 감싸는 캡슐
@@ -176,12 +188,22 @@ struct NavGuideOverlay: View {
             if step.tabIndex != nil { Spacer() }
 
             VStack(spacing: 16) {
-                Image(step.mascot)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: step.tabIndex == nil ? 150 : 100,
-                           height: step.tabIndex == nil ? 150 : 100)
-                    .floating(amplitude: 6, speed: 1.3)
+                // 탭을 소개하는 단계에서는 그 탭의 아이콘을 세운다 —
+                // 어느 탭 이야기인지 글보다 그림이 먼저 알려준다.
+                // 환영·마무리 카드는 탭과 무관하므로 마스코트를 그대로 쓴다.
+                if let badge = step.tabIndex.flatMap(tabBadge) {
+                    Image(systemName: badge.icon)
+                        .font(.tte(30, .semibold))
+                        .foregroundColor(.tteOrange)
+                        .frame(width: 68, height: 68)
+                        .background(Circle().fill(Color.tteOrange.opacity(0.12)))
+                } else {
+                    Image(step.mascot)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 150, height: 150)
+                        .floating(amplitude: 6, speed: 1.3)
+                }
 
                 // 첫 카드에서 언어를 바꿀 수 있게 — 이후 화면은 전부 그 언어로 이어진다
                 if stepIndex == 0 {
@@ -189,8 +211,16 @@ struct NavGuideOverlay: View {
                 }
 
                 VStack(spacing: 8) {
+                    // 탭 이름과 설명 제목을 줄로 나눈다 —
+                    // "촬영 — 오늘을 남기기"처럼 한 줄에 붙이면 어디까지가 탭 이름인지 읽히지 않는다
+                    if let badge = step.tabIndex.flatMap(tabBadge) {
+                        Text(badge.name)
+                            .font(.tte(13, .bold))
+                            .foregroundColor(.tteOrange)
+                            .tracking(1.5)
+                    }
                     Text(step.title)
-                        .font(.tte(20, .bold))
+                        .font(.tte(22, .bold))
                         .foregroundColor(.tteDarkGray)
                     Text(step.message)
                         .font(.tte(15))

@@ -23,8 +23,14 @@ struct VlogGenerationView: View {
     @AppStorage("vlog.fontScale") private var vlogFontScale = VlogFontScale.medium.rawValue
     @AppStorage("vlog.subtitleFields") private var vlogFields = VlogSubtitleFields.both.rawValue
     @AppStorage("vlog.subtitleColor") private var vlogColor = VlogSubtitleColor.orange.rawValue
-    /// 캡션만 저장하지 않는다 — 이번 여행에 붙이는 문구라, 다음 브이로그에 지난 글이 남으면 안 된다.
-    @State private var caption = ""
+    /// 장소별 한 줄 문구 (클립 파일명 → 문구). 저장하지 않는다 —
+    /// 이번 여행에 붙이는 말이라 다음 브이로그에 지난 글이 남으면 안 된다.
+    @State private var captions: [String: String] = [:]
+    /// 지금 문구를 편집 중인 클립
+    @State private var editingClip: String?
+    /// 클립 첫 프레임 캐시 (클립 파일명 → 이미지)
+    @State private var previewFrames: [String: UIImage] = [:]
+    @AppStorage("vlog.subtitleHold") private var subtitleHold = false
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var pro = ProManager.shared
     @ObservedObject private var tutorial = VlogTutorial.shared
@@ -60,7 +66,7 @@ struct VlogGenerationView: View {
 
     private let vlogService = VlogService()
 
-    enum Phase { case chooseFormat, chooseBgm, chooseText, generating, preview, error, guestLimit }
+    enum Phase { case chooseFormat, chooseBgm, chooseText, chooseCaption, generating, preview, error, guestLimit }
 
     /// 게스트가 이미 첫 브이로그를 받았는가. 판정은 **진입할 때** 한다 —
     /// 포맷·음악·자막까지 다 고르게 해 놓고 마지막에 막으면 헛수고를 시키는 셈이다.
@@ -80,6 +86,7 @@ struct VlogGenerationView: View {
                 }
         case .chooseBgm: chooseBgmView
         case .chooseText: chooseTextView
+        case .chooseCaption: chooseCaptionView
         case .generating: generatingView
         case .preview:
             if let url = vlogURL {
@@ -460,7 +467,8 @@ struct VlogGenerationView: View {
     private var selectedColor: VlogSubtitleColor { VlogSubtitleColor(rawValue: vlogColor) ?? .orange }
     private var subtitleStyle: VlogSubtitleStyle {
         VlogSubtitleStyle(font: selectedFont, scale: selectedScale,
-                          fields: selectedFields, color: selectedColor, caption: caption)
+                          fields: selectedFields, color: selectedColor,
+                          holdsSubtitle: subtitleHold, captions: captions)
     }
     /// 미리보기에 쓸 실제 첫 장소명 (없으면 샘플)
     private var previewPlaceName: String {
@@ -590,11 +598,18 @@ struct VlogGenerationView: View {
                             }
                         }
 
-                        // 한 줄 문구
-                        Text(L("vlog.textSheet.captionLabel"))
-                            .font(.tte(13, .semibold))
-                            .foregroundColor(.white.opacity(0.75))
-                        captionField
+                        // 자막 유지 — 끄면 2.5초만 보이고 사라진다
+                        Toggle(isOn: $subtitleHold) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(L("vlog.textSheet.holdLabel"))
+                                    .font(.tte(14, .semibold))
+                                    .foregroundColor(.white)
+                                Text(L("vlog.textSheet.holdHint"))
+                                    .font(.tte(12))
+                                    .foregroundColor(.white.opacity(0.6))
+                            }
+                        }
+                        .tint(.tteOrange)
                     }
                     .padding(.horizontal, 24)
                     .padding(.top, 22)
@@ -603,9 +618,10 @@ struct VlogGenerationView: View {
                 .scrollDismissesKeyboard(.interactively)
 
                 Button {
-                    phase = .generating
+                    editingClip = clipsForCaption.first?.clipFileName
+                    phase = .chooseCaption
                 } label: {
-                    Text(L("session.makeVlog"))
+                    Text(L("common.next"))
                         .font(.tte(17, .bold))
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity).frame(height: 56)
@@ -625,6 +641,238 @@ struct VlogGenerationView: View {
     }
 
     /// 선택한 서체·크기가 실제 자막처럼 얹힌 미리보기
+    // MARK: - 장소별 한 줄 문구
+
+    /// 실제로 클립이 있는 장소만 — 파일이 없는 장소는 브이로그에 안 들어간다
+    private var clipsForCaption: [Place] {
+        course.places.filter { place in
+            FileManager.default.fileExists(
+                atPath: VlogService.clipURL(place: place, sessionId: sessionId).path)
+        }
+    }
+
+    private var chooseCaptionView: some View {
+        ZStack {
+            VlogAuroraBackground()
+            VStack(spacing: 0) {
+                Spacer(minLength: 30)
+                Text(L("vlog.caption.title"))
+                    .font(.tte(22, .bold))
+                    .foregroundColor(.white)
+                Text(L("vlog.caption.subtitle"))
+                    .font(.tte(13))
+                    .foregroundColor(.white.opacity(0.65))
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 6)
+                    .padding(.horizontal, 32)
+
+                // 세로 스크롤 안에 담는다 — 글씨 스타일 화면과 같은 구조.
+                // 가로 칩 줄만 따로 두면 높이가 잡히지 않아 스크롤도 탭도 먹지 않았다.
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 16) {
+                        // 클립이 하나뿐이면 고를 것이 없다 — 칩 줄을 감춘다
+                        if clipsForCaption.count > 1 {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 8) {
+                                    ForEach(clipsForCaption) { place in
+                                        captionChip(place)
+                                    }
+                                }
+                                .padding(.horizontal, 24)
+                            }
+                            .frame(height: 40)
+                        }
+
+                        clipPreviewCard
+                        captionField.padding(.horizontal, 24)
+                    }
+                    .padding(.top, 20)
+                    .padding(.bottom, 12)
+                }
+                .scrollDismissesKeyboard(.interactively)
+
+                Button {
+                    phase = .generating
+                } label: {
+                    Text(L("session.makeVlog"))
+                        .font(.tte(17, .bold))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity).frame(height: 56)
+                        .background(RoundedRectangle(cornerRadius: 16).fill(Color.tteOrange))
+                }
+                .padding(.horizontal, 24)
+
+                Button(L("vlog.back")) { phase = .chooseText }
+                    .font(.tte(14))
+                    .foregroundColor(.white.opacity(0.6))
+                    .padding(.top, 14)
+                    .padding(.bottom, 30)
+            }
+        }
+    }
+
+    private func captionChip(_ place: Place) -> some View {
+        let isOn = editingClip == place.clipFileName
+        let written = !(captions[place.clipFileName ?? ""] ?? "").isEmpty
+        return Button {
+            Haptics.light()
+            editingClip = place.clipFileName
+        } label: {
+            HStack(spacing: 5) {
+                Text("\(place.order)")
+                    .font(.tte(11, .bold))
+                    .foregroundColor(isOn ? .white : .tteOrange)
+                    .frame(width: 18, height: 18)
+                    .background(Circle().fill(isOn ? Color.white.opacity(0.25) : Color.tteOrange.opacity(0.18)))
+                Text(place.placeName)
+                    .font(.tte(13, isOn ? .bold : .medium))
+                    .lineLimit(1)
+                // 이미 적은 곳은 표시해 둔다 — 여러 곳을 오갈 때 어디를 채웠는지 놓치기 쉽다
+                if written {
+                    Image(systemName: "checkmark")
+                        .font(.tte(9, .bold))
+                        .foregroundColor(isOn ? .white : .tteOrange)
+                }
+            }
+            .foregroundColor(isOn ? .white : .white.opacity(0.7))
+            .padding(.horizontal, 12)
+            .frame(height: 38)
+            .background(
+                Capsule().fill(isOn ? Color.tteOrange : Color.white.opacity(0.10))
+            )
+        }
+    }
+
+    /// 완성될 영상과 **같은 비율**로 보여준다.
+    /// 가로로 넓은 카드에 자막을 얹어 두면 실제 결과물이 그렇게 나오는 줄 오해한다 —
+    /// 세로 촬영이면 9:16, 가로면 16:9로 맞춰 잘린 모습까지 그대로 보인다.
+    private var previewAspect: CGFloat { baseFormat == "reels" ? 9.0 / 16.0 : 16.0 / 9.0 }
+    private var previewHeight: CGFloat { baseFormat == "reels" ? 300 : 190 }
+
+    /// 좌우로 넘겨 클립을 오갈 수 있게 한다 — 칩을 정확히 누르는 것보다 손이 편하다.
+    /// 스와이프와 칩은 같은 값(editingClip)을 보므로 어느 쪽으로 바꿔도 함께 움직인다.
+    private var clipPreviewCard: some View {
+        TabView(selection: previewSelection) {
+            ForEach(clipsForCaption) { place in
+                previewCard(for: place)
+                    .tag(place.clipFileName ?? "")
+            }
+        }
+        .tabViewStyle(.page(indexDisplayMode: .never))
+        .frame(height: previewHeight + 16)
+    }
+
+    private var previewSelection: Binding<String> {
+        Binding(
+            get: { editingClip ?? clipsForCaption.first?.clipFileName ?? "" },
+            set: { editingClip = $0 }
+        )
+    }
+
+    private func previewCard(for place: Place) -> some View {
+        let h = previewHeight
+        let w = h * previewAspect
+        let key = place.clipFileName ?? ""
+        return ZStack {
+            if let frame = previewFrames[key] {
+                Image(uiImage: frame)
+                    .resizable()
+                    .scaledToFill()          // 서버의 cover 크롭과 같은 방식
+            } else {
+                LinearGradient(colors: [Color(red: 0.18, green: 0.10, blue: 0.05),
+                                        Color(red: 0.30, green: 0.16, blue: 0.08)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+            }
+
+            VStack(spacing: 4) {
+                if selectedFields.showsPlace {
+                    previewLine(place.placeName, videoWanted: videoPlaceSize,
+                                cardWidth: Double(w), color: selectedColor.color)
+                }
+                if selectedFields.showsTime {
+                    previewLine(Self.previewDateString,
+                                videoWanted: videoPlaceSize * 0.62, cardWidth: Double(w),
+                                color: selectedFields.showsPlace ? .white : selectedColor.color)
+                }
+                let text = VlogSubtitleStyle.sanitize(captions[key] ?? "")
+                if !text.isEmpty {
+                    previewLine(text, videoWanted: videoPlaceSize * 0.62,
+                                cardWidth: Double(w), color: .white)
+                }
+            }
+            .padding(.horizontal, 8)
+        }
+        .frame(width: w, height: h)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.white.opacity(0.15), lineWidth: 1))
+        .shadow(color: .black.opacity(0.35), radius: 14, y: 6)
+        .overlay(alignment: .bottom) {
+            Text(baseFormat == "reels" ? "9:16" : "16:9")
+                .font(.tte(10, .bold))
+                .foregroundColor(.white.opacity(0.8))
+                .padding(.horizontal, 8).padding(.vertical, 3)
+                .background(Capsule().fill(Color.black.opacity(0.45)))
+                .padding(.bottom, 8)
+        }
+        // 페이지마다 자기 프레임을 뽑는다 — 넘기기 전에 옆 장이 미리 준비된다
+        .task { await loadPreviewFrame(for: place) }
+    }
+
+    private var currentPlace: Place? {
+        clipsForCaption.first { $0.clipFileName == editingClip }
+    }
+
+    /// 클립의 첫 프레임을 뽑아 둔다. 한 번 뽑은 건 다시 뽑지 않는다.
+    private func loadPreviewFrame(for place: Place) async {
+        let key = place.clipFileName ?? ""
+        guard !key.isEmpty, previewFrames[key] == nil else { return }
+        let url = VlogService.clipURL(place: place, sessionId: sessionId)
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        let gen = AVAssetImageGenerator(asset: AVURLAsset(url: url))
+        gen.appliesPreferredTrackTransform = true      // 세로 촬영이 눕지 않게
+        gen.maximumSize = CGSize(width: 720, height: 720)
+        if let cg = try? await gen.image(at: CMTime(seconds: 0.3, preferredTimescale: 600)).image {
+            previewFrames[key] = UIImage(cgImage: cg)
+        }
+    }
+
+    private var captionField: some View {
+        VStack(alignment: .trailing, spacing: 6) {
+            TextField("", text: captionBinding,
+                      prompt: Text(L("vlog.caption.placeholder"))
+                        .foregroundColor(.white.opacity(0.35)))
+                .font(.tte(15))
+                .foregroundColor(.white)
+                .submitLabel(.done)
+                .padding(.horizontal, 14)
+                .frame(height: 48)
+                .background(RoundedRectangle(cornerRadius: 14).fill(Color.white.opacity(0.06)))
+            Text("\(currentCaption.count)/\(VlogSubtitleStyle.captionMaxLength)")
+                .font(.tte(11))
+                .foregroundColor(.white.opacity(0.4))
+        }
+    }
+
+    private var currentCaption: String { captions[editingClip ?? ""] ?? "" }
+
+    /// 입력을 한 곳으로 모은다 — 자르기와 햅틱을 onChange에 두면 값을 되돌려 쓸 때
+    /// 다시 불려 한 번의 입력에 햅틱이 두 번 울린다.
+    private var captionBinding: Binding<String> {
+        Binding(
+            get: { currentCaption },
+            set: { raw in
+                guard let key = editingClip else { return }
+                let clamped = VlogSubtitleStyle.sanitize(raw)
+                if clamped == currentCaption {
+                    if raw != currentCaption { Haptics.limitReached() }
+                } else {
+                    Haptics.typing()
+                }
+                captions[key] = clamped
+            }
+        )
+    }
+
     private var textPreviewCard: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 20)
@@ -635,22 +883,19 @@ struct VlogGenerationView: View {
                 )
             // 카드 폭을 알아야 실제 렌더와 같은 규칙으로 크기를 정할 수 있다
             GeometryReader { geo in
-                let inner = Double(geo.size.width) - 32   // 아래 .padding(.horizontal, 16)
-                let base = Double(30 * selectedScale.multiplier)
+                let cardW = Double(geo.size.width)
                 VStack(spacing: 6) {
                     if selectedFields.showsPlace {
-                        previewLine(previewPlaceName, wanted: base, width: inner,
-                                    color: selectedColor.color)
+                        previewLine(previewPlaceName, videoWanted: videoPlaceSize,
+                                    cardWidth: cardW, color: selectedColor.color)
                     }
                     if selectedFields.showsTime {
                         // 강조색은 첫 줄에만 — 장소를 껐다면 시각이 첫 줄이 된다
-                        previewLine(Self.previewDateString, wanted: base * 0.62, width: inner,
+                        previewLine(Self.previewDateString, videoWanted: videoPlaceSize * 0.62,
+                                    cardWidth: cardW,
                                     color: selectedFields.showsPlace ? .white : selectedColor.color)
                     }
-                    if !subtitleStyle.sanitizedCaption.isEmpty {
-                        previewLine(subtitleStyle.sanitizedCaption, wanted: base * 0.62,
-                                    width: inner, color: .white)
-                    }
+                    // 한 줄 문구는 다음 단계(장소별)에서 다룬다 — 여기서는 공통 스타일만 보여준다
                 }
                 .padding(.horizontal, 16)
                 .frame(width: geo.size.width, height: geo.size.height)
@@ -689,15 +934,31 @@ struct VlogGenerationView: View {
     /// 예전엔 여기에만 `.minimumScaleFactor(0.5)`가 걸려 있어 SwiftUI가 몰래 글씨를 줄였다.
     /// 그 탓에 한글 9자만 넘어도 '보통'과 '크게'가 똑같은 크기로 그려져 단계 차이가 사라졌고,
     /// 정작 실제 영상은 줄이지 않고 화면 밖으로 흘려보냈다 — 미리보기가 결과와 어긋난 셈이다.
-    private func previewLine(_ text: String, wanted: Double, width: Double,
+    /// 완성될 영상의 가로 픽셀. 자막 크기·줄임 판정을 여기 기준으로 한다.
+    private var videoWidth: Double { baseFormat == "reels" ? 1080 : 1920 }
+    /// 영상에서 쓰는 장소명 크기 — 서버와 같은 식(짧은 변의 4.2% × 배율)
+    private var videoPlaceSize: Double { 1080 * 0.042 * Double(selectedScale.multiplier) }
+    /// 미리보기는 실제보다 조금 크게 그린다. 그대로 축소하면 9pt라 읽히지 않는다.
+    private static let previewMagnify: Double = 1.7
+
+    /// 자막 한 줄.
+    ///
+    /// **크기와 줄임은 완성될 영상 기준으로 계산한 뒤 미리보기 크기로 옮긴다.**
+    /// 미리보기 카드 폭으로 직접 계산하면, 읽히게 하려고 키운 글자 때문에 폭이 모자란 것으로
+    /// 판정돼 영상에서는 멀쩡한 이름이 여기서만 "푸른마을푸르지오…"처럼 잘린다.
+    /// 그러면 유저는 "안 되는 건가?" 하게 된다 — 실제로 그렇게 보였다.
+    private func previewLine(_ text: String, videoWanted: Double, cardWidth: Double,
                              color: Color) -> some View {
-        let fitted = VlogSubtitleFit.fit(text, wanted: wanted, frameWidth: width)
+        let fitted = VlogSubtitleFit.fit(text, wanted: videoWanted, frameWidth: videoWidth)
+        let shown = fitted.size * (cardWidth / videoWidth) * Self.previewMagnify
         return Text(fitted.text)
-            .font(.custom(selectedFont.postScriptName, size: fitted.size))
+            .font(.custom(selectedFont.postScriptName, size: shown))
             .foregroundColor(color)
             .shadow(color: .black.opacity(0.35), radius: 2, x: 2, y: 2)
             .lineLimit(1)
-            .minimumScaleFactor(0.9)   // 글자폭 어림값 오차만 흡수한다 (축소는 위 규칙이 담당)
+            // 확대해 그리다 카드를 넘칠 수 있다 — 조용히 줄여서 흡수한다.
+            // (영상에서의 줄임 판정은 이미 위에서 끝났으므로 여기서 잘릴 일은 없다)
+            .minimumScaleFactor(0.5)
     }
 
     private func fieldsPill(_ fields: VlogSubtitleFields) -> some View {
@@ -746,41 +1007,6 @@ struct VlogGenerationView: View {
     ///
     /// 자르기와 햅틱을 `onChange`에 두면, 길이를 잘라 값을 되돌려 쓸 때 다시 불려
     /// 한 번의 입력에 햅틱이 두 번 울린다. setter 한 곳으로 모으면 그럴 일이 없다.
-    private var captionBinding: Binding<String> {
-        Binding(
-            get: { caption },
-            set: { raw in
-                // '한 줄 · 글자수' 약속을 입력하는 순간에 지킨다. 렌더러와 서버도 한 번 더 자른다.
-                let oneLine = raw.components(separatedBy: .newlines).joined(separator: " ")
-                let clamped = String(oneLine.prefix(VlogSubtitleStyle.captionMaxLength))
-                if clamped == caption {
-                    // 한도에 막혀 글자가 늘지 않았다 — 무반응이면 고장으로 읽힌다
-                    if raw != caption { Haptics.limitReached() }
-                } else {
-                    Haptics.typing()
-                }
-                caption = clamped
-            }
-        )
-    }
-
-    private var captionField: some View {
-        VStack(alignment: .trailing, spacing: 6) {
-            TextField("", text: captionBinding,
-                      prompt: Text(L("vlog.textSheet.captionPlaceholder"))
-                        .foregroundColor(.white.opacity(0.35)))
-                .font(.tte(15))
-                .foregroundColor(.white)
-                .submitLabel(.done)
-                .padding(.horizontal, 14)
-                .frame(height: 48)
-                .background(RoundedRectangle(cornerRadius: 14).fill(Color.white.opacity(0.06)))
-            Text("\(caption.count)/\(VlogSubtitleStyle.captionMaxLength)")
-                .font(.tte(11))
-                .foregroundColor(.white.opacity(0.4))
-        }
-    }
-
     private func sizePill(_ scale: VlogFontScale) -> some View {
         let isOn = selectedScale == scale
         return Button {
@@ -1071,6 +1297,10 @@ struct VlogPreviewView: View {
     @State private var showShareSheet = false
     @State private var thumbPickerItem: PhotosPickerItem?
     @State private var thumbState: ThumbState = .idle
+    @State private var showAuthFromPreview = false
+
+    /// 게스트가 첫 브이로그를 막 손에 넣은 상태인가 — 회원가입을 권하기 가장 좋은 순간
+    private var isGuest: Bool { Auth.auth().currentUser?.isAnonymous == true }
 
     private enum ThumbState { case idle, uploading, done, failed }
 
@@ -1161,6 +1391,12 @@ struct VlogPreviewView: View {
                         thumbnailButton(courseId: courseId)
                     }
 
+                    // 결과물을 손에 쥔 지금이 가입을 권하기 가장 좋은 순간이다.
+                    // 예전엔 '두 번째 브이로그를 만들려 할 때'만 권했는데, 첫 브이로그를 받고
+                    // 앱을 닫은 사람은 그 화면을 영영 보지 못했다 — 정작 붙잡아야 할 쪽이다.
+                    // 막지 않는다. 영상은 이미 앨범에 저장됐고, 여기서는 이어가자고 권하기만 한다.
+                    if isGuest { signUpInvite }
+
                     Button {
                         showShareSheet = true
                     } label: {
@@ -1200,6 +1436,47 @@ struct VlogPreviewView: View {
     }
 
     // MARK: - 탐색탭 썸네일 선택
+
+    private var signUpInvite: some View {
+        VStack(spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
+                Image("tteoni-thumbsup")
+                    .resizable().scaledToFit()
+                    .frame(width: 44, height: 44)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(L("vlog.invite.title"))
+                        .font(.tte(15, .bold))
+                        .foregroundColor(.white)
+                    Text(L("vlog.invite.message"))
+                        .font(.tte(13))
+                        .foregroundColor(.white.opacity(0.7))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+
+            Button {
+                Haptics.light()
+                showAuthFromPreview = true
+            } label: {
+                Text(L("vlog.invite.signUp"))
+                    .font(.tte(15, .bold))
+                    .foregroundColor(.tteOrange)
+                    .frame(maxWidth: .infinity).frame(height: 46)
+                    .background(RoundedRectangle(cornerRadius: 13).fill(Color.white))
+            }
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 18)
+                .fill(Color.white.opacity(0.10))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18)
+                        .stroke(Color.white.opacity(0.18), lineWidth: 1)
+                )
+        )
+        .fullScreenCover(isPresented: $showAuthFromPreview) { AuthView() }
+    }
 
     private func thumbnailButton(courseId: String) -> some View {
         PhotosPicker(selection: $thumbPickerItem, matching: .images) {

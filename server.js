@@ -1528,7 +1528,7 @@ const vlogUpload = multer({
 //                   places: [{order, placeName, shotAt?}] }  (shotAt: 클립 촬영시각 표시 문자열)
 app.post('/api/vlog/jobs', requireAuth, vlogJobLimiter, async (req, res) => {
   const { courseId, courseName, tag, formats, bgm, places, watermark, priority, shareRoomIds, font, fontScale,
-          subtitleFields, subtitleColor, caption } = req.body || {};
+          subtitleFields, subtitleColor, caption, subtitleHold } = req.body || {};
   const userId = req.uid || req.body?.userId; // 검증된 uid 우선
   if (!userId || !Array.isArray(places) || places.length === 0) {
     return res.status(400).json({ error: 'userId and places required' });
@@ -1560,7 +1560,11 @@ app.post('/api/vlog/jobs', requireAuth, vlogJobLimiter, async (req, res) => {
       `INSERT INTO vlog_jobs (user_id, course_id, course_name, status, clips, options)
        VALUES ($1, $2, $3, 'uploading', $4, $5) RETURNING id`,
       [userId, courseId || 'free', courseName || '나의 오늘',
-       JSON.stringify(places),
+       JSON.stringify(places.map(pl => ({
+         ...pl,
+         // 장소마다 다른 한 줄. 서체·크기·표시항목은 전체 공통이고 이 문구만 다르다.
+         caption: sanitizeCaption(pl?.caption) || null,
+       }))),
        JSON.stringify({ tag: tag || null, formats: wanted,
                         bgm: typeof bgm === 'string' ? bgm.slice(0, 200) : null,
                         watermark: watermark !== false,
@@ -1571,7 +1575,8 @@ app.post('/api/vlog/jobs', requireAuth, vlogJobLimiter, async (req, res) => {
                         // 표시 항목·강조색·한 줄 문구 — 화이트리스트 밖은 렌더 시 기본값으로 폴백
                         subtitleFields: VLOG_SUBTITLE_FIELDS.includes(subtitleFields) ? subtitleFields : null,
                         subtitleColor: VLOG_SUBTITLE_COLORS[subtitleColor] ? subtitleColor : null,
-                        caption: sanitizeCaption(caption) || null,
+                        caption: sanitizeCaption(caption) || null,   // 구버전 앱의 전역 문구
+                        subtitleHold: subtitleHold === true,
                         shareRoomIds: shareRooms,
                         shareToken: shareRooms.length > 0 ? randomBytes(16).toString('hex') : null })]
     );
@@ -1778,7 +1783,8 @@ async function composeVlog(job) {
   const fontScale = VLOG_FONT_SCALE[opts.fontScale] || 1.0;
   const subFields = VLOG_SUBTITLE_FIELDS.includes(opts.subtitleFields) ? opts.subtitleFields : 'both';
   const subColor = VLOG_SUBTITLE_COLORS[opts.subtitleColor] || VLOG_SUBTITLE_COLORS.orange;
-  const subCaption = sanitizeCaption(opts.caption);
+  const subCaption = sanitizeCaption(opts.caption);   // 구버전 앱 폴백
+  const holdSubtitle = opts.subtitleHold === true;
   await setProgress(4);
 
   const enc = ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21', '-pix_fmt', 'yuv420p',
@@ -1843,9 +1849,11 @@ async function composeVlog(job) {
       const isLast = i === clips.length - 1;
       const D = Math.max(info.duration, 0.8);
 
-      // 자막 표시: 클립 시작 후 최대 2.5초, 페이드 인/아웃 0.4초 (알파 커브)
-      const show = Math.min(2.5, D).toFixed(2);
-      const fadeOutStart = Math.max(0.4, Math.min(2.5, D) - 0.4).toFixed(2);
+      // 자막 표시 구간. 기본은 2.5초만 보이고 사라진다(장면을 가리지 않게).
+      // 유지 옵션을 켜면 클립이 끝날 때까지 띄워 둔다 — 페이드 곡선은 그대로 재사용한다.
+      const showFor = holdSubtitle ? D : Math.min(2.5, D);
+      const show = showFor.toFixed(2);
+      const fadeOutStart = Math.max(0.4, showFor - 0.4).toFixed(2);
       const alpha = `'if(lt(t,0.4),t/0.4,if(lt(t,${fadeOutStart}),1,if(lt(t,${show}),(${show}-t)/0.4,0)))'`;
       const placeSize = Math.round(Math.min(W, H) * 0.042 * fontScale);
       const dateSize2 = Math.round(placeSize * 0.62);
@@ -1874,7 +1882,10 @@ async function composeVlog(job) {
       const lines = [];
       if (subFields !== 'time' && c.placeName) pushLine('sub', c.placeName, placeSize, 1.486);
       if (subFields !== 'place' && c.shotAt)   pushLine('date', String(c.shotAt), dateSize2, 1.8);
-      if (subCaption)                          pushLine('cap', subCaption, dateSize2, 1.8);
+      // 이 클립에 적힌 문구가 우선. 없으면 구버전 앱이 보낸 전역 문구를 쓴다
+      // (업데이트하지 않은 사용자의 문구가 조용히 사라지지 않도록).
+      const clipCaption = sanitizeCaption(c.caption) || subCaption;
+      if (clipCaption)                         pushLine('cap', clipCaption, dateSize2, 1.8);
       // 화면 세로 중앙을 기준으로 전체 묶음을 가운데 맞춘다
       const totalTextH = lines.reduce((a, l) => a + l.advance, 0);
       let cursor = 0;
