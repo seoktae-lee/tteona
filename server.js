@@ -1247,20 +1247,33 @@ app.get('/api/places/tour-photo', requireAuth, async (req, res) => {
     }
 
     // 2) TourAPI 키워드 검색
-    const url = 'https://apis.data.go.kr/B551011/KorService2/searchKeyword2'
-      + `?serviceKey=${encodeURIComponent(TOUR_API_KEY)}`
-      + '&numOfRows=20&pageNo=1&MobileOS=IOS&MobileApp=tteona&_type=json'
-      + `&keyword=${encodeURIComponent(name)}`;
+    const searchTour = async (keyword) => {
+      const url = 'https://apis.data.go.kr/B551011/KorService2/searchKeyword2'
+        + `?serviceKey=${encodeURIComponent(TOUR_API_KEY)}`
+        + '&numOfRows=20&pageNo=1&MobileOS=IOS&MobileApp=tteona&_type=json'
+        + `&keyword=${encodeURIComponent(keyword)}`;
+      try {
+        if (!TOUR_API_KEY) throw new Error('TOUR_API_KEY not set');
+        const j = await (await fetch(url)).json();
+        const raw = j?.response?.body?.items?.item;
+        return Array.isArray(raw) ? raw : (raw ? [raw] : []);
+      } catch (e) {
+        console.error('[TourPhoto] fetch error:', e.message);
+        return [];
+      }
+    };
 
-    let items = [];
-    try {
-      if (!TOUR_API_KEY) throw new Error('TOUR_API_KEY not set');
-      const r = await fetch(url);
-      const j = await r.json();
-      const raw = j?.response?.body?.items?.item;
-      items = Array.isArray(raw) ? raw : (raw ? [raw] : []);
-    } catch (e) {
-      console.error('[TourPhoto] fetch error:', e.message);
+    let items = await searchTour(name);
+
+    // TourAPI는 '성심당 본점'처럼 지점 표기가 붙으면 0건을 준다 — 등재명은 '성심당'이라서.
+    // 그럴 때만 지점 표기를 떼고 한 번 더 찾는다. (아래 이름 규칙이 여전히 검증하므로
+    // 엉뚱한 결과가 이 재시도로 통과하지는 않는다)
+    if (items.length === 0) {
+      const tokens = name.trim().split(/\s+/);
+      const last = tokens[tokens.length - 1];
+      if (tokens.length > 1 && /^(본점|본관|정문|입구|\d+호점|[가-힣A-Za-z0-9]{1,4}점)$/.test(last)) {
+        items = await searchTour(tokens.slice(0, -1).join(' '));
+      }
     }
 
     // 사진 있는 항목만
@@ -1272,22 +1285,51 @@ app.get('/api/places/tour-photo', requireAuth, async (req, res) => {
     const norm = s => (s || '').replace(/\s+/g, '').toLowerCase();
     const target = norm(name);
 
+    // 엉뚱한 장소 사진이 뜨던 원인은 여기였다.
+    //
+    // 옛 로직은 "결과 중 가장 가까운 것"을 골랐다. 그런데 '서울역'을 검색하면
+    // TourAPI는 **롯데아울렛 서울역점에 입점한 매장 20개**를 돌려주고, 그것들의 좌표는
+    // 전부 역에서 0.13km다 — 거리로는 절대 못 거른다. 그래서 GUESS 매장 내부 사진이
+    // '서울역' 썸네일로 올라갔다. 이름 판정이 없던 게 진짜 원인이다.
+    //
+    // 이제 **이름으로 먼저 자른다.** 사진이 없는 편이 남의 장소 사진보다 낫다
+    // (여기서 못 고르면 404 → 앱이 Google Places로 폴백한다).
+    //   · 정확 일치                              → 5km 이내
+    //   · 뒤에 괄호/대괄호 꾸밈말만 붙은 경우      → 1km 이내
+    //     ('성산일출봉 [유네스코 세계자연유산]')
+    //   · 검색어가 더 길고 뒤가 지점 표기인 경우   → 1km 이내
+    //     ('성심당 본점' → '성심당')
+    //   · 그 외는 전부 탈락
+    //     ('게스 롯데아울렛 서울역점', '전주한옥마을 도서관', '서울역사박물관')
+    const clean = v => (v || '').trim().replace(/\s+/g, ' ').toLowerCase();
+    const DECORATION = /^[\s]*[\[\(\-–~,·:]/;              // 뒤에 붙은 게 꾸밈말인가
+    const BRANCH = /^\s*(본점|본관|정문|입구|\d+호점|[가-힣A-Za-z0-9]{1,4}점)$/;  // 지점 표기인가
+    const q = clean(name);
+    const hasCoord = !isNaN(lat) && !isNaN(lng);
+    const LIMIT_KM = [5, 1];   // [정확 일치, 부분 일치]
+
     let picked = null;
     if (withImage.length > 0) {
-      // 1) 이름 정확 일치 항목이 있으면 그 안에서만 선택 (별빛야행 같은 파생 콘텐츠 배제)
-      const exact = withImage.filter(it => norm(it.title) === target);
-      const pool = exact.length > 0 ? exact : withImage;
+      const scored = withImage.map(it => {
+        const t = clean(it.title);
+        let nameRank = 2;
+        if (t === q) nameRank = 0;
+        else if (t.startsWith(q) && DECORATION.test(t.slice(q.length))) nameRank = 1;
+        else if (q.startsWith(t) && t.length >= 2 && BRANCH.test(q.slice(t.length))) nameRank = 1;
 
-      picked = pool
-        .map(it => ({
-          it,
-          // 좌표 없으면 거리 0, 있으면 0.5km 단위로 버킷화해 근접 동률은 타입으로 판정
-          distBucket: (!isNaN(lat) && !isNaN(lng))
-            ? Math.round(haversineKm(lat, lng, parseFloat(it.mapy), parseFloat(it.mapx)) * 2)
-            : 0,
-          typeRank: typeRank[it.contenttypeid] ?? 5,
-        }))
-        .sort((a, b) => (a.distBucket - b.distBucket) || (a.typeRank - b.typeRank))[0].it;
+        const d = hasCoord ? haversineKm(lat, lng, parseFloat(it.mapy), parseFloat(it.mapx)) : NaN;
+        return { it, nameRank, dist: d, typeRank: typeRank[it.contenttypeid] ?? 5 };
+      });
+
+      const usable = scored.filter(s => {
+        if (s.nameRank === 2) return false;
+        if (!hasCoord || isNaN(s.dist)) return s.nameRank === 0;   // 좌표를 모르면 정확 일치만 신뢰
+        return s.dist <= LIMIT_KM[s.nameRank];
+      });
+
+      picked = usable.sort((a, b) => (a.nameRank - b.nameRank)
+                                  || ((a.dist || 0) - (b.dist || 0))
+                                  || (a.typeRank - b.typeRank))[0]?.it || null;
     }
 
     // 3) 결과 캐싱 (양성 30일 / 음성 7일)

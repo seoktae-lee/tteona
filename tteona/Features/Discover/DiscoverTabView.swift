@@ -12,26 +12,46 @@ struct DiscoverTabView: View {
     @AppStorage("discover.mode") private var modeRaw = Mode.map.rawValue
     private var mode: Mode { Mode(rawValue: modeRaw) ?? .map }
 
+    /// 지도의 코스 선택 상태. MainView가 아니라 여기서 들고 있는다 —
+    /// 미리보기 카드가 뜨면 아래 토글과 겹치므로 토글을 접어야 하는데,
+    /// 그 판단을 하려면 토글 주인이 선택 상태를 알아야 한다.
+    @StateObject private var mapSelection = MapSelection()
+
     /// 토글이 차지하는 높이 — 두 화면의 상단 콘텐츠를 이만큼 내려 겹치지 않게 한다
     private static let toggleHeight: CGFloat = 34
     private static let contentInset: CGFloat = toggleHeight + 12
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            // 활성인 쪽만 그린다.
-            //
-            // 처음엔 전환 시 상태를 잃지 않으려고 둘 다 살려두고 opacity로 감췄는데,
-            // 그 구조가 버그를 두 개 만들었다 — 감춘 쪽이 터치를 가로챘고(필터 버튼 먹통),
-            // SwiftUI 갱신 사이클이 깨져 지도 마커가 영영 갱신되지 않았다.
-            // 전환할 때 다시 불러오는 비용이 그 대가보다 훨씬 싸다.
-            if mode == .map {
-                MainView()
-            } else {
-                ExploreGridView(topInset: 8)
+        // 토글을 ZStack 형제로 두지 않고 **오버레이**로 얹는다.
+        //
+        // 지도(UIViewRepresentable)를 ZStack에 형제와 나란히 두면 SwiftUI 갱신 사이클이
+        // 깨진다. **실측으로 확인했다** — 핀을 눌러 선택 상태를 바꿔도 카드가 만들어지지
+        // 않았고(값은 들어가는데 뷰가 안 생김), 오버레이로 바꾸자 즉시 정상 동작했다.
+        // 예전에 둘 다 살려두고 opacity로 감췄을 때 "지도 마커가 영영 갱신되지 않던" 것도
+        // 같은 계열이다. 이 파일에서 두 번 반복된 함정이니 형제로 되돌리지 말 것.
+        //
+        // 촬영 탭이 생기기 전에는 MainView가 TabView의 직접 자식이라 형제가 없었고,
+        // 그때는 카드가 곧바로 떴다. 그 구조에 최대한 가깝게 되돌린다.
+        content
+            .overlay(alignment: .bottom) {
+                // 지도를 가리지 않도록 하단 플로팅 — '나의 오늘' CTA가 촬영 탭으로 가며 빈 자리다
+                // 코스 카드가 떠 있는 동안은 접는다. 카드를 보는 사람은 그 코스를 판단하는
+                // 중이지 화면을 갈아탈 생각이 없고, 그대로 두면 CTA 위에 겹쳐 앉는다.
+                if mapSelection.course == nil && mapSelection.place == nil {
+                    modeToggle
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                }
             }
+    }
 
-            // 지도를 가리지 않도록 하단 플로팅 — '나의 오늘' CTA가 촬영 탭으로 가며 빈 자리다
-            modeToggle
+    /// 활성인 쪽만 그린다. 전환할 때 다시 불러오는 비용이, 감춘 화면이 터치를 가로채고
+    /// 갱신 사이클을 깨뜨리는 대가보다 훨씬 싸다.
+    @ViewBuilder
+    private var content: some View {
+        if mode == .map {
+            MainView(selection: mapSelection)
+        } else {
+            ExploreGridView(topInset: 8)
         }
     }
 

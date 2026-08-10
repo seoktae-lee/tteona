@@ -1,4 +1,5 @@
 import Foundation
+import CoreLocation
 import Combine
 import FirebaseFirestore
 
@@ -76,6 +77,39 @@ class CourseService: ObservableObject {
         let fetched = snapshot?.documents.compactMap { try? $0.data(as: Course.self) } ?? []
         let existingIds = Set(courses.map(\.courseId))
         let merged = fetched.filter { !existingIds.contains($0.courseId) && !blockedUserIds.contains($0.authorId) }
+        guard !merged.isEmpty else { return }
+        courses.append(contentsOf: merged)
+    }
+
+    /// 좌표 주변 코스를 불러와 병합한다. 지도에서 장소를 검색해 이동했을 때,
+    /// 인기 상위 300에 못 든 그 동네 코스가 안 보이는 것을 메운다.
+    ///
+    /// Firestore에 지리 인덱스가 없다. 대신 `region`이 코스 생성 시
+    /// 대표 장소의 위도로 만들어진다("37.4°N") — 사실상 유일한 좌표 단서라 이걸 쓴다.
+    /// 밴드는 0.1° 단위(약 11km)라 경계에서 놓치지 않도록 위아래 한 칸씩 같이 본다.
+    /// 위도 밴드는 경도를 가리지 못하므로, 받아온 뒤 실제 거리로 한 번 더 거른다.
+    func fetchCoursesNear(latitude: Double, longitude: Double,
+                          radiusKm: Double = 60, blockedUserIds: [String] = []) async {
+        let bands = [-0.1, 0.0, 0.1].map { String(format: "%.1f°N", latitude + $0) }
+        let origin = CLLocation(latitude: latitude, longitude: longitude)
+
+        var fetched: [Course] = []
+        for band in bands {
+            let snapshot = try? await db.collection("courses")
+                .whereField("region", isEqualTo: band)
+                .limit(to: 100)
+                .getDocuments()
+            fetched += snapshot?.documents.compactMap { try? $0.data(as: Course.self) } ?? []
+        }
+
+        let existingIds = Set(courses.map(\.courseId))
+        let merged = fetched.filter { course in
+            guard !existingIds.contains(course.courseId),
+                  !blockedUserIds.contains(course.authorId),
+                  let main = course.mainPlace else { return false }
+            let d = origin.distance(from: CLLocation(latitude: main.latitude, longitude: main.longitude))
+            return d <= radiusKm * 1000
+        }
         guard !merged.isEmpty else { return }
         courses.append(contentsOf: merged)
     }

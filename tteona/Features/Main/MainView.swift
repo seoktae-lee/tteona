@@ -1,6 +1,20 @@
 import SwiftUI
+import Combine
 import MapKit
 import GoogleMaps
+
+/// 지도에서 고른 코스를 담는 상자.
+///
+/// `@State`로 두면 마커 탭 클로저가 붙잡은 MainView 구조체의 State가 현재 화면의 저장소와
+/// 끊겨 있을 때 값만 대입되고 화면은 그대로다 — 실제로 그랬다(설정 로그는 찍히는데
+/// 카드가 만들어지지 않았다). 참조 타입이면 어느 시점에 붙잡힌 클로저든 같은 객체에 닿는다.
+@MainActor
+final class MapSelection: ObservableObject {
+    @Published var course: Course?
+    /// 검색해서 찍은 장소. 코스 카드와 같은 자리를 쓰고, 둘 중 하나라도 떠 있으면
+    /// 컨테이너가 지도/탐색 토글을 접는다 — 그래서 지역 상태가 아니라 여기 둔다.
+    @Published var place: PlaceSearchService.SearchResult?
+}
 
 struct MainView: View {
     /// DiscoverTabView의 지도/목록 토글이 차지하는 높이 — 상단 검색바를 그만큼 내린다
@@ -32,7 +46,17 @@ struct MainView: View {
     @State private var searchText = ""
     @FocusState private var searchFocused: Bool
     @State private var isLoadingCourses = false
-    @State private var previewCourse: Course?
+
+    /// 지도 검색을 코스 이름에만 걸어두면 '양재고'처럼 **장소**를 찾는 사람은 빈손으로 나간다.
+    /// 네이버·카카오 지도가 그러듯 입력하는 동안 장소 후보를 같이 보여주고,
+    /// 고르면 그 자리로 이동해 핀을 세운다.
+    @StateObject private var placeSearch = PlaceSearchService()
+    /// 검색으로 찍은 장소 핀. 코스 핀과 별개로 지도에 하나만 떠 있는다.
+    private var searchedPlace: PlaceSearchService.SearchResult? { selection.place }
+    /// 코스 선택 상태를 **바깥에서 주입받는다.**
+    /// 미리보기 카드가 떠 있는 동안 컨테이너(DiscoverTabView)의 지도/탐색 토글을
+    /// 숨겨야 하는데, 그 토글은 이 뷰가 아니라 컨테이너 소유라서 상태를 공유해야 한다.
+    @ObservedObject var selection: MapSelection
 
     enum CourseFilter { case all, liked, mine }
     // 구글맵 카메라 — cameraCommand에 값 세팅하면 그 위치로 이동(유저 팬 방해 없이)
@@ -54,10 +78,10 @@ struct MainView: View {
         }
 
         let results: [Course]
-        if searchText.isEmpty {
+        if courseNameQuery.isEmpty {
             results = base
         } else {
-            let query = searchText.lowercased()
+            let query = courseNameQuery.lowercased()
             results = base.filter {
                 $0.courseName.lowercased().contains(query) ||
                 $0.region.lowercased().contains(query) ||
@@ -67,6 +91,31 @@ struct MainView: View {
 
         return results.sorted { $0.likeCount > $1.likeCount }
     }
+
+    /// 검색해서 찍은 장소 핀의 id — 코스 핀과 구분하려고 접두사를 붙인다
+    private static let searchedPinId = "searched-place"
+
+    // 지도에 찍을 마커 = 코스 핀 + (있으면) 검색한 장소 핀
+    private var mapMarkers: [GoogleMapMarker] {
+        var markers = courseMarkers
+        if let place = searchedPlace {
+            markers.append(GoogleMapMarker(
+                id: Self.searchedPinId,
+                coordinate: CLLocationCoordinate2D(latitude: place.latitude, longitude: place.longitude),
+                label: place.name,
+                symbolName: "mappin"
+            ))
+        }
+        return markers
+    }
+
+    /// 코스를 **이름으로** 거를 때 쓸 검색어.
+    ///
+    /// 검색창은 두 가지 뜻을 겸한다 — "이 이름의 코스를 걸러줘"와 "이 장소로 가줘".
+    /// 장소를 골랐다면 뒤쪽이 확정된 것이므로 이름 필터는 손을 뗀다.
+    /// (안 그러면 '판교백화점'을 찾아간 순간 그 자리에 있는 '판교 수다 코스'가
+    ///  이름이 다르다는 이유로 걸러져, 코스가 하나도 없는 것처럼 보였다)
+    private var courseNameQuery: String { selection.place == nil ? searchText : "" }
 
     // 지도에 찍을 코스 마커 (대표 장소 기준, 태그별 핀 + 코스명 라벨)
     private var courseMarkers: [GoogleMapMarker] {
@@ -85,7 +134,10 @@ struct MainView: View {
         ZStack(alignment: .bottom) {
             mapLayer
 
-            if !searchText.isEmpty && filteredCourses.isEmpty {
+            // 이 오버레이는 '코스'가 없다는 뜻이다. 장소를 찾아 핀을 세웠거나 후보를
+            // 고르는 중이라면 사용자는 막다른 길이 아니므로 띄우지 않는다.
+            if !courseNameQuery.isEmpty && filteredCourses.isEmpty
+                && searchedPlace == nil && placeSearch.results.isEmpty {
                 emptySearchResultOverlay
                     .transition(.opacity.combined(with: .scale(scale: 0.9)))
                     .zIndex(1)
@@ -112,22 +164,31 @@ struct MainView: View {
 
             topBar
             locationButton
-            if previewCourse == nil {
+            if selection.course == nil {
                 createCourseButton
             }
-            if let course = previewCourse {
-                CoursePreviewCard(course: course) {
-                    withAnimation(.spring(response: 0.3)) { previewCourse = nil }
+            if let place = searchedPlace, selection.course == nil {
+                searchedPlaceCard(place)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .zIndex(3)
+                    .padding(.bottom, 83)
+            }
+            if let course = selection.course {
+                CoursePreviewCard(course: course,
+                                  distanceKm: distanceKm(to: course)) {
+                    withAnimation(.spring(response: 0.3)) { selection.course = nil }
                     selectedCourse = course
                 } onDismiss: {
-                    withAnimation(.spring(response: 0.3)) { previewCourse = nil }
+                    withAnimation(.spring(response: 0.3)) { selection.course = nil }
                 }
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .zIndex(3)
                 .padding(.bottom, 83)
             }
         }
-        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: previewCourse == nil)
+        // ZStack 전체에 애니메이션을 걸면 그 안의 지도(UIViewRepresentable)까지 대상이 된다.
+        // 갱신 그래프에 순환이 있는 상태에서는 이 트랜잭션이 통째로 버려져,
+        // previewCourse를 바꿔도 카드가 아예 만들어지지 않았다.
         .ignoresSafeArea()
         .task {
             isLoadingCourses = true
@@ -237,21 +298,33 @@ struct MainView: View {
         }
     }
 
+    /// 내 위치에서 코스 대표 장소까지의 거리(km).
+    /// 부산 코스를 서울에서 보는 사람에게는 이게 가장 먼저 필요한 정보다.
+    /// 위치 권한이 없으면 nil — 그 줄만 빠진다.
+    private func distanceKm(to course: Course) -> Double? {
+        guard let me = locationService.currentLocation,
+              let main = course.mainPlace else { return nil }
+        let target = CLLocation(latitude: main.latitude, longitude: main.longitude)
+        return me.distance(from: target) / 1000
+    }
+
     // MARK: - Map
     private var mapLayer: some View {
         GoogleMapView(
-            markers: courseMarkers,
+            markers: mapMarkers,
             showsUserLocation: true,
             initialCamera: gmsCamera(center: CLLocationCoordinate2D(latitude: 36.5, longitude: 127.8), latDelta: 5),
             cameraCommand: $cameraCommand,
             onMarkerTap: { courseId in
+                // 검색 핀은 코스가 아니다 — 코스 조회로 넘기면 조용히 무시될 뿐이라 명시한다
+                guard courseId != Self.searchedPinId else { return }
                 guard let course = filteredCourses.first(where: { $0.courseId == courseId }) else { return }
                 if activeSessionStore.hasTodaySession {
                     pendingNewCourse = course
                     showCourseResumeSheet = true
                 } else {
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                        previewCourse = course
+                        selection.course = course
                     }
                 }
             }
@@ -281,10 +354,21 @@ struct MainView: View {
                                 searchFocused = false
                                 Task { await performMapSearch() }
                             }
+                            .onChange(of: searchText) { _, text in
+                                // 한국 밖에서는 MapKit으로 넘어가야 해서 기준 좌표를 먼저 맞춘다
+                                if let me = locationService.currentLocation?.coordinate {
+                                    placeSearch.searchCoordinate = me
+                                }
+                                let q = text.trimmingCharacters(in: .whitespaces)
+                                if q.isEmpty { placeSearch.results = [] }
+                                else { placeSearch.searchDebounced(q) }
+                            }
                         
                         if !searchText.isEmpty {
                             Button {
                                 searchText = ""
+                                placeSearch.results = []
+                                selection.place = nil
                             } label: {
                                 Image(systemName: "xmark.circle.fill")
                                     .foregroundColor(.tteMediumGray)
@@ -362,8 +446,83 @@ struct MainView: View {
     }
 
     // MARK: - 검색 제안 카드
+    //
+    // 입력은 두 가지 뜻을 가진다 — "이 이름의 코스를 걸러줘"와 "이 장소로 가줘".
+    // 예전엔 뒤쪽이 '지도에서 찾기' 한 줄에 숨어 있어서 '양재고'를 친 사람은
+    // 코스 0개만 보고 막다른 길에 섰다. 이제 장소 후보를 직접 늘어놓는다.
     private var searchSuggestionCard: some View {
         VStack(spacing: 0) {
+            if !placeSearch.results.isEmpty {
+                sectionHeader(L("main.searchSectionPlaces"))
+                ForEach(placeSearch.results.prefix(5)) { place in
+                    Button { selectPlace(place) } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "mappin.circle.fill")
+                                .font(.tte(15))
+                                .foregroundColor(.tteOrange)
+                                .frame(width: 22)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(place.name)
+                                    .font(.tte(14, .medium))
+                                    .foregroundColor(.tteDarkGray)
+                                    .lineLimit(1)
+                                if !place.address.isEmpty {
+                                    Text(place.address)
+                                        .font(.tte(11))
+                                        .foregroundColor(.tteMediumGray)
+                                        .lineLimit(1)
+                                }
+                            }
+                            Spacer()
+                            Image(systemName: "arrow.up.left")
+                                .font(.tte(12))
+                                .foregroundColor(.tteMediumGray)
+                        }
+                        .padding(.horizontal, 14)
+                        .frame(height: 48)
+                        .contentShape(Rectangle())
+                    }
+                }
+                Divider().padding(.leading, 46)
+            } else if placeSearch.isSearching {
+                HStack(spacing: 10) {
+                    ProgressView().scaleEffect(0.7).frame(width: 22)
+                    Text(L("main.searchSectionPlaces"))
+                        .font(.tte(13))
+                        .foregroundColor(.tteMediumGray)
+                    Spacer()
+                }
+                .padding(.horizontal, 14)
+                .frame(height: 44)
+                Divider().padding(.leading, 46)
+            } else {
+                // 카카오·MapKit이 아무것도 못 찾은 경우에도 길은 남겨둔다 —
+                // 지역명처럼 '장소'가 아닌 입력은 여기로 흡수된다.
+                Button {
+                    searchFocused = false
+                    Task { await performMapSearch() }
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "location.magnifyingglass")
+                            .font(.tte(14))
+                            .foregroundColor(.tteOrange)
+                            .frame(width: 22)
+                        Text(L("main.goToRegion", searchText.trimmingCharacters(in: .whitespaces)))
+                            .font(.tte(14, .medium))
+                            .foregroundColor(.tteDarkGray)
+                            .lineLimit(1)
+                        Spacer()
+                        Image(systemName: "arrow.up.left")
+                            .font(.tte(12))
+                            .foregroundColor(.tteMediumGray)
+                    }
+                    .padding(.horizontal, 14)
+                    .frame(height: 44)
+                    .contentShape(Rectangle())
+                }
+                Divider().padding(.leading, 46)
+            }
+
             // 현재 입력으로 필터된 코스 수 — 탭하면 키보드를 내리고 지도에서 확인
             Button {
                 searchFocused = false
@@ -382,38 +541,104 @@ struct MainView: View {
                 .frame(height: 44)
                 .contentShape(Rectangle())
             }
-
-            Divider().padding(.leading, 46)
-
-            // 지역/장소로 지도 이동 — 기존 onSubmit의 숨은 동작을 눈에 보이는 선택지로
-            Button {
-                searchFocused = false
-                Task { await performMapSearch() }
-            } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "location.magnifyingglass")
-                        .font(.tte(14))
-                        .foregroundColor(.tteOrange)
-                        .frame(width: 22)
-                    Text(L("main.goToRegion", searchText.trimmingCharacters(in: .whitespaces)))
-                        .font(.tte(14, .medium))
-                        .foregroundColor(.tteDarkGray)
-                        .lineLimit(1)
-                    Spacer()
-                    Image(systemName: "arrow.up.left")
-                        .font(.tte(12))
-                        .foregroundColor(.tteMediumGray)
-                }
-                .padding(.horizontal, 14)
-                .frame(height: 44)
-                .contentShape(Rectangle())
-            }
         }
         .background(
             RoundedRectangle(cornerRadius: 16)
                 .fill(Color.tteBackground)
-                .shadow(color: .black.opacity(0.12), radius: 10, y: 3)
+                .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
         )
+    }
+
+    /// 검색해서 찾아간 장소를 지도 위에서 한 번 더 확인시켜 준다.
+    /// 핀만 세우면 "여기가 맞나?"에서 끝나는데, 사람이 장소를 찾아온 진짜 이유는
+    /// 대개 "여기 뭐 있지?"라서 근처 코스 수를 같이 보여준다.
+    private func searchedPlaceCard(_ place: PlaceSearchService.SearchResult) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "mappin.circle.fill")
+                .font(.tte(22))
+                .foregroundColor(.tteOrange)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(place.name)
+                    .font(.tte(16, .bold))
+                    .foregroundColor(.tteDarkGray)
+                    .lineLimit(1)
+                if !place.address.isEmpty {
+                    Text(place.address)
+                        .font(.tte(11.5))
+                        .foregroundColor(.tteMediumGray)
+                        .lineLimit(1)
+                }
+                let count = nearbyCourseCount(of: place)
+                Text(count > 0 ? L("main.nearbyCourses", count) : L("main.nearbyCoursesNone"))
+                    .font(.tte(12, .medium))
+                    .foregroundColor(count > 0 ? .tteOrange : .tteMediumGray)
+                    .padding(.top, 1)
+            }
+
+            Spacer(minLength: 0)
+
+            Button {
+                withAnimation(.spring(response: 0.3)) { selection.place = nil }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.tte(12, .semibold))
+                    .foregroundColor(.tteMediumGray)
+                    .frame(width: 28, height: 28)
+                    .background(Circle().fill(Color(UIColor.secondarySystemBackground)))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(L("main.clearSearchedPlace"))
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color.tteBackground)
+                .shadow(color: .black.opacity(0.12), radius: 14, y: -3)
+        )
+        .padding(.horizontal, 12)
+    }
+
+    /// 지도에 이미 올라와 있는 코스 중 그 장소 5km 안에 있는 것
+    private func nearbyCourseCount(of place: PlaceSearchService.SearchResult) -> Int {
+        let origin = CLLocation(latitude: place.latitude, longitude: place.longitude)
+        return filteredCourses.filter { course in
+            guard let main = course.mainPlace else { return false }
+            return origin.distance(from: CLLocation(latitude: main.latitude,
+                                                    longitude: main.longitude)) <= 5000
+        }.count
+    }
+
+    private func sectionHeader(_ title: String) -> some View {
+        HStack {
+            Text(title)
+                .font(.tte(11, .semibold))
+                .foregroundColor(.tteMediumGray)
+            Spacer()
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 10)
+        .padding(.bottom, 2)
+    }
+
+    /// 고른 장소로 지도를 옮기고 핀을 세운다.
+    /// 그 동네 코스도 함께 불러온다 — 장소를 찾아온 사람이 진짜 원하는 건 대개 "여기 뭐 있지?"다.
+    private func selectPlace(_ place: PlaceSearchService.SearchResult) {
+        Haptics.light()
+        searchFocused = false
+        withAnimation(.spring(response: 0.3)) { selection.place = place }
+        withAnimation(.spring(response: 0.3)) { selection.course = nil }
+        cameraCommand = gmsCamera(
+            center: CLLocationCoordinate2D(latitude: place.latitude, longitude: place.longitude),
+            latDelta: 0.02
+        )
+        Task {
+            await courseService.fetchCoursesNear(
+                latitude: place.latitude, longitude: place.longitude,
+                blockedUserIds: userService.currentUser?.blockedUserIds ?? []
+            )
+        }
     }
 
     // MARK: - 나라 크기에 맞는 줌 레벨로 이동
@@ -515,7 +740,7 @@ struct MainView: View {
                     pendingNewCourse = nil
                     if let tapped {
                         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                            previewCourse = tapped
+                            selection.course = tapped
                         }
                     }
                 } label: {
@@ -732,15 +957,21 @@ extension MainView {
         guard !q.isEmpty else { return }
 
         // 카카오 우선(한국 지명 정확) → 없으면 MapKit 폴백 (PlaceSearchService 내부 처리)
-        // 검색한 지역의 코스를 별도로 불러와 병합 — 인기 상위 300에 못 든 지역 코스 보완
+        // 이름으로 지은 region("서울"·"제주")을 쓰던 초기 코스를 위해 텍스트 조회도 남겨둔다
         await courseService.fetchCoursesInRegion(q, blockedUserIds: userService.currentUser?.blockedUserIds ?? [])
 
         let svc = PlaceSearchService()
         await svc.search(q)
         if let first = svc.results.first {
+            selection.place = first
             cameraCommand = gmsCamera(
                 center: CLLocationCoordinate2D(latitude: first.latitude, longitude: first.longitude),
                 latDelta: 0.1
+            )
+            // 지금 코스는 region이 위도 밴드라 좌표로 찾아야 주변 코스가 딸려온다
+            await courseService.fetchCoursesNear(
+                latitude: first.latitude, longitude: first.longitude,
+                blockedUserIds: userService.currentUser?.blockedUserIds ?? []
             )
         }
     }
@@ -761,98 +992,129 @@ extension MKCoordinateRegion {
 // MARK: - 지도 핀 탭 미니카드
 struct CoursePreviewCard: View {
     let course: Course
+    /// 내 위치에서의 거리(km). 위치를 모르면 nil이고 그 항목만 빠진다.
+    var distanceKm: Double? = nil
     let onTap: () -> Void
     let onDismiss: () -> Void
     @State private var isAuthorVerified = false
     @State private var authorNickname: String = ""
     @EnvironmentObject private var userService: UserService
 
+    // 정보 순서만 뒤집었다. 카드는 **작게** 유지한다.
+    //
+    // 예전엔 썸네일이 먼저 나오고 판단에 필요한 제목·규모·인기가 그 아래 눌려 있었다.
+    // 핀을 누른 사람의 질문은 "이거 갈까?"라서 그 답부터 위에 놓고 썸네일을 보조로 내렸다.
+    // 대신 전체 폭 CTA 같은 걸 넣어 카드를 키우지 않는다 — 지도를 가리면 핀을 여러 개
+    // 눌러 비교하는 이 화면의 쓸모가 사라지고, 실제로 탭바 뒤로 깔리기도 했다.
+    // 상세로 가는 길은 카드 전체 탭 + 오른쪽 셰브론 하나로 충분하다.
     var body: some View {
         VStack(spacing: 0) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 2.5)
-                    .fill(Color(UIColor.tertiaryLabel))
-                    .frame(width: 36, height: 5)
-                HStack {
-                    Spacer()
-                    Button(action: onDismiss) {
-                        Image(systemName: "xmark")
-                            .font(.tte(12, .semibold))
-                            .foregroundColor(.tteMediumGray)
-                            .frame(width: 28, height: 28)
-                            .background(Circle().fill(Color(UIColor.secondarySystemBackground)))
+            handle
+
+            HStack(alignment: .center, spacing: 10) {
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 5) {
+                        Text(course.courseName)
+                            .font(.tte(17, .bold))
+                            .foregroundColor(.tteDarkGray)
+                            .lineLimit(1)
+                            .layoutPriority(1)
+                        if isAuthorVerified { VerifiedBadge(creatorLabel: nil) }
+                        if !authorNickname.isEmpty {
+                            Text(authorNickname)
+                                .font(.tte(12))
+                                .foregroundColor(.tteMediumGray)
+                                .lineLimit(1)
+                        }
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(L("main.closePreview"))
+                    metaRow
                 }
-                .padding(.horizontal, 16)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.tte(15, .semibold))
+                    .foregroundColor(.tteMediumGray)
             }
-            .padding(.top, 10)
-            .padding(.bottom, 12)
+            .padding(.horizontal, 18)
 
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
+                HStack(spacing: 8) {
                     // 연속 중복 장소는 하나로 병합해 표시 (저장 데이터는 원본 유지)
                     ForEach(course.displayPlaces) { place in
                         PlacePhotoThumbnail(place: place)
                     }
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, 18)
             }
             .frame(height: 130)
-
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 5) {
-                        Text(course.courseName)
-                            .font(.tte(16, .bold))
-                            .foregroundColor(.tteDarkGray)
-                            .lineLimit(1)
-                        if isAuthorVerified {
-                            VerifiedBadge(creatorLabel: nil)
-                        }
-                    }
-                    HStack(spacing: 6) {
-                        Text(course.tag.displayName)
-                            .font(.tte(11, .semibold))
-                            .foregroundColor(.tteOrange)
-                            .padding(.horizontal, 8).padding(.vertical, 3)
-                            .background(Capsule().fill(Color.tteOrange.opacity(0.12)))
-                        if isAuthorVerified {
-                            Text(authorNickname)
-                                .font(.tte(11, .medium))
-                                .foregroundColor(.tteOrange.opacity(0.8))
-                        }
-                        Text(L("main.placeCount", course.displayPlaces.count))
-                            .font(.tte(12))
-                            .foregroundColor(.tteMediumGray)
-                        HStack(spacing: 3) {
-                            Image(systemName: "heart.fill").font(.tte(11))
-                            Text("\(course.likeCount)").font(.tte(12))
-                        }
-                        .foregroundColor(.tteMediumGray)
-                    }
-                }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.tte(14, .semibold))
-                    .foregroundColor(.tteOrange)
-            }
-            .padding(.horizontal, 16)
             .padding(.top, 10)
-            .padding(.bottom, 20)
+            .padding(.bottom, 6)
         }
         .background(
             RoundedRectangle(cornerRadius: 24)
                 .fill(Color.tteBackground)
                 .shadow(color: .black.opacity(0.12), radius: 16, y: -4)
         )
+        .contentShape(Rectangle())
         .onTapGesture { onTap() }
         .task {
             let author = await userService.fetchAuthor(uid: course.authorId)
             isAuthorVerified = author?.isVerified ?? false
             authorNickname = author?.nickname ?? ""
         }
+    }
+
+    private var handle: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 2.5)
+                .fill(Color(UIColor.tertiaryLabel))
+                .frame(width: 36, height: 5)
+            HStack {
+                Spacer()
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark")
+                        .font(.tte(12, .semibold))
+                        .foregroundColor(.tteMediumGray)
+                        .frame(width: 28, height: 28)
+                        .background(Circle().fill(Color(UIColor.secondarySystemBackground)))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(L("main.closePreview"))
+            }
+            .padding(.horizontal, 16)
+        }
+        .padding(.top, 10)
+        .padding(.bottom, 10)
+    }
+
+    /// 판단에 필요한 것만 한 줄로 — 태그 · 거리 · 장소 수 · 좋아요
+    private var metaRow: some View {
+        HStack(spacing: 8) {
+            Text(course.tag.displayName)
+                .font(.tte(11, .semibold))
+                .foregroundColor(.tteOrange)
+                .padding(.horizontal, 8).padding(.vertical, 3)
+                .background(Capsule().fill(Color.tteOrange.opacity(0.12)))
+
+            if let km = distanceKm {
+                Label(km < 1 ? L("main.distanceNear")
+                             : L("main.distanceKm", Int(km.rounded())),
+                      systemImage: "location.fill")
+                    .font(.tte(12))
+                    .labelStyle(.titleAndIcon)
+                    .foregroundColor(.tteMediumGray)
+            }
+
+            Text(L("main.placeCount", course.displayPlaces.count))
+                .font(.tte(12))
+                .foregroundColor(.tteMediumGray)
+
+            HStack(spacing: 3) {
+                Image(systemName: "heart.fill").font(.tte(11))
+                Text("\(course.likeCount)").font(.tte(12))
+            }
+            .foregroundColor(.tteMediumGray)
+        }
+        .lineLimit(1)
     }
 }
 
@@ -946,7 +1208,7 @@ struct PlacePhotoThumbnail: View {
 }
 
 #Preview {
-    MainView()
+    MainView(selection: MapSelection())
         .environmentObject(AuthService())
         .environmentObject(CourseService())
 }

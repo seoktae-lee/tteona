@@ -10,6 +10,7 @@ struct GoogleMapMarker: Identifiable {
     var pinImageName: String? = nil // 태그별 핀 에셋 (예: pin_couple). 없으면 기본/번호 핀
     var label: String? = nil        // 핀 아래 항상 보이는 라벨 (코스명)
     var badgeNumber: Int? = nil     // 지정 시 번호 핀(동선용)
+    var symbolName: String? = nil   // 번호 대신 넣을 SF Symbol (예: 검색 핀의 mappin)
     var highlighted: Bool = false   // 선택 강조 (더 크게 + 헤일로)
     var icon: UIImage? = nil        // 직접 렌더한 커스텀 아이콘 (있으면 최우선)
     var iconAnchor: CGPoint = CGPoint(x: 0.5, y: 0.5)  // icon 사용 시 앵커
@@ -67,6 +68,9 @@ struct GoogleMapView: UIViewRepresentable {
     }
 
     func updateUIView(_ mapView: GMSMapView, context: Context) {
+        // 콜백만 최신으로 — 이걸 빠뜨리면 탭 콜백이 첫 렌더에 묶인다
+        context.coordinator.onMarkerTap = onMarkerTap
+        context.coordinator.onCameraIdle = onCameraIdle
         mapView.isMyLocationEnabled = showsUserLocation
         context.coordinator.rebuildMarkers(on: mapView, markers: markers)
         context.coordinator.rebuildPolyline(on: mapView, coords: polyline, dashed: dashedPolyline)
@@ -100,7 +104,18 @@ struct GoogleMapView: UIViewRepresentable {
     class Coordinator: NSObject, GMSMapViewDelegate {
         static let labelZoomThreshold: Float = 9.0   // 이 줌 이상일 때만 코스명 라벨 표시(낮출수록 더 일찍 뜸)
 
-        let parent: GoogleMapView
+        // 부모 구조체를 통째로 붙잡지 않고 **콜백만** 보관한다.
+        //
+        // makeCoordinator는 한 번만 불리므로, 여기에 처음 값을 잡아 두면 마커 탭 콜백이
+        // 첫 렌더에 묶인다. MainView는 구조체라 클로저가 당시 상태를 스냅샷하므로,
+        // 지도가 만들어질 때 코스가 비어 있었다면 이후 핀이 그려져도 탭은 빈 목록을 뒤진다
+        // — 핀은 보이는데 눌리지 않고, 탭을 오가 뷰를 새로 만들어야 고쳐진다.
+        //
+        // 그렇다고 parent 구조체 자체를 갱신하면 그 안의 @Binding까지 매 갱신마다 붙잡게 되어
+        // 갱신 그래프에 되먹임이 생긴다(updateUIView가 끝없이 반복돼 화면이 멎었다).
+        // 필요한 건 콜백뿐이므로 그것만 갈아끼운다.
+        var onMarkerTap: ((String) -> Void)?
+        var onCameraIdle: ((GMSCameraPosition) -> Void)?
         private var markerViews: [String: GMSMarker] = [:]
         private var lastSignature: String = ""
         private var lastMarkers: [GoogleMapMarker] = []
@@ -108,13 +123,16 @@ struct GoogleMapView: UIViewRepresentable {
         private var polylineView: GMSPolyline?
         private var lastPolylineKey: String = ""
 
-        init(_ parent: GoogleMapView) { self.parent = parent }
+        init(_ parent: GoogleMapView) {
+            self.onMarkerTap = parent.onMarkerTap
+            self.onCameraIdle = parent.onCameraIdle
+        }
 
         // 마커 렌더 내용(id·라벨·번호·강조·라벨표시여부)이 바뀔 때만 갱신 (깜빡임 방지)
         func rebuildMarkers(on mapView: GMSMapView, markers: [GoogleMapMarker]) {
             lastMarkers = markers
             let sig = markers.map {
-                "\($0.id)|\($0.pinImageName ?? "")|\($0.label ?? "")|\($0.badgeNumber.map(String.init) ?? "")|\($0.highlighted ? 1 : 0)|\($0.styleKey ?? "")|" + String(format: "%.5f,%.5f", $0.coordinate.latitude, $0.coordinate.longitude)
+                "\($0.id)|\($0.pinImageName ?? "")|\($0.label ?? "")|\($0.badgeNumber.map(String.init) ?? "")|\($0.symbolName ?? "")|\($0.highlighted ? 1 : 0)|\($0.styleKey ?? "")|" + String(format: "%.5f,%.5f", $0.coordinate.latitude, $0.coordinate.longitude)
             }.joined(separator: ";") + "#labels:\(showLabels ? 1 : 0)"
             guard sig != lastSignature else { return }
             markerViews.values.forEach { $0.map = nil }
@@ -130,6 +148,7 @@ struct GoogleMapView: UIViewRepresentable {
                     let rendered = MarkerIcon.make(pinImageName: m.pinImageName,
                                                    label: showLabels ? m.label : nil,
                                                    badge: m.badgeNumber,
+                                                   symbolName: m.symbolName,
                                                    highlighted: m.highlighted)
                     marker.icon = rendered.image
                     marker.groundAnchor = rendered.anchor
@@ -172,7 +191,7 @@ struct GoogleMapView: UIViewRepresentable {
         }
 
         func mapView(_ mapView: GMSMapView, didTap marker: GMSMarker) -> Bool {
-            if let id = marker.userData as? String { parent.onMarkerTap?(id) }
+            if let id = marker.userData as? String { onMarkerTap?(id) }
             return true // 기본 정보창/센터링 억제
         }
 
@@ -183,7 +202,7 @@ struct GoogleMapView: UIViewRepresentable {
                 showLabels = shouldShow
                 rebuildMarkers(on: mapView, markers: lastMarkers)
             }
-            parent.onCameraIdle?(position)
+            onCameraIdle?(position)
         }
     }
 }
@@ -194,8 +213,9 @@ private enum MarkerIcon {
     static var cache: [String: (image: UIImage, anchor: CGPoint)] = [:]
     static let orange = UIColor(red: 1.0, green: 0.42, blue: 0.21, alpha: 1.0)
 
-    static func make(pinImageName: String?, label: String?, badge: Int?, highlighted: Bool = false) -> (image: UIImage, anchor: CGPoint) {
-        let key = "\(pinImageName ?? "")|\(label ?? "")|\(badge.map(String.init) ?? "")|\(highlighted ? 1 : 0)"
+    static func make(pinImageName: String?, label: String?, badge: Int?,
+                     symbolName: String? = nil, highlighted: Bool = false) -> (image: UIImage, anchor: CGPoint) {
+        let key = "\(pinImageName ?? "")|\(label ?? "")|\(badge.map(String.init) ?? "")|\(symbolName ?? "")|\(highlighted ? 1 : 0)"
         if let cached = cache[key] { return cached }
 
         let pinImage = pinImageName.flatMap { UIImage(named: $0) }
@@ -228,7 +248,8 @@ private enum MarkerIcon {
             if let pinImage {
                 pinImage.draw(in: CGRect(x: pinX, y: 0, width: pinW, height: pinH))
             } else {
-                drawDefaultPin(in: CGRect(x: pinX, y: 0, width: pinW, height: pinH), badge: badge, highlighted: highlighted, ctx: ctx)
+                drawDefaultPin(in: CGRect(x: pinX, y: 0, width: pinW, height: pinH), badge: badge,
+                               symbolName: symbolName, highlighted: highlighted, ctx: ctx)
             }
             // 코스명 라벨 (흰 캡슐 + 얇은 테두리 + 은은한 그림자 + 다크 텍스트)
             if hasLabel {
@@ -264,7 +285,8 @@ private enum MarkerIcon {
     }
 
     // 번호 핀 — 기존 PlacePin처럼 깔끔한 원형(주황 원 + 흰 번호), 선택 시 크게 + 헤일로
-    private static func drawDefaultPin(in rect: CGRect, badge: Int?, highlighted: Bool, ctx: UIGraphicsImageRendererContext) {
+    private static func drawDefaultPin(in rect: CGRect, badge: Int?, symbolName: String? = nil,
+                                       highlighted: Bool, ctx: UIGraphicsImageRendererContext) {
         let center = CGPoint(x: rect.midX, y: rect.midY)
         let circleD: CGFloat = highlighted ? 40 : 30
         let circleRect = CGRect(x: center.x - circleD / 2, y: center.y - circleD / 2, width: circleD, height: circleD)
@@ -290,6 +312,17 @@ private enum MarkerIcon {
             ]
             let ts = text.size(withAttributes: attrs)
             text.draw(at: CGPoint(x: circleRect.midX - ts.width / 2, y: circleRect.midY - ts.height / 2), withAttributes: attrs)
+        }
+
+        // 번호가 없는 핀(검색으로 찍은 장소 등)은 빈 주황 원이 돼 무엇을 가리키는지 알 수 없다.
+        // 흰 글리프를 넣어 코스 핀과 역할을 구분한다.
+        if badge == nil, let symbolName,
+           let glyph = UIImage(systemName: symbolName)?
+            .withTintColor(.white, renderingMode: .alwaysOriginal) {
+            let side = circleD * 0.5
+            let box = CGRect(x: circleRect.midX - side / 2, y: circleRect.midY - side / 2,
+                             width: side, height: side)
+            glyph.draw(in: box)
         }
     }
 }
