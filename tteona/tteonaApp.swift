@@ -45,6 +45,12 @@ struct TteonaApp: App {
                     guard let url = notification.object as? URL else { return }
                     deepLinkHandler.handle(url: url)
                 }
+                // 신원이 정해진 뒤에 지난 게스트 세션 폴더를 치운다.
+                // currentUser가 아니라 identityUid를 보는 이유: 게스트도 신원은 있고,
+                // 정리 기준은 "화면을 어디까지 보여줄까"가 아니라 "파일을 어느 폴더에 두는가"다.
+                .onChange(of: authService.identityUid, initial: true) { _, uid in
+                    SessionFileHousekeeping.purgeOrphanedGuestSessions(currentUid: uid)
+                }
                 .onChange(of: authService.currentUser) { _, user in
                     // 게스트(익명)는 계정이 아니다 — 결제 신원도 푸시 등록도 붙이지 않는다.
                     // RevenueCat에 익명 uid를 물리면 그 상태로 결제가 이뤄지고,

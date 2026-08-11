@@ -85,7 +85,7 @@ struct GuestGateView: View {
                 .padding(.trailing, 4)
             }
         }
-        .fullScreenCover(isPresented: $showAuth) { AuthView() }
+        .fullScreenCover(isPresented: $showAuth) { AuthView(isDismissable: true) }
         .onAppear {
             guard !appeared else { return }
             withAnimation(.spring(response: 0.55, dampingFraction: 0.78).delay(0.05)) {

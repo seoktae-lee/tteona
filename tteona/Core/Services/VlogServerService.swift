@@ -23,6 +23,8 @@ actor VlogServerService {
         case transient(String)
         /// 서버에 잡이 남아 있지 않음 (만료·삭제)
         case jobGone
+        /// 게스트 무료 체험을 이미 썼다 — 재시도해도, 로컬로 도망쳐도 안 되는 **약속의 경계**다
+        case guestLimit
 
         var errorDescription: String? {
             switch self {
@@ -31,13 +33,14 @@ actor VlogServerService {
             case .processingFailed(let m):  return L("vlogserver.error.processingFailed", m)
             case .transient(let m):         return L("vlogserver.error.badResponse", m)
             case .jobGone:                  return L("vlogserver.error.statusFailed")
+            case .guestLimit:               return L("vlogserver.error.guestLimit")
             }
         }
 
         /// 서버가 "이 영상은 못 만든다"고 확정했는가 — true면 로컬 폴백 외에 방법이 없다.
         var isDefinitive: Bool {
             switch self {
-            case .noClips, .processingFailed: return true
+            case .noClips, .processingFailed, .guestLimit: return true
             case .badResponse, .transient, .jobGone: return false
             }
         }
@@ -357,10 +360,18 @@ actor VlogServerService {
                 "places": placesPayload,
             ])
             let (data, resp) = try await URLSession.shared.data(for: req)
-            guard (resp as? HTTPURLResponse)?.statusCode == 200,
-                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let jobId = json["jobId"] as? Int else {
-                throw ServerVlogError.transient("job create failed")
+            let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+
+            // 상태 코드를 뭉뚱그리면 **거절과 장애를 구분할 수 없다.**
+            // 예전엔 200이 아닌 건 전부 transient였다 — 그래서 "게스트 체험을 다 썼다"는
+            // 확정 거절에도 3번을 재시도한 뒤 로컬 합성으로 넘어가, 서버가 그은 선이
+            // 아무 의미가 없었다(6초를 기다리게 만든 건 덤).
+            if status == 403, (json?["error"] as? String) == "guest_limit" {
+                throw ServerVlogError.guestLimit
+            }
+            guard status == 200, let jobId = json?["jobId"] as? Int else {
+                throw ServerVlogError.transient("job create failed (status \(status))")
             }
             return jobId
         }

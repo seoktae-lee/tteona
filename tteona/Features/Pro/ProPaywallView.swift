@@ -215,7 +215,7 @@ struct ProPaywallView: View {
             .frame(maxWidth: .infinity).frame(height: 56)
         }
         .disabled(isPurchasing || selectedPackage == nil)
-        .fullScreenCover(isPresented: $showAuthForPurchase) { AuthView() }
+        .fullScreenCover(isPresented: $showAuthForPurchase) { AuthView(isDismissable: true) }
     }
 
     private func featureRow(icon: String, title: String, subtitle: String) -> some View {

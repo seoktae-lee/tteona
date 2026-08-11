@@ -78,15 +78,28 @@ final class ProManager: ObservableObject {
         }
     }
 
+    /// RevenueCat에 결제 신원을 붙인 적이 있는가.
+    ///
+    /// 게스트에게는 결제 신원을 붙이지 않는다 — 익명 상태로 결제가 이뤄지면 기기를 바꿨을 때
+    /// 복원되지 않기 때문이다. 그런데 그 "안 붙인다"를 **로그아웃 호출**로 표현했더니,
+    /// 붙인 적도 없는 걸 떼라고 부르는 셈이 되어 앱을 켤 때마다 SDK가 거부하며 에러를 남겼다.
+    /// ("LogOut was called but the current user is anonymous")
+    /// 뗄 것이 있을 때만 떼도록, 붙였다는 사실을 여기서 기억한다.
+    private var didAttachIdentity = false
+
     func logIn(userId: String) {
         guard isConfigured else { return }
         Task {
-            if let (info, _) = try? await Purchases.shared.logIn(userId) { apply(info) }
+            if let (info, _) = try? await Purchases.shared.logIn(userId) {
+                didAttachIdentity = true
+                apply(info)
+            }
         }
     }
 
     func logOut() {
-        guard isConfigured else { return }
+        guard isConfigured, didAttachIdentity else { return }
+        didAttachIdentity = false
         Task {
             if let info = try? await Purchases.shared.logOut() { apply(info) }
         }

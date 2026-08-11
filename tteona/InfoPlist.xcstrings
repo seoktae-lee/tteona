@@ -1,168 +1,168 @@
 {
-  "sourceLanguage" : "ko",
-  "strings" : {
-    "CFBundleDisplayName" : {
-      "comment" : "Bundle display name",
-      "extractionState" : "extracted_with_value",
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "떠나"
+  "sourceLanguage": "ko",
+  "strings": {
+    "CFBundleDisplayName": {
+      "comment": "Bundle display name",
+      "extractionState": "extracted_with_value",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "new",
+            "value": "떠나"
           }
         }
       }
     },
-    "CFBundleName" : {
-      "comment" : "Bundle name",
-      "extractionState" : "extracted_with_value",
-      "localizations" : {
-        "ko" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "tteona"
+    "CFBundleName": {
+      "comment": "Bundle name",
+      "extractionState": "extracted_with_value",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "new",
+            "value": "tteona"
           }
         }
       }
     },
-    "NSCameraUsageDescription" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Used to record videos at each place so you can create memory Vlogs."
+    "NSCameraUsageDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Used to record videos at each place so you can create memory Vlogs."
           }
         },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "各スポットで動画を撮影し、思い出のVlogを作成するためにカメラを使用します。"
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "各スポットで動画を撮影し、思い出のVlogを作成するためにカメラを使用します。"
           }
         },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "각 장소에서 영상을 촬영하여 추억 Vlog를 만들기 위해 카메라를 사용합니다."
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "각 장소에서 영상을 촬영하여 추억 Vlog를 만들기 위해 카메라를 사용합니다."
           }
         }
       }
     },
-    "NSLocationAlwaysAndWhenInUseUsageDescription" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Used to track your location in the background so you get notified when you arrive at a destination. In group trips, your location is shared in real time with members."
+    "NSLocationAlwaysAndWhenInUseUsageDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Used to track your location in the background so you get notified when you arrive at a destination. In group trips, your location is shared in real time with members."
           }
         },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "バックグラウンドでも位置を追跡し、目的地に到着した際に通知を受け取れるようにします。グループ旅行中は、一緒のメンバーとリアルタイムで位置を共有します。"
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "バックグラウンドでも位置を追跡し、目的地に到着した際に通知を受け取れるようにします。グループ旅行中は、一緒のメンバーとリアルタイムで位置を共有します。"
           }
         },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "백그라운드에서도 위치를 추적하여 목적지 도착 시 알림을 받을 수 있습니다. 그룹 여행 중에는 함께하는 멤버들과 실시간으로 위치를 공유합니다."
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "백그라운드에서도 위치를 추적하여 목적지 도착 시 알림을 받을 수 있습니다. 그룹 여행 중에는 함께하는 멤버들과 실시간으로 위치를 공유합니다."
           }
         }
       }
     },
-    "NSLocationWhenInUseUsageDescription" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Used to show your current location and detect arrival at destinations during a course. In group trips, your location is shared in real time with members."
+    "NSLocationWhenInUseUsageDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Used to show your current location and detect arrival at destinations during a course. In group trips, your location is shared in real time with members."
           }
         },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "コース進行中に現在地を確認し、目的地への到着を検知するために位置情報を使用します。グループ旅行中は、一緒のメンバーとリアルタイムで位置を共有します。"
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "コース進行中に現在地を確認し、目的地への到着を検知するために位置情報を使用します。グループ旅行中は、一緒のメンバーとリアルタイムで位置を共有します。"
           }
         },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "코스 진행 중 현재 위치를 확인하고 목적지 도착을 감지하기 위해 위치 정보를 사용합니다. 그룹 여행 중에는 함께하는 멤버들과 실시간으로 위치를 공유합니다."
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "코스 진행 중 현재 위치를 확인하고 목적지 도착을 감지하기 위해 위치 정보를 사용합니다. 그룹 여행 중에는 함께하는 멤버들과 실시간으로 위치를 공유합니다."
           }
         }
       }
     },
-    "NSMicrophoneUsageDescription" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Used to record on-site sound in the short clips captured at each destination, so your travel Vlog keeps the atmosphere of the trip."
+    "NSMicrophoneUsageDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Used to record on-site sound while you film each place with the shutter, so your travel Vlog keeps the atmosphere of the moment."
           }
         },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "旅先で自動撮影される短い動画に現地の音を一緒に録音し、旅の思い出を残すVlogを作るためにマイクを使用します。"
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "シャッターで各スポットを撮影する際に現地の音も一緒に録音し、旅のあとにVlogへ収めるためにマイクを使用します。"
           }
         },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "여행지 도착 시 자동으로 촬영되는 5초 영상에 현장의 소리를 함께 녹음하여, 여행이 끝난 후 추억을 담은 나만의 여행 브이로그를 만드는 데 마이크를 사용합니다."
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "촬영 버튼으로 각 장소를 찍을 때 현장의 소리를 함께 녹음해, 여행이 끝난 뒤 브이로그에 담기 위해 마이크를 사용합니다."
           }
         }
       }
     },
-    "NSPhotoLibraryAddUsageDescription" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Access is needed to save your finished Vlog to your photo library."
+    "NSPhotoLibraryAddUsageDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Access is needed to save your finished Vlog to your photo library."
           }
         },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "完成したVlogをカメラロールに保存するためにアクセス権限が必要です。"
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完成したVlogをカメラロールに保存するためにアクセス権限が必要です。"
           }
         },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "완성된 Vlog를 카메라 앨범에 저장하기 위해 접근 권한이 필요합니다."
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "완성된 Vlog를 카메라 앨범에 저장하기 위해 접근 권한이 필요합니다."
           }
         }
       }
     },
-    "NSUserNotificationUsageDescription" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Notification permission is needed to alert you about destination arrivals and group trip activity."
+    "NSUserNotificationUsageDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notification permission is needed to alert you about destination arrivals and group trip activity."
           }
         },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "目的地への到着やグループ旅行の活動を通知するために、通知の権限が必要です。"
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目的地への到着やグループ旅行の活動を通知するために、通知の権限が必要です。"
           }
         },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "목적지 도착 및 그룹 여행 활동 알림을 받기 위해 알림 권한이 필요합니다."
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "목적지 도착 및 그룹 여행 활동 알림을 받기 위해 알림 권한이 필요합니다."
           }
         }
       }
     }
   },
-  "version" : "1.0"
+  "version": "1.0"
 }

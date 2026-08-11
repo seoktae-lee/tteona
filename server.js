@@ -112,7 +112,31 @@ async function requireAuth(req, res, next) {
   if (uid === undefined) return res.status(401).json({ error: 'invalid token' });
   if (uid === null && AUTH_ENFORCE) return res.status(401).json({ error: 'auth required' });
   req.uid = uid; // 완화 모드에서 토큰 미전송이면 null
+  if (uid === null) countAnonymousHit(req);
   next();
+}
+
+/// 검증된 uid가 **반드시** 있어야 하는 구간. 완화 모드(AUTH_ENFORCE=false)와 무관하게 막는다.
+///
+/// 완화 모드는 토큰을 안 보내던 구버전 앱을 끊지 않으려고 열어둔 문인데, 브이로그 쪽에서는
+/// 그 문이 검사 자체를 없애버린다:
+///   · `req.isGuest`는 토큰 해독에 성공한 경로에서만 채워진다 → 토큰이 없으면 undefined가 되어
+///     게스트 한도 검사가 통째로 건너뛰어진다
+///   · `userId`가 클라이언트 본문 값으로 떨어져 신원을 스스로 적어 낼 수 있다
+///   · 소유자 검증도 `!req.uid`면 그냥 통과라 잡 id(순번)만 알면 남의 것에 닿는다
+/// 서버 렌더는 실제 CPU·디스크가 나가는 작업이라, 여기만은 예외를 두지 않는다.
+/// 구버전 앱은 401을 받고 로컬 합성으로 물러난다 — 결과물은 여전히 손에 들어간다.
+function requireUser(req, res, next) {
+  if (!req.uid) return res.status(401).json({ error: 'auth required' });
+  next();
+}
+
+// 완화 모드를 언제 닫을 수 있는지 판단할 근거. 토큰 없이 들어온 요청을 경로별로 세어
+// /api/health에 노출한다 — 0이 충분히 오래 유지되면 AUTH_ENFORCE=true로 닫으면 된다.
+const anonymousHits = new Map();
+function countAnonymousHit(req) {
+  const key = `${req.method} ${req.route?.path || req.path}`;
+  anonymousHits.set(key, (anonymousHits.get(key) || 0) + 1);
 }
 
 // ─── 푸시 문구 (수신자 언어 기준) ─────────────────────────────────────────────
@@ -351,17 +375,18 @@ app.use('/uploads/vlog', async (req, res, next) => {
     return res.status(403).json({ error: 'forbidden' });
   }
 
-  // 기존 소유자 경로 — 변경 없음
+  // 소유자 경로 — 토큰이 없으면 **검사를 건너뛰는 게 아니라 거절**한다.
+  // 예전엔 `if (req.uid)`로 감싸 두어, 헤더를 빼고 부르면 소유자 확인 없이 파일이 그대로
+  // 내려갔다. jobId가 순번이라 사실상 남의 완성본을 받아갈 수 있는 경로였다.
   requireAuth(req, res, async () => {
-    if (req.uid) {
-      try {
-        const r = await pgPool.query('SELECT user_id FROM vlog_jobs WHERE id = $1', [m[1]]);
-        if (r.rows.length === 0 || r.rows[0].user_id !== req.uid) {
-          return res.status(403).json({ error: 'forbidden' });
-        }
-      } catch (err) {
-        return res.status(500).json({ error: 'Internal server error' });
+    if (!req.uid) return res.status(401).json({ error: 'auth required' });
+    try {
+      const r = await pgPool.query('SELECT user_id FROM vlog_jobs WHERE id = $1', [m[1]]);
+      if (r.rows.length === 0 || r.rows[0].user_id !== req.uid) {
+        return res.status(403).json({ error: 'forbidden' });
       }
+    } catch (err) {
+      return res.status(500).json({ error: 'Internal server error' });
     }
     next();
   });
@@ -436,6 +461,8 @@ app.get('/api/health', async (req, res) => {
     out.diskFreeMB = await diskFreeMB(VLOG_DIR);
     if (out.diskFreeMB < 5120) out.status = 'warn';
   } catch { out.diskFreeMB = null; }
+  // 토큰 없이 들어온 요청 (완화 모드를 닫을 시점 판단용 — 재기동 시 초기화)
+  out.anonymousHits = Object.fromEntries(anonymousHits);
   try {
     const q = await pgPool.query(`
       SELECT
@@ -1568,10 +1595,10 @@ const vlogUpload = multer({
 // 잡 생성 — body: { userId, courseId?, courseName?, tag?, formats?: ['reels'|'youtube'|'insta'],
 //                   bgm?: 'auto'|'none'|'mood/파일명',
 //                   places: [{order, placeName, shotAt?}] }  (shotAt: 클립 촬영시각 표시 문자열)
-app.post('/api/vlog/jobs', requireAuth, vlogJobLimiter, async (req, res) => {
+app.post('/api/vlog/jobs', requireAuth, requireUser, vlogJobLimiter, async (req, res) => {
   const { courseId, courseName, tag, formats, bgm, places, watermark, priority, shareRoomIds, font, fontScale,
           subtitleFields, subtitleColor, caption, subtitleHold } = req.body || {};
-  const userId = req.uid || req.body?.userId; // 검증된 uid 우선
+  const userId = req.uid; // requireUser가 보장한다 — 본문 userId는 더 이상 신뢰하지 않는다
   if (!userId || !Array.isArray(places) || places.length === 0) {
     return res.status(400).json({ error: 'userId and places required' });
   }
@@ -1633,7 +1660,7 @@ app.post('/api/vlog/jobs', requireAuth, vlogJobLimiter, async (req, res) => {
 async function requireJobOwner(req, res, next) {
   const id = parseInt(req.params.jobId);
   if (isNaN(id)) return res.status(400).json({ error: 'invalid jobId' });
-  if (!req.uid) return next(); // 완화 모드(구버전 앱) 통과
+  if (!req.uid) return res.status(401).json({ error: 'auth required' });
   try {
     const r = await pgPool.query('SELECT user_id FROM vlog_jobs WHERE id = $1', [id]);
     if (r.rows.length === 0) return res.status(404).json({ error: 'job not found' });
@@ -1645,7 +1672,7 @@ async function requireJobOwner(req, res, next) {
 }
 
 // 클립 업로드 — multipart 필드 "clip", 쿼리 ?order=N (장소 순번)
-app.post('/api/vlog/jobs/:jobId/clips', requireAuth, uploadLimiter, requireJobOwner, vlogUpload.single('clip'), async (req, res) => {
+app.post('/api/vlog/jobs/:jobId/clips', requireAuth, requireUser, uploadLimiter, requireJobOwner, vlogUpload.single('clip'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'clip file required' });
   // 무결성 검증 — 전송 중 잘린 파일이 그대로 합성에 들어가면 잡 전체가 이상한 결과물로
   // 완성돼 버린다(실패보다 나쁨). 저장 직후 ffprobe로 실제 재생 가능한 영상인지 확인하고,
@@ -1662,7 +1689,7 @@ app.post('/api/vlog/jobs/:jobId/clips', requireAuth, uploadLimiter, requireJobOw
 });
 
 // 업로드 완료 → 처리 큐 투입
-app.post('/api/vlog/jobs/:jobId/start', requireAuth, requireJobOwner, async (req, res) => {
+app.post('/api/vlog/jobs/:jobId/start', requireAuth, requireUser, requireJobOwner, async (req, res) => {
   const id = parseInt(req.params.jobId);
   try {
     const r = await pgPool.query(
@@ -1677,7 +1704,7 @@ app.post('/api/vlog/jobs/:jobId/start', requireAuth, requireJobOwner, async (req
 });
 
 // 상태 조회 — iOS 진행률 폴링용 (altUrl = 반대 방향 멀티포맷 버전)
-app.get('/api/vlog/jobs/:jobId', requireAuth, requireJobOwner, async (req, res) => {
+app.get('/api/vlog/jobs/:jobId', requireAuth, requireUser, requireJobOwner, async (req, res) => {
   try {
     const r = await pgPool.query(
       'SELECT status, progress, output_url, error_msg, options FROM vlog_jobs WHERE id = $1',

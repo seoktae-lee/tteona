@@ -211,6 +211,16 @@ enum GuestVlogQuota {
         UserDefaults.standard.set(made + 1, forKey: key)
     }
 
+    /// 서버가 "이미 다 썼다"고 알려줬을 때 기기 쪽 셈을 거기에 맞춘다.
+    ///
+    /// 기기 카운트와 서버 카운트는 서로 다른 곳에 있어서 어긋날 수 있다
+    /// (기기 백업 복원처럼 UserDefaults만 초기화되고 uid는 살아남는 경우).
+    /// 어긋난 채로 두면 브이로그를 만들려 할 때마다 서버까지 갔다가 거절당하는 길을
+    /// 매번 되풀이한다 — 한 번 알았으면 다음부터는 들어오는 문에서 안내한다.
+    static func markExhausted() {
+        UserDefaults.standard.set(max(made, limit), forKey: key)
+    }
+
     /// 회원가입하면 제한이 사라지므로 기록도 지운다 —
     /// 나중에 로그아웃해 다시 게스트가 됐을 때 옛 기록으로 막히면 안 된다.
     static func reset() {

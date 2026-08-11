@@ -533,7 +533,7 @@ struct VlogGenerationView: View {
                 .padding(.bottom, 36)
             }
         }
-        .fullScreenCover(isPresented: $showAuthForGuestLimit) { AuthView() }
+        .fullScreenCover(isPresented: $showAuthForGuestLimit) { AuthView(isDismissable: true) }
     }
 
     private var chooseTextView: some View {
@@ -1116,6 +1116,16 @@ struct VlogGenerationView: View {
                     // 서버가 아직 이 잡을 붙잡고 있다면 로컬로 도망치지 않는다 —
                     // 지금 폴백하면 음악·워터마크 없는 열화본이 저장되고, 서버는 헛일을 한다.
                     // 대신 이어받기를 안내해 다음 시도에서 완성본을 그대로 받아오게 한다.
+                    // 게스트 체험 소진은 장애가 아니라 **약속의 경계**다.
+                    // 로컬 합성은 통신이 끊겼을 때의 비상구지, 서버가 그은 선을 넘는 우회로가
+                    // 아니다 — 여기서 폴백하면 서버 한도가 아무 의미가 없어진다.
+                    if case .guestLimit? = error as? VlogServerService.ServerVlogError {
+                        dlog("[VlogGeneration] 게스트 체험 소진 — 가입 안내로 전환")
+                        GuestVlogQuota.markExhausted()   // 다음부터는 들어오는 문에서 안내
+                        phase = .guestLimit
+                        return
+                    }
+
                     let definitive = (error as? VlogServerService.ServerVlogError)?.isDefinitive ?? false
                     let pending = await VlogServerService.shared.hasPendingJob(sessionId: sessionId)
                     if !definitive, pending {
@@ -1475,7 +1485,7 @@ struct VlogPreviewView: View {
                         .stroke(Color.white.opacity(0.18), lineWidth: 1)
                 )
         )
-        .fullScreenCover(isPresented: $showAuthFromPreview) { AuthView() }
+        .fullScreenCover(isPresented: $showAuthFromPreview) { AuthView(isDismissable: true) }
     }
 
     private func thumbnailButton(courseId: String) -> some View {

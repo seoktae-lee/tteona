@@ -4,6 +4,14 @@ import GoogleSignIn
 import FirebaseAuth
 
 struct AuthView: View {
+    /// 닫을 수 있는 화면인가.
+    ///
+    /// 이 화면은 두 얼굴을 갖는다 — 로그인해야만 앱을 쓸 수 있던 시절의 **관문**이자,
+    /// 게스트가 "가입하면 계속 쓸 수 있어요"를 눌렀을 때 올라오는 **초대장**이다.
+    /// 초대장인데 나가는 문이 없으면 권유가 아니라 강요가 된다(앱을 껐다 켜야 빠져나왔다).
+    /// 기본값은 false — RootView가 관문으로 세울 때는 나가는 문이 있으면 안 된다.
+    var isDismissable: Bool = false
+
     @EnvironmentObject private var authService: AuthService
     @Environment(\.dismiss) private var dismiss
     @State private var isSignUp = false
@@ -42,6 +50,7 @@ struct AuthView: View {
             // 언어 변경은 루트 .id(language) 재구성으로 즉시 전체 반영된다.
             VStack {
                 HStack {
+                    if isDismissable { closeButton }
                     Spacer()
                     languagePicker
                 }
@@ -296,6 +305,22 @@ struct AuthView: View {
     }
 
     // MARK: - Language Picker (가입 전 언어 선택)
+    /// 게스트가 권유를 받고 들어왔을 때의 퇴로. 인증 대기 화면에서도 같이 떠 있어야 한다 —
+    /// 메일을 나중에 확인하려는 사람이 여기 갇히면 그것대로 막다른 길이다.
+    private var closeButton: some View {
+        Button {
+            Haptics.light()
+            dismiss()
+        } label: {
+            Image(systemName: "xmark")
+                .font(.tte(14, .semibold))
+                .foregroundColor(.tteMediumGray)
+                .frame(width: 36, height: 36)
+                .background(Circle().fill(Color(UIColor.secondarySystemBackground).opacity(0.9)))
+        }
+        .accessibilityLabel(L("common.close"))
+    }
+
     private var languagePicker: some View {
         Menu {
             ForEach(AppLanguage.allCases) { language in
