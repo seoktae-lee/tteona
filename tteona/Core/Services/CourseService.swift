@@ -35,32 +35,59 @@ class CourseService: ObservableObject {
         // 처음 진입이면 로컬 캐시로 먼저 그린다 — 서버 응답까지 빈 지도를 보여주지 않는다.
         // (Firestore iOS SDK는 기본적으로 디스크 캐시를 유지한다)
         if courses.isEmpty {
-            let cachedQuery = db.collection("courses")
-                .order(by: "likeCount", descending: true)
-                .limit(to: 300)
-            if let cached = try? await cachedQuery.getDocuments(source: .cache), !cached.isEmpty {
-                let fromCache = cached.documents.compactMap { try? $0.data(as: Course.self) }
-                self.courses = fromCache.filter { !blockedUserIds.contains($0.authorId) }
+            var cached: [QuerySnapshot] = []
+            for query in Self.popularAndCuratedQueries(db) {
+                if let snapshot = try? await query.getDocuments(source: .cache) {
+                    cached.append(snapshot)
+                }
+            }
+            if cached.contains(where: { !$0.isEmpty }) {
+                self.courses = Self.merge(cached, blockedUserIds: blockedUserIds)
             }
         }
 
         do {
-            // 지도/탐색은 인기순 상위 300개만 로드한다. 코스가 수천 개로 늘어도 진입이
-            // 느려지거나 읽기 비용이 폭증하지 않게 상한을 둔다. 지도 특성상 수백 개 이상
-            // 핀은 사람이 구분하지 못하므로 UX 손실이 거의 없다.
-            // (특정 지역의 비인기 코스는 지역 검색 별도 쿼리 fetchCoursesInRegion로 보완)
-            let snapshot = try await db.collection("courses")
-                .order(by: "likeCount", descending: true)
-                .limit(to: 300)
-                .getDocuments()
-            let fetched = snapshot.documents.compactMap { doc in
-                try? doc.data(as: Course.self)
+            var snapshots: [QuerySnapshot] = []
+            for query in Self.popularAndCuratedQueries(db) {
+                snapshots.append(try await query.getDocuments())
             }
-            self.courses = fetched.filter { !blockedUserIds.contains($0.authorId) }
+            self.courses = Self.merge(snapshots, blockedUserIds: blockedUserIds)
             self.lastFetchedAt = Date()
         } catch {
             self.errorMessage = error.localizedDescription
         }
+    }
+
+    /// 지도·탐색의 기본 로드는 **두 쿼리**다. 하나로 합칠 수 없다.
+    ///
+    /// 1. 인기순 상위 300 — 코스가 수천 개로 늘어도 진입이 느려지거나 읽기 비용이
+    ///    폭증하지 않게 둔 상한. 지도 특성상 수백 개 이상 핀은 사람이 구분하지 못한다.
+    /// 2. 큐레이션 전량 — **큐레이션 코스는 좋아요가 0에서 시작하므로 1번에 절대 들지
+    ///    못한다.** 이 쿼리가 없으면 코스를 넣어도 지도에 영원히 안 뜬다. 수백 개
+    ///    규모라 상한 500이면 충분하고, 정렬을 걸지 않아 복합 인덱스도 필요 없다.
+    ///
+    /// (특정 지역의 비인기 UGC 코스는 fetchCoursesInRegion / fetchCoursesNear로 보완)
+    private static func popularAndCuratedQueries(_ db: Firestore) -> [Query] {
+        [
+            db.collection("courses").order(by: "likeCount", descending: true).limit(to: 300),
+            db.collection("courses").whereField("curated", isEqualTo: true).limit(to: 500),
+        ]
+    }
+
+    /// 두 쿼리 결과를 courseId 기준으로 합치고 차단 유저를 걸러낸다.
+    /// 큐레이션 코스가 인기 상위 300에 들면 양쪽에 나타나므로 중복 제거가 필수다.
+    private static func merge(_ snapshots: [QuerySnapshot], blockedUserIds: [String]) -> [Course] {
+        var seen = Set<String>()
+        var result: [Course] = []
+        for snapshot in snapshots {
+            for doc in snapshot.documents {
+                guard let course = try? doc.data(as: Course.self),
+                      !blockedUserIds.contains(course.authorId),
+                      seen.insert(course.courseId).inserted else { continue }
+                result.append(course)
+            }
+        }
+        return result
     }
 
     /// 지역 검색 보완 — 인기 상위 300에 들지 못한 그 지역 코스를 별도로 불러와 병합한다.
@@ -95,11 +122,21 @@ class CourseService: ObservableObject {
 
         var fetched: [Course] = []
         for band in bands {
-            let snapshot = try? await db.collection("courses")
+            // UGC 코스: region 자체가 위도 밴드다
+            let byRegion = try? await db.collection("courses")
                 .whereField("region", isEqualTo: band)
                 .limit(to: 100)
                 .getDocuments()
-            fetched += snapshot?.documents.compactMap { try? $0.data(as: Course.self) } ?? []
+            fetched += byRegion?.documents.compactMap { try? $0.data(as: Course.self) } ?? []
+
+            // 큐레이션 코스: region이 읽히는 지역명("서울")이라 별도 latBand로 찾는다.
+            // 이게 없으면 전국 큐레이션 코스가 초기 로드 상한(500) 밖으로 밀리는 순간
+            // 그 지역으로 지도를 옮겨도 영영 나타나지 않는다.
+            let byBand = try? await db.collection("courses")
+                .whereField("latBand", isEqualTo: band)
+                .limit(to: 100)
+                .getDocuments()
+            fetched += byBand?.documents.compactMap { try? $0.data(as: Course.self) } ?? []
         }
 
         let existingIds = Set(courses.map(\.courseId))

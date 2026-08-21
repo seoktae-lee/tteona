@@ -175,12 +175,27 @@ actor PlaceDetailService {
             "places.photos,places.types,places.rating,places.userRatingCount,places.reviews",
             forHTTPHeaderField: "X-Goog-FieldMask"
         )
-        // 좌표가 있으면 5km 반경 우선 검색 — 동명 장소 오매칭 방지
+        // 좌표가 있으면 반경 밖을 **아예 배제**한다.
+        //
+        // 예전에는 locationBias를 썼는데, bias는 선호일 뿐 강제가 아니라서 더 유명한
+        // 동명 장소가 그대로 1등으로 올라왔다. 실제로 노량진 수산시장의 '진남회집'을
+        // 열었더니 여수의 동명 식당(리뷰 1,000개 이상) 사진과 리뷰가 나왔다.
+        // locationRestriction은 원을 벗어난 결과를 반환하지 않는다.
+        //
+        // 반경은 3km로 좁힌다. 5km면 도심에서 다른 동네 동명 가게까지 들어온다.
+        // 못 찾으면 사진·평점 없이 보여줄지언정, 엉뚱한 가게를 보여주지는 않는다.
+        //
+        // **주의: locationRestriction은 circle을 받지 않는다. rectangle만 지원한다.**
+        // circle을 넣으면 400(Unknown name "circle")이 떨어지고, 이 함수는 그것을 조용히
+        // nil로 흘려보내 모든 장소의 사진·리뷰가 사라진다. 실호출로 확인했다.
         var body: [String: Any] = ["textQuery": placeName]
         if let latitude, let longitude {
-            body["locationBias"] = ["circle": [
-                "center": ["latitude": latitude, "longitude": longitude],
-                "radius": 5000.0
+            let radiusKm = 3.0
+            let dLat = radiusKm / 111.0
+            let dLng = radiusKm / (111.0 * max(cos(latitude * .pi / 180), 0.1))
+            body["locationRestriction"] = ["rectangle": [
+                "low":  ["latitude": latitude - dLat, "longitude": longitude - dLng],
+                "high": ["latitude": latitude + dLat, "longitude": longitude + dLng]
             ]]
         }
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)

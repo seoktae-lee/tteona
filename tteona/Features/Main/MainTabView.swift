@@ -228,6 +228,10 @@ struct MainTabView: View {
             if ProcessInfo.processInfo.arguments.contains("-previewProfileTab") {
                 selectedTab = Tab.profile
             }
+            // 시각 검증용: 발견 탭(지도) 바로 진입 — 핀 밀도·클러스터를 눈으로 확인할 때 쓴다
+            if ProcessInfo.processInfo.arguments.contains("-previewDiscoverTab") {
+                selectedTab = Tab.discover
+            }
             if ProcessInfo.processInfo.arguments.contains("-previewNavGuide") {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
                     withAnimation(.easeIn(duration: 0.3)) { showNavGuide = true }

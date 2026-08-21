@@ -53,6 +53,27 @@ actor StatsService {
         _ = try? await URLSession.shared.data(for: req)
     }
 
+    // MARK: - 코스 퍼널
+
+    /// 코스가 세션까지 이어지는 각 단계.
+    /// 큐레이션 코스가 실제로 "떠나기"를 만드는지 알려면 코스별·큐레이션 여부와 함께 세야 한다.
+    enum CourseFunnelStep: String {
+        case pinTap        = "pin_tap"
+        case courseOpen    = "course_open"
+        case sessionStart  = "session_start"
+        case vlogComplete  = "vlog_complete"
+    }
+
+    /// 통계 전송이 사용자 흐름을 막아서는 안 된다 — 실패해도 조용히 넘어간다.
+    func postCourseEvent(_ step: CourseFunnelStep, course: Course) async {
+        guard let url = URL(string: "\(baseURL)/stats/course-event") else { return }
+        let req = await APIAuth.request(url: url, method: "POST",
+                                        jsonBody: ["event": step.rawValue,
+                                                   "courseId": course.courseId,
+                                                   "curated": course.isCurated])
+        _ = try? await URLSession.shared.data(for: req)
+    }
+
     // MARK: - 크리에이터 랭킹
 
     /// 실패(네트워크 오류·태스크 취소)와 "정말 랭킹이 비어 있음"을 구분한다.

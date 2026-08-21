@@ -20,6 +20,10 @@ struct CourseDetailView: View {
     // 코스 제목(UGC) 번역문 — 도착 전·실패 시에는 원문을 보여준다.
     @State private var translatedTitle: String?
     @State private var selectedPlaceForDetail: Place?
+    /// 코스 전체 동선을 전체 화면 지도로 본다.
+    /// 예전에는 상세 위쪽 260pt를 지도가 늘 차지했는데, 그만큼 목록이 밀려
+    /// 코스 정보가 한눈에 안 들어왔다. 필요할 때만 펼치도록 바꿨다.
+    @State private var showFullMap = false
     @State private var showReportAlert = false
     @State private var showBlockAlert = false
     @State private var showReportSuccessAlert = false
@@ -40,8 +44,6 @@ struct CourseDetailView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                mapLayer
-                    .frame(height: 260)
                 contentSection
                 startButton
                     .padding(.horizontal, 20)
@@ -64,11 +66,27 @@ struct CourseDetailView: View {
                 }
 
                 ToolbarItem(placement: .topBarTrailing) {
+                    // 아이콘은 셋(지도·하트·⋯)까지만 둔다. 넷이 되면 코스명이 잘려
+                    // "현충원 벚꽃과…"처럼 무슨 코스인지 알 수 없게 된다.
+                    // 공유는 자주 쓰는 동작이 아니라 ⋯ 메뉴 안으로 넣었다.
                     HStack(spacing: 16) {
-                        shareButton
+                        Button {
+                            Haptics.light()
+                            showFullMap = true
+                        } label: {
+                            Image(systemName: "map")
+                                .font(.tte(16, .medium))
+                                .foregroundColor(.tteDarkGray)
+                        }
+                        .accessibilityLabel(L("coursedetail.viewMap"))
                         likeButton
                         if course.authorId == authService.currentUser?.uid {
                             Menu {
+                                Button {
+                                    shareCourse()
+                                } label: {
+                                    Label(L("detail.shareCourse"), systemImage: "square.and.arrow.up")
+                                }
                                 Button {
                                     editName = localName ?? course.courseName
                                     editTag = course.tag
@@ -91,6 +109,11 @@ struct CourseDetailView: View {
                             }
                         } else {
                             Menu {
+                                Button {
+                                    shareCourse()
+                                } label: {
+                                    Label(L("detail.shareCourse"), systemImage: "square.and.arrow.up")
+                                }
                                 Button(role: .destructive) {
                                     showReportAlert = true
                                 } label: {
@@ -112,6 +135,7 @@ struct CourseDetailView: View {
             }
         }
         .task {
+            Task { await StatsService.shared.postCourseEvent(.courseOpen, course: course) }
             let uid = authService.currentUser?.uid ?? ""
             await courseService.fetchLikedCourseIds(userId: uid)
             courseAuthor = await userService.fetchAuthor(uid: course.authorId)
@@ -163,6 +187,24 @@ struct CourseDetailView: View {
         }
         .sheet(item: $selectedPlaceForDetail) { place in
             PlaceDetailSheet(place: place)
+        }
+        .fullScreenCover(isPresented: $showFullMap) {
+            NavigationStack {
+                mapLayer
+                    .ignoresSafeArea(edges: .bottom)
+                    .navigationTitle(L("coursedetail.mapTitle"))
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button { showFullMap = false } label: {
+                                Image(systemName: "xmark")
+                                    .font(.tte(16, .medium))
+                                    .foregroundColor(.tteDarkGray)
+                            }
+                            .accessibilityLabel(L("common.close"))
+                        }
+                    }
+            }
         }
         .confirmationDialog(L("report.selectReason"), isPresented: $showReportAlert, titleVisibility: .visible) {
             // 신고 사유는 운영 검토용으로 한국어 원문을 서버에 제출하고, 버튼 표기만 현지화
@@ -240,14 +282,33 @@ struct CourseDetailView: View {
         let sorted = sortedPlaces
         let selectedOrder = selectedPlaceIndex < sorted.count ? sorted[selectedPlaceIndex].order : -1
 
+        // 코스 장소는 번호 핀, 근처 맛집은 포크 핀 — 한 지도에 있어도 역할이 갈린다.
+        // 맛집은 코스에 포함된 곳이 아니므로 폴리라인(동선)에는 넣지 않는다.
+        var markers = sorted.map { place in
+            GoogleMapMarker(id: place.id, coordinate: place.coordinate,
+                            badgeNumber: place.order,
+                            highlighted: place.order == selectedOrder)
+        }
+        markers += (course.nearbyFood ?? []).map { food in
+            GoogleMapMarker(id: "food-\(food.name)", coordinate: food.coordinate,
+                            label: food.name, symbolName: "fork.knife")
+        }
+
         return GoogleMapView(
-            markers: sorted.map { place in
-                GoogleMapMarker(id: place.id, coordinate: place.coordinate,
-                                badgeNumber: place.order,
-                                highlighted: place.order == selectedOrder)
-            },
+            markers: markers,
             polyline: sorted.count >= 2 ? sorted.map(\.coordinate) : nil,
-            initialCamera: GoogleMapView.fittingCamera(for: sorted.map(\.coordinate))
+            initialCamera: GoogleMapView.fittingCamera(for: sorted.map(\.coordinate)),
+            onMarkerTap: { id in
+                guard id.hasPrefix("food-") else { return }
+                let name = String(id.dropFirst(5))
+                if let food = course.nearbyFood?.first(where: { $0.name == name }) {
+                    showFullMap = false
+                    // 전체화면 지도를 먼저 닫아야 상세 시트가 그 위에 겹치지 않는다
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                        selectedPlaceForDetail = food.asPlace
+                    }
+                }
+            }
         )
     }
 
@@ -275,6 +336,10 @@ struct CourseDetailView: View {
                     .padding(.vertical, 8)
                     .background(Color.tteOrange.opacity(0.06))
                 }
+
+                CourseSourceLabel(course: course)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 7)
 
                 if !sortedPlaces.isEmpty {
                     VStack(spacing: 8) {
@@ -334,14 +399,37 @@ struct CourseDetailView: View {
                     }
                 }
                 .padding(.horizontal, 20)
+
+                CourseSummaryBar(course: course)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 8)
                 .padding(.vertical, 10)
 
-                Text(L("coursedetail.placeList"))
-                    .font(.tte(14, .semibold))
-                    .foregroundColor(.tteDarkGray)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 8)
+                // 지도 입구를 여기에도 둔다. 툴바 아이콘 하나만으로는 눈에 띄지 않아
+                // "코스가 어디인지" 확인할 방법이 없는 것처럼 느껴진다.
+                HStack {
+                    Text(L("coursedetail.placeList"))
+                        .font(.tte(14, .semibold))
+                        .foregroundColor(.tteDarkGray)
+                    Spacer()
+                    Button {
+                        Haptics.light()
+                        showFullMap = true
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "map")
+                                .font(.tte(11))
+                            Text(L("coursedetail.viewMap"))
+                                .font(.tte(12, .medium))
+                        }
+                        .foregroundColor(.tteOrange)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Capsule().fill(Color.tteOrange.opacity(0.10)))
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 8)
 
                 Divider().padding(.horizontal, 20)
 
@@ -354,9 +442,30 @@ struct CourseDetailView: View {
                 }
                 .padding(.horizontal, 20)
 
+                extraInfoSection
+
             }
         }
         .background(Color.tteBackground)
+    }
+
+    /// 근처 추천 식당 + 날씨·이동 정보.
+    /// 두 화면(탐색·지도)이 같은 것을 보여주도록 공용 조각(CourseDetailParts)을 쓴다.
+    @ViewBuilder
+    private var extraInfoSection: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            if course.nearbyFood?.isEmpty == false {
+                Divider()
+                CourseNearbyFoodSection(course: course) { food in
+                    selectedPlaceForDetail = food.asPlace
+                }
+            }
+            Divider()
+            CourseTravelInfo(course: course)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 14)
+        .padding(.bottom, 4)
     }
 
     private var startButton: some View {
@@ -409,17 +518,6 @@ struct CourseDetailView: View {
         }
         .disabled(isLikeProcessing)
         .accessibilityLabel(isLiked ? L("detail.unlike") : L("detail.like"))
-    }
-
-    private var shareButton: some View {
-        Button {
-            shareCourse()
-        } label: {
-            Image(systemName: "square.and.arrow.up")
-                .font(.tte(18, .medium))
-                .foregroundColor(.tteDarkGray)
-        }
-        .accessibilityLabel(L("detail.shareCourse"))
     }
 
     private func shareCourse() {

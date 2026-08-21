@@ -209,6 +209,10 @@
         <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
         콘텐츠
       </div>
+      <div class="nav-item" data-tab="funnel" onclick="switchTab('funnel',this)">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 4h18l-7 8v6l-4 2v-8L3 4z"/></svg>
+        코스 퍼널
+      </div>
       <div class="nav-item" data-tab="subscription" onclick="switchTab('subscription',this)">
         <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" stroke-linecap="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
         PRO 구독
@@ -519,6 +523,28 @@
         </div>
 
         <!-- ══ PRO 구독 탭 ══ -->
+        <div id="tab-funnel" class="tab-content">
+          <div class="card" style="margin-bottom:16px">
+            <div class="card-head">
+              <div class="card-title">코스 퍼널 — 큐레이션 vs 유저 코스</div>
+              <select id="funnel-days" onchange="loadFunnel(true)" class="btn btn-ghost">
+                <option value="7">최근 7일</option>
+                <option value="30" selected>최근 30일</option>
+                <option value="90">최근 90일</option>
+              </select>
+            </div>
+            <div class="muted" style="font-size:12px;margin:-4px 0 14px">
+              핀을 눌러 → 코스를 열고 → 떠나기를 눌러 → 브이로그까지 간 비율.
+              절대 수치보다 <b>두 열의 전환율 차이</b>를 볼 것.
+            </div>
+            <div id="funnel-body" class="muted">불러오는 중…</div>
+          </div>
+          <div class="card">
+            <div class="card-head"><div class="card-title">세션까지 이어진 코스 TOP 10</div></div>
+            <div id="funnel-top" class="muted">불러오는 중…</div>
+          </div>
+        </div>
+
         <div id="tab-subscription" class="tab-content">
           <div id="sub-body">
             <div class="empty"><div class="skeleton" style="width:60%;margin:0 auto"></div></div>
@@ -1011,6 +1037,91 @@ const RC_METRIC_LABEL = {
   new_customers:        { name:'신규 고객 (28일)',   sub:'새로 생긴 앱 유저 ID — 결제와 무관' },
   active_users:         { name:'활성 사용자 (28일)', sub:'RevenueCat과 통신한 유저 (≈앱 실행)' },
 };
+const FUNNEL_STEPS = [
+  ['pin_tap',        '지도 핀 탭'],
+  ['course_open',    '코스 열기'],
+  ['session_start',  '떠나기 시작'],
+  ['vlog_complete',  '브이로그 완성'],
+];
+
+async function loadFunnel(force = false) {
+  const days = document.getElementById('funnel-days').value;
+  const d = await cachedApi(`/analytics/funnel?days=${days}`, 60000, force);
+  const body = document.getElementById('funnel-body');
+  const top  = document.getElementById('funnel-top');
+  if (!d) return;
+
+  const total = (d.funnel.curated.total.pin_tap || 0) + (d.funnel.ugc.total.pin_tap || 0);
+  if (!total) {
+    body.innerHTML = `<div class="empty"><div class="empty-icon">📊</div><div class="empty-text">
+      아직 쌓인 이벤트가 없습니다.<br>앱 새 버전이 배포되어야 데이터가 들어옵니다.</div></div>`;
+    top.innerHTML = '';
+    return;
+  }
+
+  // 첫 단계 대비 통과율. 단계별 직전 대비 비율도 함께 보여야 어디서 새는지 보인다.
+  const col = (side) => {
+    const t = d.funnel[side].total;
+    const base = t.pin_tap || 0;
+    let prev = base;
+    return FUNNEL_STEPS.map(([k, label], i) => {
+      const v = t[k] || 0;
+      const fromTop = base ? (v / base * 100) : 0;
+      const fromPrev = (i === 0) ? 100 : (prev ? (v / prev * 100) : 0);
+      prev = v;
+      return { label, v, fromTop, fromPrev };
+    });
+  };
+  const cur = col('curated'), ugc = col('ugc');
+
+  const bar = (pct, color) =>
+    `<div style="height:6px;border-radius:3px;background:#eee;overflow:hidden;margin-top:5px">
+       <div style="height:100%;width:${Math.max(pct,1)}%;background:${color}"></div></div>`;
+
+  const cell = (row, color) => `
+    <td style="padding:10px 12px;vertical-align:top">
+      <div style="font-size:17px;font-weight:700">${row.v.toLocaleString()}</div>
+      <div class="muted" style="font-size:11px">전체의 ${row.fromTop.toFixed(1)}% · 직전 대비 ${row.fromPrev.toFixed(0)}%</div>
+      ${bar(row.fromTop, color)}
+    </td>`;
+
+  body.innerHTML = `
+    <table style="width:100%;border-collapse:collapse">
+      <tr>
+        <th style="text-align:left;padding:8px 12px;font-size:12px" class="muted">단계</th>
+        <th style="text-align:left;padding:8px 12px;font-size:12px;color:#ff6b35">큐레이션 코스</th>
+        <th style="text-align:left;padding:8px 12px;font-size:12px;color:#4e8ef7">유저 코스</th>
+      </tr>
+      ${FUNNEL_STEPS.map(([, label], i) => `
+        <tr style="border-top:1px solid #f0f0f0">
+          <td style="padding:10px 12px;font-size:13px;font-weight:600">${label}</td>
+          ${cell(cur[i], '#ff6b35')}
+          ${cell(ugc[i], '#4e8ef7')}
+        </tr>`).join('')}
+    </table>`;
+
+  top.innerHTML = d.topCourses.length ? `
+    <table style="width:100%;border-collapse:collapse">
+      <tr>
+        <th style="text-align:left;padding:8px 12px;font-size:12px" class="muted">코스</th>
+        <th style="text-align:right;padding:8px 12px;font-size:12px" class="muted">열람</th>
+        <th style="text-align:right;padding:8px 12px;font-size:12px" class="muted">떠나기</th>
+        <th style="text-align:right;padding:8px 12px;font-size:12px" class="muted">전환</th>
+      </tr>
+      ${d.topCourses.map(c => `
+        <tr style="border-top:1px solid #f0f0f0">
+          <td style="padding:9px 12px;font-size:13px">
+            ${c.curated ? '<span style="color:#ff6b35;font-size:11px">큐레이션</span> ' : ''}
+            ${escapeHtml(c.course_id)}
+          </td>
+          <td style="padding:9px 12px;text-align:right">${c.opens}</td>
+          <td style="padding:9px 12px;text-align:right;font-weight:600">${c.starts}</td>
+          <td style="padding:9px 12px;text-align:right" class="muted">
+            ${c.opens ? (c.starts / c.opens * 100).toFixed(0) : 0}%</td>
+        </tr>`).join('')}
+    </table>` : '<div class="muted" style="padding:12px">아직 데이터가 없습니다.</div>';
+}
+
 async function loadSubscription(force = false) {
   const d = await cachedApi('/analytics/subscription', 300000, force);
   const el = document.getElementById('sub-body');
@@ -1278,13 +1389,14 @@ function switchTab(id, navEl) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById(`tab-${domId}`).classList.add('active');
   if (navEl) navEl.classList.add('active');
-  const titles = {overview:'개요', growth:'성장 지표', content:'콘텐츠', subscription:'PRO 구독', reports:'신고 관리', users:'유저 관리', system:'시스템'};
+  const titles = {overview:'개요', growth:'성장 지표', content:'콘텐츠', funnel:'코스 퍼널', subscription:'PRO 구독', reports:'신고 관리', users:'유저 관리', system:'시스템'};
   document.getElementById('page-title').textContent = titles[id] || id;
   currentTab = domId;
 
   // 탭 진입 시 지연 로드 (클라이언트 캐시 2분)
   if (id === 'growth') loadGrowth();
   else if (id === 'content') loadContent();
+  else if (id === 'funnel') loadFunnel();
   else if (id === 'subscription') loadSubscription();
   else if (id === 'system') loadSystem();
 }

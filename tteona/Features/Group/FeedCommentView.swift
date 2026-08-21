@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreLocation
 import MapKit
 
 // 채팅 타임라인에서 피드 이벤트와 댓글을 통합하는 타입
@@ -311,14 +312,8 @@ struct FeedEventRow: View {
     }
 
     private func openInMap(latitude: Double, longitude: Double, name: String) {
-        let kakaoScheme = "kakaomap://look?p=\(latitude),\(longitude)"
-        let appleURL = URL(string: "maps://?ll=\(latitude),\(longitude)&q=\(name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")")!
-
-        if let kakaoURL = URL(string: kakaoScheme), UIApplication.shared.canOpenURL(kakaoURL) {
-            UIApplication.shared.open(kakaoURL)
-        } else {
-            UIApplication.shared.open(appleURL)
-        }
+        MapAppLauncher.openPlace(
+            at: CLLocationCoordinate2D(latitude: latitude, longitude: longitude), name: name)
     }
 }
 

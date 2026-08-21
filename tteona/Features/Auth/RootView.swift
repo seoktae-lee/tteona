@@ -28,7 +28,8 @@ struct RootView: View {
             } else if ProcessInfo.processInfo.arguments.contains("-previewOnboarding") {
                 OnboardingView()
             } else if ProcessInfo.processInfo.arguments.contains("-previewNavGuide")
-                        || ProcessInfo.processInfo.arguments.contains("-previewProfileTab") {
+                        || ProcessInfo.processInfo.arguments.contains("-previewProfileTab")
+                        || ProcessInfo.processInfo.arguments.contains("-previewDiscoverTab") {
                 MainTabView()
                     .environmentObject(courseService)
                     .environmentObject(deepLinkHandler)

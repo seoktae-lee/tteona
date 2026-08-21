@@ -65,6 +65,8 @@ struct ActiveSessionView: View {
         .task {
             guard !didStartSession else { return }
             didStartSession = true
+            // 이 가드 덕에 세션당 정확히 한 번만 기록된다(화면 재진입으로 중복되지 않음)
+            Task { await StatsService.shared.postCourseEvent(.sessionStart, course: course) }
             recomputeRecordedSeconds()
             locationService.requestPermission()
             locationService.startTracking(places: course.places)
@@ -193,6 +195,7 @@ struct ActiveSessionView: View {
                                shareRoomIds: roomIds) {
                 vlogCompleted = true
                 showVlog = false
+                Task { await StatsService.shared.postCourseEvent(.vlogComplete, course: course) }
             }
         }
         .sheet(isPresented: $showResumeSheet) {
@@ -394,15 +397,41 @@ struct ActiveSessionView: View {
                 if !visitedList.isEmpty { budgetBar }
 
                 if let place = currentPlace, !allVisited {
-                    // 거리 표시
-                    if let distance = locationService.distance(to: place) {
-                        HStack(spacing: 6) {
+                    // 거리 표시 + 길찾기
+                    //
+                    // 거리만 알려주고 "어떻게 가는지"는 알려주지 않으면, 사용자는 지도 앱을
+                    // 따로 열어 장소명을 다시 입력해야 한다. 그 단절을 여기서 끊는다.
+                    // 이동 중에 지도 앱으로 나가는 것은 손해가 아니다 — 도착하면 촬영하러 돌아온다.
+                    HStack(spacing: 6) {
+                        // 거리는 위치를 알 때만 보여줄 수 있지만, **길찾기는 그렇지 않다.**
+                        // 두 개를 한 조건 안에 묶어두면 실내·GPS 불안정으로 위치를 못 잡을 때
+                        // 길찾기까지 같이 사라진다 — 정작 그때가 가장 필요한 순간이다.
+                        if let distance = locationService.distance(to: place) {
                             Image(systemName: "location.fill")
                                 .foregroundColor(.tteOrange)
                                 .font(.tte(14))
                             Text(L("session.distanceRemaining", place.placeName, formatDistance(distance)))
                                 .font(.tte(14))
                                 .foregroundColor(.tteDarkGray)
+                        }
+
+                        Button {
+                            Haptics.light()
+                            MapAppLauncher.openDirections(
+                                to: place.coordinate,
+                                name: place.placeName,
+                                distanceMeters: locationService.distance(to: place))
+                        } label: {
+                            HStack(spacing: 3) {
+                                Image(systemName: "arrow.triangle.turn.up.right.diamond.fill")
+                                    .font(.tte(10))
+                                Text(L("common.directions"))
+                                    .font(.tte(12, .semibold))
+                            }
+                            .foregroundColor(.tteOrange)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 4)
+                            .background(Capsule().fill(Color.tteOrange.opacity(0.12)))
                         }
                     }
 

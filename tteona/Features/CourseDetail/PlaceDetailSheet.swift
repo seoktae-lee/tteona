@@ -141,6 +141,25 @@ struct PlaceDetailSheet: View {
                             .foregroundColor(.tteMediumGray)
                     }
                 }
+
+                // 길찾기는 여기 한 단계 안쪽에 둔다. 코스 목록에 바로 노출하면 아직
+                // 갈지 말지 정하지도 않은 사용자를 지도 앱으로 내보내게 된다.
+                Button {
+                    Haptics.light()
+                    MapAppLauncher.openDirections(to: place.coordinate, name: place.placeName)
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.triangle.turn.up.right.diamond.fill")
+                            .font(.tte(11))
+                        Text(L("common.directions"))
+                            .font(.tte(12, .semibold))
+                    }
+                    .foregroundColor(.tteOrange)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Capsule().fill(Color.tteOrange.opacity(0.12)))
+                }
+                .padding(.top, 3)
             }
             Spacer()
             if visitCount > 0 {
@@ -229,7 +248,7 @@ struct PlaceDetailSheet: View {
     }
 
     private var googleTab: some View {
-        VStack(spacing: 0) {
+        VStack(alignment: .leading, spacing: 0) {
             if isLoadingDetail {
                 ProgressView().padding(40)
             } else if let reviews = detail?.reviews, !reviews.isEmpty {
@@ -244,7 +263,7 @@ struct PlaceDetailSheet: View {
     }
 
     private var tteonaTab: some View {
-        VStack(spacing: 0) {
+        VStack(alignment: .leading, spacing: 0) {
             if isLoadingReviews {
                 ProgressView().padding(40)
             } else if !tteonaReviews.isEmpty {
@@ -341,6 +360,9 @@ struct GoogleReviewRow: View {
                     .lineLimit(4)
             }
         }
+        // 너비를 고정하지 않으면 행이 **글자 수만큼만** 넓어지고, 부모 VStack의 기본
+        // 가운데 정렬에 걸려 짧은 리뷰일수록 오른쪽으로 밀린다(줄이 삐뚤빼뚤해 보였다).
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
     }
@@ -407,6 +429,8 @@ struct TteonaReviewRow: View {
                     .foregroundColor(.tteDarkGray)
             }
         }
+        // 구글 리뷰 행과 같은 이유로 너비를 채운다 — 안 그러면 짧은 후기가 오른쪽으로 밀린다
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
     }

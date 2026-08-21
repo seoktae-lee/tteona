@@ -46,6 +46,10 @@ struct MainView: View {
     @State private var searchText = ""
     @FocusState private var searchFocused: Bool
     @State private var isLoadingCourses = false
+    /// 이미 코스를 받아온 위도 밴드 — 지도를 움직일 때마다 같은 쿼리가 나가는 걸 막는다
+    @State private var loadedBands: Set<String> = []
+    /// 현재 지도 줌. 너무 멀리 보고 있으면 핀을 그리지 않으므로 그때 안내를 띄운다.
+    @State private var mapZoom: Float = 6
 
     /// 지도 검색을 코스 이름에만 걸어두면 '양재고'처럼 **장소**를 찾는 사람은 빈손으로 나간다.
     /// 네이버·카카오 지도가 그러듯 입력하는 동안 장소 후보를 같이 보여주고,
@@ -125,7 +129,8 @@ struct MainView: View {
                 id: course.courseId,
                 coordinate: main.coordinate,
                 pinImageName: course.tag.pinImageName,
-                label: course.courseName
+                label: course.courseName,
+                curated: course.isCurated
             )
         }
     }
@@ -160,6 +165,26 @@ struct MainView: View {
                 }
                 .zIndex(2)
                 .transition(.opacity)
+            }
+
+            // 핀을 그리지 않는 줌에서는 이유를 알려준다. 그냥 비어 있으면
+            // "이 지역엔 코스가 없구나"로 읽혀 사용자가 확대해볼 생각을 하지 않는다.
+            if mapZoom < GoogleMapView.Coordinator.pinMinZoom && !isLoadingCourses {
+                VStack {
+                    Spacer()
+                    Text(L("main.zoomInForCourses"))
+                        .font(.tte(13, .semibold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Capsule().fill(Color.black.opacity(0.55)))
+                        // 탭바(≈83) + 지도/탐색 토글(34+12)을 피해야 한다.
+                        // 100으로 뒀더니 토글 뒤에 깔려 글자가 안 보였다.
+                        .padding(.bottom, 170)
+                }
+                .zIndex(2)
+                .transition(.opacity)
+                .allowsHitTesting(false)
             }
 
             topBar
@@ -204,12 +229,12 @@ struct MainView: View {
             locationService.requestPermission()
             locationService.startTracking(places: [])
             if let coord = locationService.currentLocation?.coordinate {
-                await moveToCountry(coord: coord)
+                await moveToUserArea(coord: coord)
             }
         }
         .onChange(of: locationService.currentLocation) { _, location in
             guard !didMoveToUser, let coord = location?.coordinate else { return }
-            Task { await moveToCountry(coord: coord) }
+            Task { await moveToUserArea(coord: coord) }
         }
         .sheet(item: $selectedCourse, onDismiss: {
             // 상세에서 "떠나기" 확정 시 → 시트 닫힘 완료 후 세션 시작 (asyncAfter 타이밍 의존 제거)
@@ -314,11 +339,13 @@ struct MainView: View {
             markers: mapMarkers,
             showsUserLocation: true,
             initialCamera: gmsCamera(center: CLLocationCoordinate2D(latitude: 36.5, longitude: 127.8), latDelta: 5),
+            thinsMarkers: true,
             cameraCommand: $cameraCommand,
             onMarkerTap: { courseId in
                 // 검색 핀은 코스가 아니다 — 코스 조회로 넘기면 조용히 무시될 뿐이라 명시한다
                 guard courseId != Self.searchedPinId else { return }
                 guard let course = filteredCourses.first(where: { $0.courseId == courseId }) else { return }
+                Task { await StatsService.shared.postCourseEvent(.pinTap, course: course) }
                 if activeSessionStore.hasTodaySession {
                     pendingNewCourse = course
                     showCourseResumeSheet = true
@@ -327,8 +354,33 @@ struct MainView: View {
                         selection.course = course
                     }
                 }
+            },
+            onCameraIdle: { position in
+                if mapZoom != position.zoom { mapZoom = position.zoom }
+                loadCoursesForVisibleArea(position)
             }
         )
+    }
+
+    /// 지도를 옮긴 자리의 코스를 채운다.
+    ///
+    /// 기본 로드는 인기 상위 300 + 큐레이션 상한이라, 전국 코스가 늘어나면 화면을 옮겨도
+    /// 그 동네 코스가 없는 상태가 된다. 카메라가 멈출 때 그 지역만 추가로 받아 메운다.
+    ///
+    /// 같은 밴드를 반복해서 받지 않도록 **이미 받아온 밴드를 기억**한다. 이게 없으면
+    /// 지도를 조금 움직일 때마다 같은 쿼리가 나가 읽기 비용이 걷잡을 수 없이 늘어난다.
+    /// 줌이 너무 멀면(전국 조망) 밴드 하나로 담을 수 없어 건너뛴다.
+    private func loadCoursesForVisibleArea(_ position: GMSCameraPosition) {
+        guard position.zoom >= 8 else { return }
+        let band = Course.latBand(for: position.target.latitude)
+        guard !loadedBands.contains(band) else { return }
+        loadedBands.insert(band)
+        Task {
+            await courseService.fetchCoursesNear(
+                latitude: position.target.latitude, longitude: position.target.longitude,
+                blockedUserIds: userService.currentUser?.blockedUserIds ?? []
+            )
+        }
     }
 
     // MARK: - Top Bar
@@ -642,33 +694,26 @@ struct MainView: View {
     }
 
     // MARK: - 나라 크기에 맞는 줌 레벨로 이동
-    private func moveToCountry(coord: CLLocationCoordinate2D) async {
-        let location = CLLocation(latitude: coord.latitude, longitude: coord.longitude)
-        let placemarks = try? await CLGeocoder().reverseGeocodeLocation(location)
-        let countryCode = placemarks?.first?.isoCountryCode ?? ""
-        let delta = countrySpan(for: countryCode)
+    /// 위치를 잡으면 **내 주변**으로 이동한다.
+    ///
+    /// 예전에는 나라 전체가 보이는 줌으로 맞췄다(moveToCountry). 코스가 수십 개일 땐
+    /// "우리 앱이 전국을 다룬다"는 인상을 줬지만, 900개가 넘자 전국 화면이 커다란
+    /// 클러스터 숫자로 뒤덮여 아무 쓸모가 없어졌다 — 전국에 157개가 있다는 정보는
+    /// 사용자의 다음 행동으로 이어지지 않는다.
+    ///
+    /// 지도 앱들이 그러하듯(네이버·카카오는 전국에서 핀을 아예 안 띄우고, 에어비앤비는
+    /// 화면에 20개 남짓만 보여준다) **처음부터 갈 만한 거리**를 보여준다.
+    private func moveToUserArea(coord: CLLocationCoordinate2D) async {
         await MainActor.run {
             didMoveToUser = true
-            cameraCommand = gmsCamera(center: coord, latDelta: delta)
+            cameraCommand = gmsCamera(center: coord, latDelta: Self.userAreaSpan)
         }
     }
 
-    private func countrySpan(for isoCode: String) -> Double {
-        switch isoCode {
-        // 소형 국가
-        case "SG", "MC", "LI", "SM", "VA", "MV", "BH", "HK", "MO": return 0.5
-        // 소~중형 국가
-        case "KR", "JP", "GB", "DE", "FR", "IT", "ES", "NL", "BE",
-             "CH", "AT", "CZ", "SK", "HU", "PT", "SE", "NO", "DK",
-             "FI", "PL", "GR", "TH", "VN", "MY", "PH", "NZ", "TW": return 8
-        // 중형 국가
-        case "MX", "SA", "IR", "MN", "ID", "PE", "CO", "ZA", "EG",
-             "TR", "NG", "ET", "TZ", "KZ": return 20
-        // 대형 국가
-        case "US", "CN", "RU", "CA", "BR", "AU", "IN", "AR": return 40
-        default: return 10
-        }
-    }
+    /// 내 위치로 맞출 때의 위도 폭(도). 0.125° ≈ 14km — 시 하나가 화면에 담긴다.
+    /// 실측으로 고른 값이다: 이 줌에서 화면에 뜨는 마커가 서울 20개·부산 8개·강릉 6개로
+    /// 대부분 개별 핀이고, 클러스터는 몇 개만 섞인다.
+    private static let userAreaSpan: Double = 0.125
 
     private func handleImpromptuTap() {
         selectedRoomIds = []

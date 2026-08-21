@@ -826,6 +826,49 @@ app.post('/api/stats/event', requireAuth, async (req, res) => {
   }
 });
 
+// ─── 코스 퍼널 이벤트 ──────────────────────────────────────────────────────────
+//
+// user_stats(컬럼 증가 방식)로는 답할 수 없는 질문이 있다 — "큐레이션 코스가 실제로
+// 세션 시작으로 이어지는가". 그러려면 **코스별로, 큐레이션 여부와 함께** 단계를 세야 한다.
+// 그래서 별도 테이블에 한 줄씩 쌓는다.
+//
+// 개인 식별이 목적이 아니라 단계별 통과율이 목적이므로 user_id는 중복 제거용으로만 쓴다.
+async function ensureCourseFunnelSchema() {
+  await pgPool.query(`
+    CREATE TABLE IF NOT EXISTS course_funnel_events (
+      id         BIGSERIAL   PRIMARY KEY,
+      event      TEXT        NOT NULL,   -- pin_tap | course_open | session_start | vlog_complete
+      course_id  TEXT        NOT NULL,
+      curated    BOOLEAN     NOT NULL DEFAULT FALSE,
+      user_id    TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pgPool.query(`CREATE INDEX IF NOT EXISTS idx_cfe_time  ON course_funnel_events (created_at DESC)`);
+  await pgPool.query(`CREATE INDEX IF NOT EXISTS idx_cfe_event ON course_funnel_events (event, curated, created_at DESC)`);
+}
+ensureCourseFunnelSchema().catch(err => console.error('[Funnel] schema migration error:', err.message));
+
+const FUNNEL_EVENTS = ['pin_tap', 'course_open', 'session_start', 'vlog_complete'];
+
+// 앱이 각 단계에서 한 줄씩 보낸다. 실패해도 앱 동작에 영향이 없어야 하므로
+// 검증 실패는 조용히 200으로 넘긴다 — 통계 때문에 사용자 흐름이 막히면 안 된다.
+app.post('/api/stats/course-event', requireAuth, cacheWriteLimiter, async (req, res) => {
+  const { event, courseId, curated } = req.body || {};
+  if (!FUNNEL_EVENTS.includes(event) || !courseId) return res.json({ ok: false });
+  try {
+    await pgPool.query(
+      `INSERT INTO course_funnel_events (event, course_id, curated, user_id)
+       VALUES ($1, $2, $3, $4)`,
+      [event, String(courseId).slice(0, 128), curated === true, req.uid || null]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[Funnel] insert error:', err.message);
+    res.json({ ok: false });
+  }
+});
+
 // 개인 누적 여행 통계 (본인 것만 조회 가능)
 app.get('/api/users/:uid/stats', requireAuth, async (req, res) => {
   const uid = req.params.uid;
@@ -3669,6 +3712,57 @@ app.get('/api/admin/analytics/content', adminAuth, async (req, res) => {
 // REVENUECAT_API_KEY: v2 secret key (sk_...), REVENUECAT_PROJECT_ID: RC 콘솔 프로젝트 ID
 const REVENUECAT_API_KEY   = process.env.REVENUECAT_API_KEY || '';
 const REVENUECAT_PROJECT_ID = process.env.REVENUECAT_PROJECT_ID || '';
+
+// 코스 퍼널 — 큐레이션 vs 일반 유저 코스를 **나란히** 놓는 것이 요점이다.
+// 절대 수치만 보면 "큐레이션이 많이 눌렸다"로 끝나지만, 전환율을 나란히 두면
+// "눈에는 띄는데 떠나고 싶게는 못 만든다" 같은 진단이 나온다.
+app.get('/api/admin/analytics/funnel', adminAuth, async (req, res) => {
+  try {
+    const days = Math.max(1, Math.min(180, parseInt(req.query.days) || 30));
+    const data = await cachedAnalytics(`funnel:${days}`, 60 * 1000, async () => {
+      const q = await pgPool.query(`
+        SELECT event, curated,
+               COUNT(*)::int                        AS total,
+               COUNT(DISTINCT user_id)::int         AS users,
+               COUNT(DISTINCT course_id)::int       AS courses
+        FROM course_funnel_events
+        WHERE created_at > NOW() - ($1 || ' days')::interval
+        GROUP BY event, curated
+      `, [String(days)]);
+
+      const empty = () => ({ pin_tap: 0, course_open: 0, session_start: 0, vlog_complete: 0 });
+      const out = {
+        curated: { total: empty(), users: empty() },
+        ugc:     { total: empty(), users: empty() },
+      };
+      for (const r of q.rows) {
+        const side = r.curated ? out.curated : out.ugc;
+        side.total[r.event] = r.total;
+        side.users[r.event] = r.users;
+      }
+
+      // 어떤 코스가 실제로 세션까지 이어졌는지 — 상위 10개
+      const top = await pgPool.query(`
+        SELECT course_id,
+               COUNT(*) FILTER (WHERE event = 'course_open')::int   AS opens,
+               COUNT(*) FILTER (WHERE event = 'session_start')::int AS starts,
+               BOOL_OR(curated)                                     AS curated
+        FROM course_funnel_events
+        WHERE created_at > NOW() - ($1 || ' days')::interval
+        GROUP BY course_id
+        HAVING COUNT(*) FILTER (WHERE event = 'course_open') > 0
+        ORDER BY starts DESC, opens DESC
+        LIMIT 10
+      `, [String(days)]);
+
+      return { days, funnel: out, topCourses: top.rows };
+    });
+    res.json(data);
+  } catch (err) {
+    console.error('admin analytics/funnel error:', err.message);
+    res.status(500).json({ error: 'internal error' });
+  }
+});
 
 app.get('/api/admin/analytics/subscription', adminAuth, async (req, res) => {
   if (!REVENUECAT_API_KEY || !REVENUECAT_PROJECT_ID) return res.json({ configured: false });

@@ -16,15 +16,11 @@ struct ExploreDetailView: View {
     @State private var author: AppUser?
     // 코스 제목(UGC) 번역문 — 도착 전·실패 시에는 원문을 보여준다.
     @State private var translatedTitle: String?
-    @State private var weather: WeatherInfo?
-    @State private var carRoute: RouteInfo?
-    @State private var walkRoute: RouteInfo?
-    @State private var transitRoute: RouteInfo?
-    @State private var isLoadingRoute = true
-    @State private var isLoadingTransit = true
     @State private var showRoomSelect = false
     @State private var showOtherCourseAlert = false
     @State private var showFullMap = false
+    /// 근처 추천 식당 상세 — 코스 장소와 같은 시트를 재사용한다
+    @State private var selectedNearbyFood: Place?
     @State private var selectedRoomIds: Set<String> = []
     @State private var isLikeProcessing = false
     @State private var showReportDialog = false
@@ -49,9 +45,16 @@ struct ExploreDetailView: View {
                 headerImage
                 VStack(alignment: .leading, spacing: 20) {
                     titleBlock
-                    weatherCard
-                    transportSection
+                    CourseSummaryBar(course: course)
+                    CourseSourceLabel(course: course)
+                    CourseTravelInfo(course: course)
                     placesBlock
+                    if course.nearbyFood?.isEmpty == false {
+                        Divider()
+                        CourseNearbyFoodSection(course: course) { food in
+                            selectedNearbyFood = food.asPlace
+                        }
+                    }
                 }
                 .padding(20)
                 .padding(.bottom, 100)
@@ -65,28 +68,19 @@ struct ExploreDetailView: View {
         .task {
             let uid = authService.currentUser?.uid ?? ""
             await courseService.fetchLikedCourseIds(userId: uid)
+            Task { await StatsService.shared.postCourseEvent(.courseOpen, course: course) }
             author = await userService.fetchAuthor(uid: course.authorId)
             // 날씨·경로 조회 뒤로 밀리지 않도록 별도 태스크로 — 도착 전까지는 원문이 보인다.
             Task {
                 translatedTitle = await TranslationService.shared.translate(
                     course.courseName, to: LanguageManager.shared.language)
             }
-            if let main = course.mainPlace {
-                weather = await ExploreInfoService.shared.fetchWeather(lat: main.latitude, lng: main.longitude)
-            }
-            // 자동차: 서버 실측(한국=카카오모빌리티) 우선, 실패 시 로컬 추정 폴백
-            if let serverCar = await ExploreInfoService.shared.computeServerRoute(places: course.places, mode: "car") {
-                carRoute = serverCar
-            } else {
-                carRoute = await ExploreInfoService.shared.computeRoute(places: course.places, transport: .automobile)
-            }
-            walkRoute = await ExploreInfoService.shared.computeRoute(places: course.places, transport: .walking)
-            isLoadingRoute = false
-            transitRoute = await ExploreInfoService.shared.computeTransitRoute(places: course.places)
-            isLoadingTransit = false
         }
         .fullScreenCover(isPresented: $showFullMap) {
             CourseFullMapView(course: course)
+        }
+        .sheet(item: $selectedNearbyFood) { place in
+            PlaceDetailSheet(place: place)
         }
         .fullScreenCover(isPresented: $showRoomSelect) {
             RoomSelectView(selectedRoomIds: $selectedRoomIds) {
@@ -322,76 +316,6 @@ struct ExploreDetailView: View {
             }
             Spacer()
         }
-    }
-
-    // MARK: - 날씨 카드
-
-    private var weatherCard: some View {
-        HStack(spacing: 10) {
-            Text(weather?.emoji ?? "🌡️").font(.tte(22))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(L("detail.currentWeather"))
-                    .font(.tte(12, .semibold))
-                    .foregroundColor(.tteMediumGray)
-                Text(weather.map { "\(Int($0.tempC))° \($0.description)" } ?? "-")
-                    .font(.tte(15, .bold))
-                    .foregroundColor(.tteDarkGray)
-            }
-            Spacer()
-        }
-        .padding(14)
-        .background(RoundedRectangle(cornerRadius: 14).fill(Color(UIColor.secondarySystemBackground)))
-    }
-
-    // MARK: - 이동 정보 (자동차 / 대중교통 / 도보)
-
-    private var transportSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(L("detail.transport"))
-                .font(.tte(16, .bold))
-                .foregroundColor(.tteDarkGray)
-
-            VStack(spacing: 0) {
-                transportRow(icon: "car.fill", label: L("detail.transport.car"),
-                             route: carRoute, loading: isLoadingRoute)
-                Divider().padding(.leading, 44)
-                transportRow(icon: "bus.fill", label: L("detail.transport.transit"),
-                             route: transitRoute, loading: isLoadingTransit,
-                             unavailableText: L("detail.noInfo"))
-                Divider().padding(.leading, 44)
-                transportRow(icon: "figure.walk", label: L("detail.transport.walk"),
-                             route: walkRoute, loading: isLoadingRoute)
-            }
-            .padding(.vertical, 4)
-            .background(RoundedRectangle(cornerRadius: 14).fill(Color(UIColor.secondarySystemBackground)))
-        }
-    }
-
-    private func transportRow(icon: String, label: String, route: RouteInfo?,
-                              loading: Bool, unavailableText: String = "-") -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.tte(15))
-                .foregroundColor(.tteOrange)
-                .frame(width: 24)
-            Text(label)
-                .font(.tte(15, .medium))
-                .foregroundColor(.tteDarkGray)
-            Spacer()
-            if loading {
-                ProgressView().scaleEffect(0.8)
-            } else if let route {
-                Text("\(route.timeText) · \(route.distanceText)")
-                    .font(.tte(15, .semibold))
-                    .foregroundColor(.tteDarkGray)
-            } else {
-                Text(unavailableText)
-                    .font(.tte(14))
-                    .foregroundColor(.tteMediumGray)
-            }
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
     }
 
     // MARK: - Places

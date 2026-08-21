@@ -45,18 +45,37 @@ service cloud.firestore {
       allow read, write: if isSignedIn() && isOwner(userId);
     }
 
+    // 공식 큐레이션 계정 — 이 uid만 curated/curationSource를 쓸 수 있다.
+    // 막지 않으면 아무 유저나 curated:true를 달아 지도에서 공식 코스 행세를 할 수 있다
+    // (큐레이션 코스는 주황 라벨 핀 + 인증 뱃지로 표시되므로 신뢰 표식을 위조하는 셈).
+    function isCurator() {
+      return request.auth.uid == 'tfK1b6xcHkcYCK7kkhzOkFrATow2';
+    }
+    // 큐레이션 표식을 건드리지 않는 문서인가 (일반 유저의 코스 생성·수정 경로)
+    function noCurationClaim() {
+      return !request.resource.data.keys().hasAny(['curated', 'curationSource'])
+          || (request.resource.data.get('curated', false) == false
+              && request.resource.data.get('curationSource', null) == null);
+    }
+
     // courses 컬렉션
     match /courses/{courseId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
+      allow create: if isSignedIn()
+                    && request.resource.data.authorId == request.auth.uid
+                    && (isCurator() || noCurationClaim());
       // 작성자: 모든 필드 수정 가능
       // 다른 유저: likeCount 필드만, 정확히 ±1 범위에서만 수정 가능 (좋아요/취소)
       //   → 임의 값(예: 9999999) 주입 차단. increment(±1)의 결과값이
       //     request.resource.data.likeCount에 반영되므로 규칙에서 검증 가능.
       //   ※ 동일 유저의 반복 증가(중복 좋아요)까지 완전 차단하려면 좋아요를
       //     서버 API/likes 서브컬렉션으로 이전해야 함(별도 과제).
-      allow update: if isSignedIn() && (
-        resource.data.authorId == request.auth.uid ||
+      // resource != null 가드: setDoc은 create/update 양쪽으로 평가되는데, 문서가 없는
+      // 상태에서 resource.data를 읽으면 규칙이 '평가 에러'를 내며 거부한다(결과는 같지만
+      // 로그가 지저분하고 진짜 에러를 가린다). 존재할 때만 아래를 보게 한다.
+      allow update: if isSignedIn() && resource != null && (
+        // 작성자라도 큐레이션 표식은 나중에 덧붙일 수 없다 — 큐레이터 uid만 가능
+        (resource.data.authorId == request.auth.uid && (isCurator() || noCurationClaim())) ||
         (
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount']) &&
           request.resource.data.likeCount is int &&

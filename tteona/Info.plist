@@ -49,6 +49,7 @@
 		<string>kakaotalk</string>
 		<string>kakaoopen</string>
 		<string>kakaomap</string>
+		<string>nmap</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>각 장소에서 영상을 촬영하여 추억 Vlog를 만들기 위해 카메라를 사용합니다.</string>
