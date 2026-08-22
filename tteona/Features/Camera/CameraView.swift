@@ -589,15 +589,38 @@ final class CameraViewController: UIViewController {
             checkMark.heightAnchor.constraint(equalToConstant: 48)
         ])
 
+        // 실패 아이콘 — 저장이 결과물 없이 끝났을 때 (인코딩 실패·저장공간 부족 등)
+        let failMark = UIImageView(image: UIImage(systemName: "exclamationmark.circle.fill"))
+        failMark.tintColor = UIColor(red: 1.0, green: 0.62, blue: 0.04, alpha: 1)
+        failMark.contentMode = .scaleAspectFit
+        failMark.isHidden = true
+        failMark.tag = 704
+        NSLayoutConstraint.activate([
+            failMark.widthAnchor.constraint(equalToConstant: 48),
+            failMark.heightAnchor.constraint(equalToConstant: 48)
+        ])
+
         let label = UILabel()
         label.text = L("camera.saving")
         label.textColor = .white
         label.font = .systemFont(ofSize: 16, weight: .medium)
+        label.textAlignment = .center
+        label.numberOfLines = 2
         label.tag = 703
+
+        // 보조 문구 — 실패했을 때만 보인다 ("다시 찍어주세요")
+        let subLabel = UILabel()
+        subLabel.textColor = UIColor.white.withAlphaComponent(0.7)
+        subLabel.font = .systemFont(ofSize: 12)
+        subLabel.textAlignment = .center
+        subLabel.isHidden = true
+        subLabel.tag = 705
 
         stack.addArrangedSubview(indicator)
         stack.addArrangedSubview(checkMark)
+        stack.addArrangedSubview(failMark)
         stack.addArrangedSubview(label)
+        stack.addArrangedSubview(subLabel)
 
         NSLayoutConstraint.activate([
             container.centerXAnchor.constraint(equalTo: overlay.centerXAnchor),
@@ -938,9 +961,45 @@ final class CameraViewController: UIViewController {
         if url != nil {
             showSaveSuccessAndClose()
         } else {
-            // 취소되거나 오류 시 오버레이 숨기기
-            savingOverlay?.isHidden = true
-            view.isUserInteractionEnabled = true
+            showSaveFailure()
+        }
+    }
+
+    /*
+     * 저장이 결과물 없이 끝났음을 알린다.
+     *
+     * 예전엔 오버레이만 조용히 걷었다. 화면이 촬영 직전과 똑같아져서 사용자는 찍힌 줄 알고
+     * 다음 장소로 이동하고, 브이로그를 만들 때가 되어서야 그 장소가 비어 있는 걸 발견한다.
+     * 실패도 결과이므로 그 자리에서 알린다. 다음 단계로는 넘기지 않는다.
+     */
+    private func showSaveFailure() {
+        savingOverlay?.isHidden = false
+        view.isUserInteractionEnabled = false
+        savingOverlay?.viewWithTag(701)?.isHidden = true   // indicator
+        savingOverlay?.viewWithTag(702)?.isHidden = true   // checkMark
+        savingOverlay?.viewWithTag(704)?.isHidden = false  // failMark
+        if let label = savingOverlay?.viewWithTag(703) as? UILabel {
+            label.text = L("camera.saveFailed")
+            label.font = .systemFont(ofSize: 15, weight: .medium)
+        }
+        if let sub = savingOverlay?.viewWithTag(705) as? UILabel {
+            sub.text = L("camera.saveFailed.sub")
+            sub.isHidden = false
+        }
+        UINotificationFeedbackGenerator().notificationOccurred(.warning)
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+            guard let self else { return }
+            self.savingOverlay?.isHidden = true
+            self.view.isUserInteractionEnabled = true
+            // 다음 촬영을 위해 오버레이를 원래 모습으로 되돌린다
+            self.savingOverlay?.viewWithTag(701)?.isHidden = false
+            self.savingOverlay?.viewWithTag(704)?.isHidden = true
+            self.savingOverlay?.viewWithTag(705)?.isHidden = true
+            if let label = self.savingOverlay?.viewWithTag(703) as? UILabel {
+                label.text = L("camera.saving")
+                label.font = .systemFont(ofSize: 16, weight: .medium)
+            }
         }
     }
 

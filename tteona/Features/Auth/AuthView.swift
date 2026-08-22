@@ -25,6 +25,12 @@ struct AuthView: View {
     @State private var resendCooldown = 0
     @State private var cooldownTask: Task<Void, Never>? = nil
     @State private var isCheckingVerification = false
+    @State private var showChangeEmail = false
+    @State private var changeEmailInput = ""
+    @State private var changeEmailSent = false
+    /// 인증 메일을 보낸 주소. 화면이 들고 있는 입력값을 쓰면 안 된다 —
+    /// 이 화면은 가입을 한 화면과 다른 인스턴스로 뜨는 경우가 있어 그 값이 비어 있다.
+    @State private var pendingEmail: String? = nil
     @FocusState private var focusedField: AuthField?
 
     enum AuthField { case email, password, confirm }
@@ -159,6 +165,24 @@ struct AuthView: View {
                     .font(.tte(12))
                     .foregroundColor(Color(UIColor.tertiaryLabel))
                     .padding(.top, 4)
+
+                // 보낸 주소 — 오타를 알아채는 유일한 단서다
+                if let addr = pendingEmail, !addr.isEmpty {
+                    Text(addr)
+                        .font(.tte(15, .semibold))
+                        .foregroundColor(.tteDarkGray)
+                        .padding(.top, 16)
+                    Button {
+                        changeEmailInput = addr
+                        showChangeEmail = true
+                    } label: {
+                        Text(L("auth.changeEmail"))
+                            .font(.tte(13, .medium))
+                            .foregroundColor(.tteOrange)
+                            .underline()
+                    }
+                    .padding(.top, 2)
+                }
             }
 
             Spacer()
@@ -203,11 +227,57 @@ struct AuthView: View {
                     }
                 }
                 .disabled(isCheckingVerification)
+
+                /*
+                 * 나가는 길.
+                 *
+                 * 이게 없으면 주소를 잘못 적은 사람은 앱을 강제로 껐다 켜는 것 말고 방법이 없다.
+                 * 로그아웃이 아니라 플래그만 내린다 — 계정은 인증 대기로 남고 uid도 그대로라
+                 * 촬영을 이어갈 수 있고, 나중에 인증을 마치면 같은 신원으로 돌아온다.
+                 */
+                Button {
+                    authService.dismissVerification()
+                } label: {
+                    Text(L("auth.verifyLater"))
+                        .font(.tte(14, .medium))
+                        .foregroundColor(.tteMediumGray)
+                }
+                .disabled(isCheckingVerification)
+                .padding(.top, 2)
             }
             .padding(.horizontal, 24)
-            .padding(.bottom, 48)
+            .padding(.bottom, 40)
         }
-        .onAppear { startResendCooldown() }
+        .onAppear {
+            startResendCooldown()
+            pendingEmail = authService.pendingVerificationEmail
+        }
+        .alert(L("auth.changeEmail"), isPresented: $showChangeEmail) {
+            TextField(L("auth.email"), text: $changeEmailInput)
+                .keyboardType(.emailAddress)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+            Button(L("common.cancel"), role: .cancel) {}
+            Button(L("common.ok")) {
+                let target = changeEmailInput
+                Task {
+                    if await authService.changeVerificationEmail(to: target) {
+                        // 링크를 누르기 전까진 계정 주소가 옛것이라 Firebase에는 안 뜬다 —
+                        // 화면에는 방금 보낸 주소를 보여줘야 사용자가 상황을 이해한다.
+                        pendingEmail = target.trimmingCharacters(in: .whitespacesAndNewlines)
+                        startResendCooldown()
+                        changeEmailSent = true
+                    }
+                }
+            }
+        } message: {
+            Text(L("auth.changeEmail.message"))
+        }
+        .alert(L("auth.verificationMail"), isPresented: $changeEmailSent) {
+            Button(L("common.ok"), role: .cancel) {}
+        } message: {
+            Text(L("auth.changeEmail.sent"))
+        }
         .onDisappear {
             cooldownTask?.cancel()
             cooldownTask = nil
