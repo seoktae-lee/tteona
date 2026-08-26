@@ -80,34 +80,70 @@ struct ProPaywallView: View {
                         .background(RoundedRectangle(cornerRadius: 20).fill(Color.white.opacity(0.07)))
                         .padding(.horizontal, 24)
 
-                        if packages.isEmpty {
-                            VStack(spacing: 10) {
-                                Text(L("paywall.loadFailed"))
-                                    .font(.tte(14))
-                                    .foregroundColor(.white.opacity(0.7))
-                                Button(L("paywall.retry")) {
-                                    Task { await pro.loadOfferings() }
-                                }
-                                .font(.tte(14, .semibold))
-                                .foregroundColor(.tteOrange)
-                            }
-                            .padding(.vertical, 12)
-                        } else {
-                            VStack(spacing: 14) {
-                                if let annual { annualCard(annual) }
-                                if let monthly { monthlyCard(monthly) }
-                            }
+                        // 자동 갱신 조건 고지 — 심사 지침 3.1.2가 인앱 표시를 요구한다.
+                        // 읽을 사람은 읽고 결정에는 방해되지 않도록 스크롤 맨 아래에 둔다.
+                        Text(L("paywall.autoRenewNotice"))
+                            .font(.tte(11))
+                            .foregroundColor(.white.opacity(0.55))
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
                             .padding(.horizontal, 24)
-                            .padding(.top, 4)
-                            .opacity(appeared ? 1 : 0)
-                            .offset(y: appeared ? 0 : 16)
-                            .animation(.spring(response: 0.55, dampingFraction: 0.85).delay(0.4), value: appeared)
+
+                        HStack(spacing: 16) {
+                            Button(L("paywall.restore")) { Task { await restore() } }
+                            // EULA는 App Store Connect에 Apple 표준으로 선언돼 있다. 자체 약관(tteona.kr/terms)엔
+                            // 구독 조항이 없어 EULA 역할을 못 하므로, 여기서는 선언된 원문을 그대로 링크한다.
+                            Link(L("paywall.eula"),
+                                 destination: URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!)
+                            Link(L("paywall.privacyPolicy"), destination: URL(string: "https://tteona.kr/privacy.html")!)
                         }
+                        .font(.tte(12))
+                        .foregroundColor(.white.opacity(0.5))
                     }
-                    .padding(.bottom, 24)
+                    .padding(.bottom, 20)
+                }
+                // 경계에서 내용이 글자 중간에 잘리면 고장처럼 보인다 — 페이드로 "더 있다"는 신호를 준다
+                .overlay(alignment: .bottom) {
+                    LinearGradient(colors: [.clear, .black.opacity(0.32)],
+                                   startPoint: .top, endPoint: .bottom)
+                        .frame(height: 28)
+                        .allowsHitTesting(false)
                 }
 
+                /*
+                 * **가격과 버튼은 항상 같이 보인다.**
+                 *
+                 * 플랜 카드가 스크롤 안에 있으면 혜택 목록이 칸을 다 먹었을 때 가격이
+                 * 화면 밖으로 밀린다 — 스크롤해야 얼마인지 알 수 있는 결제 화면이 된다.
+                 * (안드로이드에서 같은 구조로 실측해 확인한 문제다. 여기는 하단에 EULA
+                 *  링크까지 더 있어 고정 칸이 더 두껍다)
+                 * 결정에 필요한 것(가격·기간·혜택가·버튼)을 고정 칸에 두고,
+                 * 스크롤에는 읽을거리만 남긴다.
+                 */
                 VStack(spacing: 10) {
+                    if packages.isEmpty {
+                        VStack(spacing: 10) {
+                            Text(L("paywall.loadFailed"))
+                                .font(.tte(14))
+                                .foregroundColor(.white.opacity(0.7))
+                            Button(L("paywall.retry")) {
+                                Task { await pro.loadOfferings() }
+                            }
+                            .font(.tte(14, .semibold))
+                            .foregroundColor(.tteOrange)
+                        }
+                        .padding(.vertical, 8)
+                    } else {
+                        VStack(spacing: 10) {
+                            if let annual { annualCard(annual) }
+                            if let monthly { monthlyCard(monthly) }
+                        }
+                        .padding(.horizontal, 24)
+                        .opacity(appeared ? 1 : 0)
+                        .offset(y: appeared ? 0 : 16)
+                        .animation(.spring(response: 0.55, dampingFraction: 0.85).delay(0.4), value: appeared)
+                    }
+
                     ctaButton
                         .padding(.horizontal, 24)
 
@@ -122,26 +158,7 @@ struct ProPaywallView: View {
                     }
                     .foregroundColor(.white.opacity(0.75))
 
-                    // 자동 갱신 조건 고지 — 심사 지침 3.1.2가 인앱 표시를 요구한다
-                    Text(L("paywall.autoRenewNotice"))
-                        .font(.tte(11))
-                        .foregroundColor(.white.opacity(0.55))
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.horizontal, 24)
-
-                    HStack(spacing: 16) {
-                        Button(L("paywall.restore")) { Task { await restore() } }
-                        // EULA는 App Store Connect에 Apple 표준으로 선언돼 있다. 자체 약관(tteona.kr/terms)엔
-                        // 구독 조항이 없어 EULA 역할을 못 하므로, 여기서는 선언된 원문을 그대로 링크한다.
-                        Link(L("paywall.eula"),
-                             destination: URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!)
-                        Link(L("paywall.privacyPolicy"), destination: URL(string: "https://tteona.kr/privacy.html")!)
-                    }
-                    .font(.tte(12))
-                    .foregroundColor(.white.opacity(0.5))
-                    .padding(.top, 4)
-                    .padding(.bottom, 24)
+                    .padding(.bottom, 20)
                 }
             }
         }
