@@ -18,16 +18,18 @@ GPS로 장소 도착을 감지해 촬영을 알리고, 모아둔 클립을 자�
 
 <table>
 <tr>
-<td width="25%"><img src="docs/screenshots/01-explore.jpg" alt="지도에서 코스 탐색"></td>
-<td width="25%"><img src="docs/screenshots/02-course.jpg" alt="코스 미리보기"></td>
-<td width="25%"><img src="docs/screenshots/03-capture.jpg" alt="도착하면 촬영"></td>
-<td width="25%"><img src="docs/screenshots/04-vlog.jpg" alt="브이로그 완성"></td>
+<td width="20%"><img src="docs/screenshots/01-explore.jpg" alt="지도에서 코스 탐색"></td>
+<td width="20%"><img src="docs/screenshots/02-course.jpg" alt="코스 상세와 이동 정보"></td>
+<td width="20%"><img src="docs/screenshots/03-capture.jpg" alt="도착하면 촬영"></td>
+<td width="20%"><img src="docs/screenshots/04-format.jpg" alt="브이로그 포맷 선택"></td>
+<td width="20%"><img src="docs/screenshots/05-caption.jpg" alt="자막 스타일 설정"></td>
 </tr>
 <tr>
-<td align="center"><sub>코스 탐색</sub></td>
-<td align="center"><sub>코스 미리보기</sub></td>
-<td align="center"><sub>도착 → 촬영</sub></td>
-<td align="center"><sub>브이로그 완성</sub></td>
+<td align="center"><sub><b>코스 탐색</b><br>지도에서 고르기</sub></td>
+<td align="center"><sub><b>코스 상세</b><br>장소 · 이동 시간</sub></td>
+<td align="center"><sub><b>촬영</b><br>도착하면 알림</sub></td>
+<td align="center"><sub><b>포맷 선택</b><br>릴스 · 유튜브 · 인스타</sub></td>
+<td align="center"><sub><b>자막 스타일</b><br>폰트 · 색 · 표시 항목</sub></td>
 </tr>
 </table>
 
