@@ -2,8 +2,12 @@
 
 > 여행을 따라 걷기만 하면, 하루가 끝날 때 브이로그가 만들어져 있습니다.
 
-GPS로 장소 도착을 감지해 촬영을 알리고, 모아둔 클립을 자동으로 이어 붙여 브이로그를 완성하는 iOS 앱입니다.
-기획부터 iOS 앱, 서버, 인프라, 운영까지 1인이 개발했습니다.
+GPS로 장소 도착을 감지해 촬영을 알리고, 모아둔 클립을 자동으로 이어 붙여 브이로그를 완성하는 앱입니다.
+**App Store와 Google Play에 출시해 운영 중이며**, 기획부터 iOS · Android 앱, 서버, 인프라, 운영까지 1인이 개발했습니다.
+
+<a href="https://apps.apple.com/kr/app/id6767218543"><img src="https://img.shields.io/badge/App_Store-다운로드-0D96F6?style=for-the-badge&logo=appstore&logoColor=white" alt="App Store에서 받기"></a>
+<a href="https://play.google.com/store/apps/details?id=com.seoktaedev.tteona"><img src="https://img.shields.io/badge/Google_Play-다운로드-01875F?style=for-the-badge&logo=googleplay&logoColor=white" alt="Google Play에서 받기"></a>
+<a href="https://tteona.kr/explore"><img src="https://img.shields.io/badge/웹에서_둘러보기-설치_없이-FF6B35?style=for-the-badge" alt="웹에서 코스 둘러보기"></a>
 
 ![iOS](https://img.shields.io/badge/iOS-17.0+-000000?logo=apple)
 ![Swift](https://img.shields.io/badge/Swift-5.9-F05138?logo=swift&logoColor=white)
@@ -11,8 +15,6 @@ GPS로 장소 도착을 감지해 촬영을 알리고, 모아둔 클립을 자�
 ![Node.js](https://img.shields.io/badge/Node.js-Express-339933?logo=nodedotjs&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
 ![Firebase](https://img.shields.io/badge/Firebase-Auth%20·%20Firestore%20·%20FCM-FFCA28?logo=firebase&logoColor=black)
-
-**웹에서 코스 둘러보기 →** [tteona.kr/explore](https://tteona.kr/explore) (앱 설치 없이 열립니다)
 
 <table>
 <tr>
@@ -35,10 +37,10 @@ GPS로 장소 도착을 감지해 촬영을 알리고, 모아둔 클립을 자�
 
 | | |
 |---|---|
-| **개발 기간** | 2026.05 ~ 진행 중 (약 4개월) |
+| **출시** | **App Store** 2026.06.08 · **Google Play** — 양대 마켓 출시 후 지속 업데이트 중 |
+| **개발 기간** | 2026.05 ~ 운영 중 (출시까지 약 1개월, 이후 계속 개선) |
 | **개발 인원** | 1인 — 기획 · iOS · Android · 서버 · 인프라 · 운영 |
 | **규모** | iOS Swift 27,011줄 (107개 파일) · 서버 4,234줄 · 커밋 167회 |
-| **출시 상태** | App Store 출시 · 1.3 대 (iOS), Google Play (Android) |
 | **지원 언어** | 한국어 · English · 日本語 (문자열 790개) |
 | **인프라** | 2026년 위치정보 클라우드 지원사업 선정 — WEB / WAS / DB 3계층 |
 
@@ -321,8 +323,10 @@ node server.js
 
 | 저장소 | 내용 |
 |---|---|
-| [tteona](https://github.com/seoktae-lee/tteona) | iOS 앱 + 서버 + 웹 (현재 저장소) |
-| [tteona-android](https://github.com/seoktae-lee/tteona-android) | Android 앱 (Kotlin) |
+| [tteona](https://github.com/seoktae-lee/tteona) | iOS 앱 + 서버 + 웹 (현재 저장소) — [App Store 출시](https://apps.apple.com/kr/app/id6767218543) |
+| [tteona-android](https://github.com/seoktae-lee/tteona-android) | Android 앱 (Kotlin, Jetpack Compose) — [Google Play 출시](https://play.google.com/store/apps/details?id=com.seoktaedev.tteona) |
+
+두 앱은 같은 서버와 데이터를 공유하며, 기능 패리티를 맞춰 함께 업데이트합니다.
 
 ---
 
