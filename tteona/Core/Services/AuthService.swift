@@ -40,6 +40,22 @@ private func fetchKakaoCustomToken(kakaoAccessToken: String) async throws -> Str
     return token
 }
 
+extension FirebaseAuth.User {
+    /// **아직 계정이 아닌 임시 신원인가.**
+    ///
+    /// 익명은 물론이고, 이메일로 가입만 하고 인증을 안 끝낸 계정도 여기 포함된다.
+    /// 앱은 그 상태를 로그인으로 치지 않고(`currentUser`를 비운다) 저장 경로만
+    /// `free_{uid}`로 유지하는데, 그 uid를 버리고 다른 계정으로 갈 때는 파일을 옮겨야 한다.
+    /// 판정을 한 곳에 모아 두지 않으면 경로마다 조건이 어긋난다.
+    var isProvisionalIdentity: Bool {
+        if isAnonymous { return true }
+        let providerIDs = providerData.map { $0.providerID }
+        let isEmailPassword = providerIDs.contains("password")
+            && providerIDs.allSatisfy { $0 == "password" }
+        return isEmailPassword && !isEmailVerified
+    }
+}
+
 @MainActor
 class AuthService: NSObject, ObservableObject {
     @Published var currentUser: AppUser?
@@ -148,7 +164,23 @@ class AuthService: NSObject, ObservableObject {
     /// 세션 이관이 따로 받는다. (카카오는 커스텀 토큰이라 애초에 이 경로를 못 탄다)
     private func signInOrLink(with credential: AuthCredential) async throws -> AuthDataResult {
         guard let user = Auth.auth().currentUser, user.isAnonymous else {
-            return try await Auth.auth().signIn(with: credential)
+            /*
+             * 익명이 아니면 link를 못 쓴다 — 그대로 갈아탄다.
+             *
+             * 다만 **갈아타기 전 신원이 임시 신원이었다면 찍어둔 파일을 옮겨 준다.**
+             * 이메일로 가입하고 인증을 아직 안 한 상태가 여기 걸린다: 익명은 아니지만
+             * 계정도 아니고(currentUser를 비워 둔다), 그 사람이 오늘 찍은 클립은
+             * `free_{그 uid}` 아래에 있다. 인증 메일이 안 와서 구글·애플로 갈아타는 건
+             * 흔한 행동인데, 예전엔 그 순간 uid만 바뀌고 파일은 남겨져 영상이 조용히 사라졌다.
+             * (진짜 계정 → 다른 계정 전환에서는 옮기면 안 된다 — 남의 데이터가 딸려간다)
+             */
+            let carryOver = Auth.auth().currentUser.flatMap { $0.isProvisionalIdentity ? $0.uid : nil }
+            let result = try await Auth.auth().signIn(with: credential)
+            if let carryOver {
+                migrateGuestSession(from: carryOver, to: result.user.uid)
+                GuestVlogQuota.reset()
+            }
+            return result
         }
         do {
             let result = try await user.link(with: credential)
@@ -270,6 +302,65 @@ class AuthService: NSObject, ObservableObject {
 
     // MARK: - 이메일 회원가입
     @Published var verificationEmailSent = false
+
+    /// 지금 인증을 기다리고 있는 이메일 주소.
+    ///
+    /// 화면에 이 값을 보여줘야 오타를 알아챌 수 있다. 화면이 들고 있는 입력값을 쓰면 안 된다 —
+    /// 인증 대기 화면은 가입을 한 화면과 다른 인스턴스로 뜨는 경우가 있어 그 값이 비어 있다.
+    var pendingVerificationEmail: String? {
+        guard let user = Auth.auth().currentUser, !user.isEmailVerified else { return nil }
+        return user.email
+    }
+
+    /// 인증 대기 화면에서 빠져나온다.
+    ///
+    /// **로그아웃하지 않는다.** 여기서 로그아웃하면 새 게스트 신원이 발급되며 uid가 바뀌어
+    /// 그날 찍어둔 클립이 통째로 끊긴다. 플래그만 내리면 계정은 인증 대기 상태로 남고,
+    /// 사용자는 촬영을 이어갈 수 있다 — 인증을 마치면 같은 uid로 돌아온다.
+    func dismissVerification() {
+        errorMessage = nil
+        verificationEmailSent = false
+    }
+
+    /// 인증 메일을 받을 주소를 바꾼다. **uid는 그대로 둔다.**
+    ///
+    /// 주소를 잘못 적은 사람에게 이게 없으면 길이 막힌다. 뒤로 나가 다시 가입해도,
+    /// 오타 난 계정이 이미 그 사람의 uid를 물고 있어 두 번째 가입은 link가 아닌 새 계정
+    /// 생성으로 흘러 uid가 바뀌고 찍어둔 영상이 사라진다.
+    /// `sendEmailVerification(beforeUpdatingEmail:)`은 새 주소로 링크를 보내고, 그 링크를
+    /// 누르면 주소 변경과 인증이 한 번에 끝난다 — 누르기 전까지 계정은 옛 주소 그대로다.
+    @discardableResult
+    func changeVerificationEmail(to newEmail: String) async -> Bool {
+        let trimmed = newEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isValidEmail(trimmed) else {
+            errorMessage = L("auth.error.invalidEmail")
+            return false
+        }
+        guard let user = Auth.auth().currentUser else {
+            errorMessage = L("auth.reenterForVerify")
+            return false
+        }
+        if trimmed.lowercased() == (user.email ?? "").lowercased() {
+            errorMessage = nil
+            return true   // 같은 주소 — 재전송과 다를 게 없다
+        }
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            try await user.sendEmailVerification(beforeUpdatingEmail: trimmed)
+            errorMessage = nil
+            return true
+        } catch let error as NSError {
+            // 로그인한 지 오래되면 Firebase가 재인증을 요구한다. 가입 직후엔 걸리지 않지만,
+            // 앱을 오래 켜 뒀다면 걸릴 수 있어 안내를 따로 준다.
+            if AuthErrorCode(rawValue: error.code) == .requiresRecentLogin {
+                errorMessage = L("auth.changeEmail.needsRecentLogin")
+            } else {
+                errorMessage = firebaseErrorMessage(error)
+            }
+            return false
+        }
+    }
 
     func signUp(email: String, password: String) async {
         isLoading = true
@@ -456,9 +547,9 @@ class AuthService: NSObject, ObservableObject {
             dlog("[Kakao] signIn with customToken start")
             #endif
             // 카카오는 uid가 kakao_{id}로 고정된 커스텀 토큰이라 link 자체가 불가능하다.
-            // 익명 계정은 버려지므로, 그 전에 찍어둔 영상을 옮길 수 있게 uid를 붙잡아 둔다.
-            let guestUid = (Auth.auth().currentUser?.isAnonymous == true)
-                ? Auth.auth().currentUser?.uid : nil
+            // 임시 신원(익명 · 인증 안 끝난 이메일 계정)은 버려지므로,
+            // 그 전에 찍어둔 영상을 옮길 수 있게 uid를 붙잡아 둔다.
+            let guestUid = Auth.auth().currentUser.flatMap { $0.isProvisionalIdentity ? $0.uid : nil }
             let result = try await Auth.auth().signIn(withCustomToken: customToken)
             #if DEBUG
             dlog("[Kakao] signIn success uid=\(result.user.uid)")

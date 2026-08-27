@@ -130,6 +130,98 @@
         }
       }
     },
+    "auth.changeEmail": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change email address"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "メールアドレスを変更"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이메일 주소 바꾸기"
+          }
+        }
+      }
+    },
+    "auth.changeEmail.message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter the address that should receive the verification link. Videos you already filmed stay put."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "認証メールを受け取るアドレスを入力してください。これまでに撮影した動画はそのまま残ります。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "인증 메일을 받을 주소를 다시 입력해주세요. 지금까지 찍은 영상은 그대로 남아요."
+          }
+        }
+      }
+    },
+    "auth.changeEmail.needsRecentLogin": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "For security, please sign in again and retry."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "セキュリティのため、再度ログインしてからお試しください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "보안을 위해 다시 로그인한 뒤 시도해주세요."
+          }
+        }
+      }
+    },
+    "auth.changeEmail.sent": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verification email sent to the new address."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新しいアドレスに認証メールを送りました。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "새 주소로 인증 메일을 보냈어요."
+          }
+        }
+      }
+    },
     "auth.checkEmail.message": {
       "extractionState": "manual",
       "localizations": {
@@ -1418,6 +1510,29 @@
         }
       }
     },
+    "auth.verifyLater": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Do this later and keep filming"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "後で行い、撮影を続ける"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "나중에 하고 촬영 계속하기"
+          }
+        }
+      }
+    },
     "block.action": {
       "extractionState": "manual",
       "localizations": {
@@ -2150,6 +2265,52 @@
           "stringUnit": {
             "state": "translated",
             "value": "자동 촬영 중 · 끝나면 자동 저장"
+          }
+        }
+      }
+    },
+    "camera.saveFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t save the video"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "動画を保存できませんでした"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "영상을 저장하지 못했어요"
+          }
+        }
+      }
+    },
+    "camera.saveFailed.sub": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Please try again"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "もう一度撮影してください"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "다시 찍어주세요"
           }
         }
       }
