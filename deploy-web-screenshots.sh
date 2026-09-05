@@ -32,7 +32,7 @@ grep -q 'app-course.png\|app-map.png' index.html && { echo "  ✗ 구버전 스�
 echo "  파일 ${#ALL[@]}개 · 스크린샷 참조 확인"
 
 echo "▶ [1/5] 배포 꾸러미 생성..."
-tar czf /tmp/web-shots-deploy.tgz "${ALL[@]}"
+COPYFILE_DISABLE=1 tar czf /tmp/web-shots-deploy.tgz "${ALL[@]}"
 tar tzf /tmp/web-shots-deploy.tgz | sed 's/^/  /'
 
 echo "▶ [2/5] WEB: 기존 파일 백업 (웹 루트 바깥)..."
