@@ -10,6 +10,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import kr.tteona.mapapi.tile.TileCacheEvictor;
+
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
@@ -40,10 +42,12 @@ public class OsmBuildingImporter {
 
 	private final JdbcTemplate jdbc;
 	private final ObjectMapper mapper;
+	private final TileCacheEvictor tileCache;
 
-	public OsmBuildingImporter(JdbcTemplate jdbc, ObjectMapper mapper) {
+	public OsmBuildingImporter(JdbcTemplate jdbc, ObjectMapper mapper, TileCacheEvictor tileCache) {
 		this.jdbc = jdbc;
 		this.mapper = mapper;
+		this.tileCache = tileCache;
 	}
 
 	/** 전부 성공하거나 전부 취소된다(@Transactional). 중간에 실패해도 반쯤 적재된 상태가 남지 않는다. */
@@ -63,6 +67,8 @@ public class OsmBuildingImporter {
 		}
 		// 한 번에 묶어서 보낸다(배치). 145번 왕복하는 것보다 네트워크 비용이 적다.
 		jdbc.batchUpdate(UPSERT, rows);
+		// 건물이 바뀌었으니 타일 캐시를 비운다. 커밋이 끝난 뒤에 실행되도록 예약만 한다.
+		tileCache.evictAllAfterCommit();
 		return rows.size();
 	}
 

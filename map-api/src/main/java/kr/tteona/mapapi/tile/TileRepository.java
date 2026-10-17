@@ -1,5 +1,6 @@
 package kr.tteona.mapapi.tile;
 
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -33,7 +34,14 @@ public class TileRepository {
 		this.jdbc = jdbc;
 	}
 
-	/** 건물이 하나도 없는 타일은 길이 0인 바이트 배열을 돌려준다. */
+	/**
+	 * 건물이 하나도 없는 타일은 길이 0인 바이트 배열을 돌려준다.
+	 * 결과는 'tiles' 캐시에 담긴다. 같은 타일을 다시 요청하면 DB까지 가지 않는다. 빈 타일도 캐시한다(없다는 사실도 반복 계산하지 않기).
+	 * 데이터를 다시 적재하면 TileCacheEvictor가 커밋 뒤에 캐시를 비운다.
+	 * sync = true: 캐시가 빈 타일에 동시 요청이 몰리면 한 요청만 DB로 보내고 나머지는 그 결과를 기다린다.
+	 *   기본값(false)에서는 동시 요청이 각자 DB로 가서 같은 타일을 여러 번 계산했다(캐시 스탬피드, 콜드 1,518장에 1,817회).
+	 */
+	@Cacheable(cacheNames = "tiles", key = "#z + '/' + #x + '/' + #y", sync = true)
 	public byte[] findBuildingsTile(int z, int x, int y) {
 		byte[] tile = jdbc.queryForObject(TILE_SQL, byte[].class, z, x, y);
 		return tile == null ? new byte[0] : tile;
