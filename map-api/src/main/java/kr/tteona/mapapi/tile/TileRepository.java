@@ -12,7 +12,8 @@ public class TileRepository {
 	//    영역을 4326으로 바꿔 비교하는 이유: 인덱스가 걸린 geom 칸(4326)을 그대로 써야 인덱스가 쓰인다.
 	// 3) ST_AsMVTGeom: 타일 내부 좌표(0~4096)로 변환하고 타일 밖으로 나간 부분을 잘라낸다.
 	// 4) ST_AsMVT: 골라낸 행들을 'buildings' 레이어 하나로 묶어 바이너리로 만든다.
-	private static final String TILE_SQL = """
+	// 테스트(TileQueryPlanTests)가 실행 계획을 검사하려고 같은 패키지에서 읽는다.
+	static final String TILE_SQL = """
 			WITH bounds AS (
 			    SELECT ST_TileEnvelope(?, ?, ?) AS geom
 			),
