@@ -1,0 +1,21 @@
+# 로컬 개발용 PostGIS. 운영 DB(tteona_db)와 완전히 분리된 별도 컨테이너다.
+# 실행: docker compose up -d   /  정리: docker compose down (데이터까지 지우려면 -v)
+services:
+  postgis:
+    # PostgreSQL 17 + PostGIS 3.5 (공식 postgis/postgis는 amd64 전용이라 arm64도 지원하는 멀티 아키텍처 빌드 사용). 공간 타입(geometry)과 ST_AsMVT 같은 공간 함수를 제공한다.
+    image: imresamu/postgis:17-3.5
+    environment:
+      POSTGRES_DB: mapapi
+      POSTGRES_USER: mapapi
+      POSTGRES_PASSWORD: mapapi-local   # 로컬 전용 값. 운영 비밀번호를 여기에 쓰지 않는다.
+    ports:
+      - "5433:5432"   # 5432는 다른 로컬 PG와 겹칠 수 있어 5433으로 연다.
+    volumes:
+      - mapapi-data:/var/lib/postgresql/data   # 컨테이너를 지워도 데이터가 남도록 볼륨에 저장
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mapapi -d mapapi"]
+      interval: 5s
+      retries: 10
+
+volumes:
+  mapapi-data:
