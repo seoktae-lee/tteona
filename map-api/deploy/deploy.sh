@@ -30,7 +30,7 @@ cd ~/map-api
 PREV=$(grep '^MAPAPI_TAG=' .env | cut -d= -f2)
 tar xzf /tmp/mapapi.tgz 2>/dev/null && rm /tmp/mapapi.tgz
 cp deploy/compose.prod.yaml compose.yaml
-sudo docker build -q -t "tteona/map-api:$TAG" . >/dev/null
+DOCKER_BUILDKIT=0 sudo docker build -q -t "tteona/map-api:$TAG" . >/dev/null
 sed -i "s/^MAPAPI_TAG=.*/MAPAPI_TAG=$TAG/" .env
 if sudo docker compose up -d --wait --wait-timeout 120 >/tmp/mapapi-up.log 2>&1 \
    && curl -fs -o /dev/null http://127.0.0.1:8081/tiles/16/55898/25384.mvt; then
@@ -42,7 +42,8 @@ else
   exit 1
 fi
 # 직전 버전 하나만 남기고 오래된 이미지는 지운다(디스크 30GB 서버).
-sudo docker images tteona/map-api --format '{{.Tag}}' | grep -vxE "$TAG|$PREV" | xargs -r -I{} sudo docker rmi -f "tteona/map-api:{}" >/dev/null
+# 지울 이미지가 없으면 grep이 1을 돌려주므로 || true (set -e로 여기서 멈추던 문제).
+{ sudo docker images tteona/map-api --format '{{.Tag}}' | grep -vxE "$TAG|$PREV" || true; } | xargs -r -I{} sudo docker rmi -f "tteona/map-api:{}" >/dev/null
 REMOTE
 
 echo "▶ 외부 확인"
