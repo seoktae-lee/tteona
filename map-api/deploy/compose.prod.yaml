@@ -1,0 +1,46 @@
+# 운영(WEB 서버) 배포. nginx가 /map-api/ → 127.0.0.1:8081 로 넘긴다.
+# 비밀 값(DB 비밀번호, 카카오 키)은 같은 폴더의 .env(권한 600, 저장소에 없음)에서 읽는다.
+# WEB 서버는 2코어/4GB라, nginx(사이트 전체)를 밀어내지 않도록 컨테이너마다 메모리 상한을 둔다.
+services:
+  postgis:
+    image: imresamu/postgis:17-3.5
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mapapi
+      POSTGRES_USER: mapapi
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD 필요}
+    volumes:
+      - mapapi-data:/var/lib/postgresql/data
+    # 외부로 포트를 열지 않는다. map-api만 컨테이너 내부 네트워크로 접근한다.
+    mem_limit: 384m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mapapi -d mapapi"]
+      interval: 10s
+      retries: 10
+
+  map-api:
+    image: tteona/map-api:${MAPAPI_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      postgis:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgis:5432/mapapi
+      SPRING_DATASOURCE_USERNAME: mapapi
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:?FIREBASE_PROJECT_ID 필요}
+      KAKAO_REST_KEY: ${KAKAO_REST_KEY:?KAKAO_REST_KEY 필요}
+    # 성수 145동을 시작할 때 upsert한다(멱등이라 재시작해도 안전).
+    command: ["--mapapi.import.osm=/app/data/osm-seongsu-2026-10-11.json"]
+    # 이 서버 안에서만 접근(127.0.0.1). 인터넷에는 nginx를 거쳐서만 노출된다.
+    ports:
+      - "127.0.0.1:8081:8080"
+    mem_limit: 640m
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080 && printf \"GET /actuator/health HTTP/1.0\\r\\n\\r\\n\" >&3 && grep -q UP <&3'"]
+      interval: 15s
+      start_period: 60s
+      retries: 5
+
+volumes:
+  mapapi-data:
