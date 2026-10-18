@@ -39,11 +39,12 @@ class GeoJsonImporterTests {
 	void clean() {
 		jdbc.update("DELETE FROM buildings WHERE data_version LIKE 'osm-testtown%'");
 		jdbc.update("DELETE FROM water_areas");
+		jdbc.update("DELETE FROM roads");
 	}
 
 	@Test
 	void 건물_조각과_물을_적재하고_다시_넣어도_늘지_않는다() throws Exception {
-		assertThat(importer.importFile(FIXTURE)).isEqualTo(new GeoJsonImporter.Result(2, 1));
+		assertThat(importer.importFile(FIXTURE)).isEqualTo(new GeoJsonImporter.Result(2, 1, 1));
 		importer.importFile(FIXTURE);
 		assertThat(jdbc.queryForObject("SELECT count(*) FROM buildings WHERE data_version = 'osm-testtown-2026-10-18'", Integer.class)).isEqualTo(2);
 		assertThat(jdbc.queryForObject("SELECT count(*) FROM water_areas", Integer.class)).isEqualTo(1);
@@ -70,6 +71,7 @@ class GeoJsonImporterTests {
 		assertThat(tower).contains("buildings").contains("min_height_m").contains("900002");
 		String lake = tile("/tiles/16/55906/25392.mvt");
 		assertThat(lake).contains("water");
+		assertThat(tower).contains("roads").contains("width_m").contains("major");
 	}
 
 	@Test

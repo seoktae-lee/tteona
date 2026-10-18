@@ -14,7 +14,7 @@ public class TileRepository {
 	// 3) ST_AsMVTGeom: 타일 내부 좌표(0~4096)로 변환하고 타일 밖으로 나간 부분을 잘라낸다.
 	// 4) ST_AsMVT: 골라낸 행들을 'buildings' 레이어 하나로 묶어 바이너리로 만든다.
 	//    속성은 데이터만 담는다(source_id, height_m, min_height_m, height_source). 색 같은 화면 표현은 앱이 정한다.
-	// 5) water 레이어(호수·강)도 같은 방식으로 붙인다.
+	// 5) water(호수·강), roads(도로·보행로) 레이어도 같은 방식으로 붙인다.
 	// 테스트(TileQueryPlanTests)가 실행 계획을 검사하려고 같은 패키지에서 읽는다.
 	static final String TILE_SQL = """
 			WITH bounds AS (
@@ -34,11 +34,20 @@ public class TileRepository {
 			           w.name
 			    FROM water_areas w, bounds
 			    WHERE w.geom && ST_Transform(bounds.geom, 4326)
+			),
+			roads AS (
+			    SELECT ST_AsMVTGeom(ST_Transform(r.geom, 3857), bounds.geom) AS geom,
+			           r.kind,
+			           r.width_m,
+			           r.name
+			    FROM roads r, bounds
+			    WHERE r.geom && ST_Transform(bounds.geom, 4326)
 			)
 			-- 레이어마다 MVT를 만들고 이어 붙이면 한 타일에 여러 레이어가 담긴다(MVT 규격상 허용).
 			-- 한쪽이 NULL이면 이어 붙인 결과 전체가 NULL이 되어 다른 레이어까지 사라지므로 빈 값으로 바꾼다.
 			SELECT COALESCE((SELECT ST_AsMVT(buildings.*, 'buildings') FROM buildings), ''::bytea)
 			    || COALESCE((SELECT ST_AsMVT(water.*, 'water') FROM water), ''::bytea)
+			    || COALESCE((SELECT ST_AsMVT(roads.*, 'roads') FROM roads), ''::bytea)
 			""";
 
 	private final JdbcTemplate jdbc;

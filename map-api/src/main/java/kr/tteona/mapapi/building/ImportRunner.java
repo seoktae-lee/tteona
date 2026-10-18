@@ -35,7 +35,7 @@ class ImportRunner implements ApplicationRunner {
 		}
 		for (String file : values(args, "mapapi.import.geojson")) {
 			GeoJsonImporter.Result r = geoJson.importFile(Path.of(file));
-			log.info("GeoJSON 건물 {}개 · 물 {}개 적재(upsert) 완료: {}", r.buildings(), r.water(), file);
+			log.info("GeoJSON 건물 {}개 · 물 {}개 · 도로 {}개 적재(upsert) 완료: {}", r.buildings(), r.water(), r.roads(), file);
 		}
 	}
 

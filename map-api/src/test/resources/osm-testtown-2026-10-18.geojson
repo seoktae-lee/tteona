@@ -2,4 +2,6 @@
 {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[127.1020,37.5125],[127.1030,37.5125],[127.1030,37.5132],[127.1020,37.5132],[127.1020,37.5125]]]},"properties":{"kind":"building","id":"900001","height_m":554.5,"min_height_m":0,"height_source":"measured","part":true}},
 {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[127.1022,37.5127],[127.1028,37.5127],[127.1028,37.5130],[127.1022,37.5130],[127.1022,37.5127]]]},"properties":{"kind":"building","id":"900002","height_m":560,"min_height_m":520,"height_source":"measured","part":true}},
 {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[127.0990,37.5070],[127.1060,37.5070],[127.1060,37.5100],[127.0990,37.5100],[127.0990,37.5070]],[[127.1010,37.5080],[127.1020,37.5080],[127.1020,37.5090],[127.1010,37.5090],[127.1010,37.5080]]]},"properties":{"kind":"water","id":"r1-0","name":"테스트호수"}}
+,
+{"type":"Feature","geometry":{"type":"LineString","coordinates":[[127.1015,37.5124],[127.1035,37.5134]]},"properties":{"kind":"road","id":"700001","road_kind":"major","width_m":14,"name":"테스트대로"}}
 ]}

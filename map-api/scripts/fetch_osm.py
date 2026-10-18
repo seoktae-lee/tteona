@@ -29,6 +29,18 @@ FALLBACK_HEIGHT = 10.0
 LEVEL_HEIGHT = 3.2
 
 
+# 도로 등급 → (화면 등급, 화면 폭 m). 폭은 지도 표현용 기준값이지 실측이 아니다.
+ROAD_CLASS = {
+    "motorway": ("major", 18), "trunk": ("major", 18), "primary": ("major", 14), "secondary": ("major", 11),
+    "tertiary": ("street", 9), "residential": ("street", 6.5), "unclassified": ("street", 6.5),
+    "living_street": ("street", 5), "pedestrian": ("path", 5), "service": ("service", 4.5),
+    "footway": ("path", 2.2), "path": ("path", 2.2), "cycleway": ("path", 2.2), "steps": ("path", 2.2),
+}
+for k in ("motorway_link", "trunk_link", "primary_link", "secondary_link"):
+    ROAD_CLASS[k] = ("major", 8)
+ROAD_CLASS["tertiary_link"] = ("street", 6.5)
+
+
 def query(bbox: str) -> dict:
     # "out geom tags"는 relation의 구성원(members)을 빼고 태그만 준다 → 호수 relation이 비어 있었다(2026-10-18). body(기본) 출력을 쓴다.
     q = f"""[out:json][timeout:120];
@@ -37,6 +49,7 @@ def query(bbox: str) -> dict:
   way["building:part"]({bbox});
   way["natural"="water"]({bbox});
   relation["natural"="water"]({bbox});
+  way["highway"]({bbox});
 );
 out geom;"""
     # 조회는 curl로 한다. 일부 환경(예: Xcode 내장 Python 3.9)의 오래된 TLS 라이브러리는
@@ -144,19 +157,41 @@ def water_features(e):
             for i, p in enumerate(polys)]
 
 
+def road_feature(e):
+    t = e["tags"]
+    cls = ROAD_CLASS.get(t.get("highway"))
+    # 지하(터널·지하도)와 실내 통로는 지도 위에 보이지 않으므로 뺀다.
+    if not cls or t.get("tunnel") in ("yes", "building_passage") or t.get("indoor") == "yes" or t.get("layer", "0").startswith("-"):
+        return None
+    pts = [[round(p["lon"], 7), round(p["lat"], 7)] for p in e.get("geometry", [])]
+    if len(pts) < 2:
+        return None
+    kind, width = cls
+    return {"type": "Feature", "geometry": {"type": "LineString", "coordinates": pts},
+            "properties": {"kind": "road", "id": str(e["id"]), "road_kind": kind, "width_m": width, "name": t.get("name")}}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--name", required=True)
     ap.add_argument("--bbox", required=True, help="south,west,north,east")
     ap.add_argument("--out", default="data")
+    ap.add_argument("--layers", default="buildings,water,roads",
+                    help="받을 종류(쉼표). 이미 다른 방식으로 건물을 넣은 지역은 water,roads 만")
     a = ap.parse_args()
     raw = query(a.bbox)
     feats, skipped = [], 0
+    want = set(a.layers.split(","))
     for e in raw["elements"]:
         t = e.get("tags", {})
         if t.get("natural") == "water":
-            feats += water_features(e)
-        elif e["type"] == "way" and ("building" in t or "building:part" in t):
+            if "water" in want:
+                feats += water_features(e)
+        elif e["type"] == "way" and "highway" in t:
+            r = road_feature(e) if "roads" in want else None
+            if r:
+                feats.append(r)
+        elif e["type"] == "way" and ("building" in t or "building:part" in t) and "buildings" in want:
             f = building_feature(e)
             if f:
                 feats.append(f)
@@ -172,7 +207,7 @@ def main():
     kinds = {}
     for f in feats:
         p = f["properties"]
-        key = p["kind"] if p["kind"] == "water" else f"building/{p['height_source']}"
+        key = f"building/{p['height_source']}" if p["kind"] == "building" else (f"road/{p['road_kind']}" if p["kind"] == "road" else p["kind"])
         kinds[key] = kinds.get(key, 0) + 1
     print(f"{out}: {len(feats)}개 {kinds}, 버림 {skipped}")
 
