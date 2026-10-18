@@ -17,15 +17,15 @@ agent: claude-code
 ## 조치
 - 새 기능은 Spring 모듈 규칙에 따라 map-api에 추가했다(Node 서버 변경 없음, 배포 없음, 앱 수정 없음).
 - `GET /places/keyword?query&size`, `GET /places/category?code&x&y&radius&size`. 응답은 카카오 JSON 그대로.
-- 인증: Firebase ID 토큰 필수(Node `requireAuth`와 같은 방식). 게스트 여부는 토큰의 `sign_in_provider`로 판정. 서비스 계정 설정이 없으면 모든 요청 401(**fail closed**).
+- 인증: Firebase ID 토큰 필수(Node `requireAuth`와 같은 판정). **Google 공개 키(JWK)로 서명을 검증**하고 iss·aud(프로젝트 ID)·만료·sub를 확인한다. 비밀 키(서비스 계정)가 필요 없다(처음엔 Firebase Admin + 서비스 계정으로 만들었다가 교체). 게스트 여부는 토큰의 `sign_in_provider`로 판정. 프로젝트 ID 설정이 없으면 모든 요청 401(**fail closed**).
 - 요청 제한: 검증된 uid 기준 고정 창 1분 60회, 초과 시 429 + `Retry-After`.
 - 입력 검증을 카카오 호출 전에: 검색어 1~100자, 개수 1~15, 카테고리 코드 허용 목록, 한국 좌표 범위, 반경 1~20,000m.
 - 외부 호출: 연결 2초·응답 3초 타임아웃. 실패 원인을 구분해 응답 — 시간 초과 504, 카카오 쿼터 초과 503 + `Retry-After: 60`, 키 미설정 503, 그 외 502. 카카오 오류 본문은 전달하지 않는다.
 - 캐시 10분(`placeSearch`, 최대 1만 건). 좌표는 소수 4자리(약 11m)로 반올림해 키로 쓴다. 실패는 캐시하지 않는다(예외는 @Cacheable에 저장되지 않음).
-- 키는 환경 변수 `KAKAO_REST_KEY`, 서비스 계정은 `FIREBASE_SERVICE_ACCOUNT`로만 받는다.
+- 키는 환경 변수 `KAKAO_REST_KEY`, 프로젝트 ID는 `FIREBASE_PROJECT_ID`로 받는다.
 
 ## 측정 (테스트)
-- 전체 26개 통과: 장소 API 9 · 카카오 클라이언트 5(가짜 카카오 서버로 정상·429·401·시간 초과·키 없음) · 요청 제한 2 · 기존 타일 10.
+- 전체 32개 통과(토큰 검증 6 추가: 정상·게스트·다른 프로젝트·만료·위조 서명·형식 오류, 테스트용 RSA 키로 서명): 장소 API 9 · 카카오 클라이언트 5(가짜 카카오 서버로 정상·429·401·시간 초과·키 없음) · 요청 제한 2 · 기존 타일 10.
 - 실행 확인(jar, 서비스 계정 미설정): `/places` 토큰 없음 401, 임의 토큰 401, `/tiles` 인증 없이 200.
 
 | 검증 항목 | 결과 |
@@ -37,6 +37,17 @@ agent: claude-code
 | 한도 5회 설정에서 6번째 → 429 + Retry-After | 통과 |
 | 시간 초과/쿼터/기타 → 504/503/502 | 통과 |
 | 실패 후 재요청 → 캐시되지 않고 다시 호출 | 통과 |
+
+**실제 E2E (2026-10-18, 운영 Firebase에 임시 익명 계정 생성 → 확인 후 삭제)**
+
+| 요청 | 결과 |
+|---|---|
+| 실제 토큰 + 실제 카카오 키워드 "대림창고" | 200, 0.45s, 3건 |
+| 같은 검색 반복 | 200, 0.003s(캐시) |
+| 성수 근처 카페(CE7, 300m) | 200, 0.05s, 3건 |
+| 토큰 없음 / 토큰 1글자 변조 | 401 / 401 |
+| 서버 로그의 키 노출 | 0건 |
+| 임시 계정 삭제 후 조회 | USER_NOT_FOUND |
 
 ## 결론
 - 앱이 키 없이 쓸 수 있는 서버 경로가 준비됐다. 남은 순서: 앱 전환 → 새 버전 보급 → 키 교체 + 서버 송신 IP 2개 제한 → 옛 키 폐기.
@@ -50,7 +61,7 @@ agent: claude-code
 - 서킷 브레이커: 이번 범위에서는 타임아웃과 원인별 응답까지. 카카오 장애가 길어질 때 호출 자체를 끊는 것은 다음 단계(자가 과제 09와 연결).
 
 ## 남은 한계
-- 실제 Firebase 토큰과 실제 카카오로 끝까지 호출하는 E2E는 하지 않았다(운영 Firebase에 테스트 계정을 만들지 않기 위해). 배포 전 확인 필요.
+- E2E는 로컬 서버에서 했다. 운영 서버(WAS) 배포 후 같은 확인을 다시 해야 한다.
 - 요청 제한·캐시가 서버 메모리라 서버가 여러 대면 대수만큼 한도가 늘고 캐시가 나뉜다(Redis로 이전 후보).
 - 카카오 응답 캐시 보관이 이용 약관상 허용되는 범위인지 확인하지 않았다. 확인 전까지 10분으로 짧게 둔다.
 - 앱이 아직 이 API를 쓰지 않는다. 앱 전환 전까지 노출된 키 문제는 그대로다.
@@ -58,7 +69,7 @@ agent: claude-code
 ## 재현
 ```sh
 cd map-api
-./gradlew test                                   # 26개
-KAKAO_REST_KEY=<키> FIREBASE_SERVICE_ACCOUNT=<서비스 계정 json 경로> java -jar build/libs/map-api-0.0.1-SNAPSHOT.jar
+./gradlew test                                   # 32개
+KAKAO_REST_KEY=<키> FIREBASE_PROJECT_ID=<프로젝트 ID> java -jar build/libs/map-api-0.0.1-SNAPSHOT.jar
 curl -H "Authorization: Bearer <Firebase ID 토큰>" "localhost:8080/places/keyword?query=성수"
 ```
