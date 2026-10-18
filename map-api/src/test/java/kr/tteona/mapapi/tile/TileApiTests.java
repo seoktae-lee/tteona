@@ -56,6 +56,9 @@ class TileApiTests {
 				.andExpect(content().contentType(TileController.MVT))
 				.andReturn().getResponse().getContentAsByteArray();
 		assertThat(body).isNotEmpty();
+		// MVT는 속성 이름을 문자열로 담는다. 앱이 색 배정·랜드마크 구분에 쓰는 건물 ID가 들어 있어야 한다.
+		assertThat(new String(body, java.nio.charset.StandardCharsets.ISO_8859_1))
+				.contains("source_id").contains("height_m").contains("height_source").contains("801819178");
 	}
 
 	@Test
