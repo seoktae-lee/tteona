@@ -58,7 +58,16 @@ class TileApiTests {
 		assertThat(body).isNotEmpty();
 		// MVT는 속성 이름을 문자열로 담는다. 앱이 색 배정·랜드마크 구분에 쓰는 건물 ID가 들어 있어야 한다.
 		assertThat(new String(body, java.nio.charset.StandardCharsets.ISO_8859_1))
-				.contains("source_id").contains("height_m").contains("height_source").contains("801819178");
+				.contains("source_id").contains("height_m").contains("height_source");
+	}
+
+	@Test
+	void 대림창고_타일에는_대림창고_ID가_담긴다() throws Exception {
+		// 대림창고(OSM 801819178)는 z16에서 x=55897 타일에 있다. 앱이 이 ID로 랜드마크 색·높이를 따로 정한다.
+		byte[] body = mvc.perform(get("/tiles/16/55897/25384.mvt"))
+				.andExpect(status().isOk())
+				.andReturn().getResponse().getContentAsByteArray();
+		assertThat(new String(body, java.nio.charset.StandardCharsets.ISO_8859_1)).contains("801819178");
 	}
 
 	@Test
