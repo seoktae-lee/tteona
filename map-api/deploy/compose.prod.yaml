@@ -30,8 +30,10 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:?FIREBASE_PROJECT_ID 필요}
       KAKAO_REST_KEY: ${KAKAO_REST_KEY:?KAKAO_REST_KEY 필요}
-    # 성수 145동을 시작할 때 upsert한다(멱등이라 재시작해도 안전).
-    command: ["--mapapi.import.osm=/app/data/osm-seongsu-2026-10-11.json"]
+    # 지역 데이터를 시작할 때 upsert한다(멱등이라 재시작해도 안전). 지역 추가 = 여기에 파일 한 줄 + 재배포.
+    command:
+      - "--mapapi.import.osm=/app/data/osm-seongsu-2026-10-11.json"
+      - "--mapapi.import.geojson=/app/data/osm-jamsil-2026-10-18.geojson"
     # 이 서버 안에서만 접근(127.0.0.1). 인터넷에는 nginx를 거쳐서만 노출된다.
     ports:
       - "127.0.0.1:8081:8080"

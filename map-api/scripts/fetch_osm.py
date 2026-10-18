@@ -10,16 +10,15 @@
     building:levels만 있음    → 층수 × 3.2m, height_source=levels
     둘 다 없음                → 아파트 36m, 그 외 10m, height_source=default
 - building:part의 min_height(공중에 뜬 조각의 시작 높이)도 남긴다.
-- 물은 natural=water 의 닫힌 way와, 멤버가 각각 닫힌 multipolygon relation의 outer/inner를 쓴다.
+- 물은 natural=water 의 닫힌 way와 multipolygon relation을 쓴다. relation은 잘린 멤버 선을 이어 고리를 만든다.
 데이터: © OpenStreetMap contributors, ODbL 1.0
 """
 import argparse
 import json
 import re
 import sys
+import subprocess
 import time
-import urllib.parse
-import urllib.request
 from datetime import date
 from pathlib import Path
 
@@ -31,6 +30,7 @@ LEVEL_HEIGHT = 3.2
 
 
 def query(bbox: str) -> dict:
+    # "out geom tags"는 relation의 구성원(members)을 빼고 태그만 준다 → 호수 relation이 비어 있었다(2026-10-18). body(기본) 출력을 쓴다.
     q = f"""[out:json][timeout:120];
 (
   way["building"]({bbox});
@@ -38,18 +38,21 @@ def query(bbox: str) -> dict:
   way["natural"="water"]({bbox});
   relation["natural"="water"]({bbox});
 );
-out geom tags;"""
+out geom;"""
+    # 조회는 curl로 한다. 일부 환경(예: Xcode 내장 Python 3.9)의 오래된 TLS 라이브러리는
+    # overpass-api.de와 SSL 핸드셰이크에 실패한다(2026-10-18 확인). curl은 시스템 TLS를 쓴다.
     wait = 15
     for attempt in range(6):
         url = SERVERS[attempt % len(SERVERS)]
-        req = urllib.request.Request(url, data=urllib.parse.urlencode({"data": q}).encode(), headers={"User-Agent": UA})
-        try:
-            with urllib.request.urlopen(req, timeout=180) as r:
-                return json.load(r)
-        except Exception as e:  # 혼잡(502/504/429)·HTML 응답 등
-            print(f"  조회 실패({url.split('/')[2]}): {str(e)[:80]} → {wait}초 뒤 재시도", file=sys.stderr)
-            time.sleep(wait)
-            wait *= 2
+        r = subprocess.run(["curl", "-sS", "-m", "180", "-A", UA, "--data-urlencode", f"data={q}", url],
+                           capture_output=True, text=True)
+        body = r.stdout
+        if r.returncode == 0 and body.lstrip().startswith("{"):
+            return json.loads(body)
+        reason = (r.stderr or body[:80]).strip().splitlines()[0] if (r.stderr or body) else f"exit {r.returncode}"
+        print(f"  조회 실패({url.split('/')[2]}): {reason[:80]} → {wait}초 뒤 재시도", file=sys.stderr)
+        time.sleep(wait)
+        wait *= 2
     sys.exit("Overpass 조회 실패: 나중에 다시 시도")
 
 
@@ -88,17 +91,54 @@ def building_feature(e):
                            "height_source": src, "part": "building:part" in t}}
 
 
+def assemble_rings(lines):
+    """잘린 선(way) 조각들을 끝점끼리 이어 닫힌 고리들로 만든다. 닫히지 않는 조각은 버린다."""
+    pending = [[(p["lon"], p["lat"]) for p in g] for g in lines if len(g) >= 2]
+    rings = []
+    while pending:
+        cur = pending.pop(0)
+        progressed = True
+        while cur[0] != cur[-1] and progressed:
+            progressed = False
+            for i, seg in enumerate(pending):
+                if seg[0] == cur[-1]:
+                    cur += seg[1:]
+                elif seg[-1] == cur[-1]:
+                    cur += seg[::-1][1:]
+                elif seg[-1] == cur[0]:
+                    cur = seg[:-1] + cur
+                elif seg[0] == cur[0]:
+                    cur = seg[::-1][:-1] + cur
+                else:
+                    continue
+                pending.pop(i)
+                progressed = True
+                break
+        if cur[0] == cur[-1] and len(cur) >= 4:
+            rings.append([[round(x, 7), round(y, 7)] for x, y in cur])
+    return rings
+
+
+def inside(point, ring):
+    """점이 고리 안에 있는지(짝홀 규칙). 섬(inner)이 어느 호수(outer)에 속하는지 정하는 데 쓴다."""
+    x, y = point
+    hit = False
+    for (x1, y1), (x2, y2) in zip(ring, ring[1:]):
+        if (y1 > y) != (y2 > y) and x < (x2 - x1) * (y - y1) / (y2 - y1) + x1:
+            hit = not hit
+    return hit
+
+
 def water_features(e):
     t = e["tags"]
     if e["type"] == "way":
         r = ring(e.get("geometry", []))
         polys = [[r]] if r else []
-    else:  # multipolygon relation: 각 멤버 way가 스스로 닫힌 경우만(조각 이어 붙이기는 하지 않음)
-        outers = [ring(m.get("geometry", [])) for m in e.get("members", []) if m.get("role") == "outer"]
-        inners = [ring(m.get("geometry", [])) for m in e.get("members", []) if m.get("role") == "inner"]
-        outers = [o for o in outers if o]
-        inners = [i for i in inners if i]
-        polys = [[o] + inners for o in outers] if len(outers) == 1 else [[o] for o in outers]
+    else:  # multipolygon relation: 조각난 멤버 선을 이어 붙여 고리를 만들고, 섬은 들어 있는 호수에 구멍으로 단다
+        members = e.get("members", [])
+        outers = assemble_rings([m.get("geometry", []) for m in members if m.get("role") == "outer"])
+        inners = assemble_rings([m.get("geometry", []) for m in members if m.get("role") == "inner"])
+        polys = [[o] + [i for i in inners if inside(i[0], o)] for o in outers]
     return [{"type": "Feature", "geometry": {"type": "Polygon", "coordinates": p},
              "properties": {"kind": "water", "id": f"{e['type'][0]}{e['id']}-{i}", "name": t.get("name")}}
             for i, p in enumerate(polys)]
