@@ -13,21 +13,32 @@ public class TileRepository {
 	//    영역을 4326으로 바꿔 비교하는 이유: 인덱스가 걸린 geom 칸(4326)을 그대로 써야 인덱스가 쓰인다.
 	// 3) ST_AsMVTGeom: 타일 내부 좌표(0~4096)로 변환하고 타일 밖으로 나간 부분을 잘라낸다.
 	// 4) ST_AsMVT: 골라낸 행들을 'buildings' 레이어 하나로 묶어 바이너리로 만든다.
-	//    속성은 데이터만 담는다(source_id, height_m, height_source). 색 같은 화면 표현은 앱이 정한다.
+	//    속성은 데이터만 담는다(source_id, height_m, min_height_m, height_source). 색 같은 화면 표현은 앱이 정한다.
+	// 5) water 레이어(호수·강)도 같은 방식으로 붙인다.
 	// 테스트(TileQueryPlanTests)가 실행 계획을 검사하려고 같은 패키지에서 읽는다.
 	static final String TILE_SQL = """
 			WITH bounds AS (
 			    SELECT ST_TileEnvelope(?, ?, ?) AS geom
 			),
-			features AS (
+			buildings AS (
 			    SELECT ST_AsMVTGeom(ST_Transform(b.geom, 3857), bounds.geom) AS geom,
 			           b.source_id,
 			           b.height_m,
+			           b.min_height_m,
 			           b.height_source
 			    FROM buildings b, bounds
 			    WHERE b.geom && ST_Transform(bounds.geom, 4326)
+			),
+			water AS (
+			    SELECT ST_AsMVTGeom(ST_Transform(w.geom, 3857), bounds.geom) AS geom,
+			           w.name
+			    FROM water_areas w, bounds
+			    WHERE w.geom && ST_Transform(bounds.geom, 4326)
 			)
-			SELECT ST_AsMVT(features.*, 'buildings') FROM features
+			-- 레이어마다 MVT를 만들고 이어 붙이면 한 타일에 여러 레이어가 담긴다(MVT 규격상 허용).
+			-- 한쪽이 NULL이면 이어 붙인 결과 전체가 NULL이 되어 다른 레이어까지 사라지므로 빈 값으로 바꾼다.
+			SELECT COALESCE((SELECT ST_AsMVT(buildings.*, 'buildings') FROM buildings), ''::bytea)
+			    || COALESCE((SELECT ST_AsMVT(water.*, 'water') FROM water), ''::bytea)
 			""";
 
 	private final JdbcTemplate jdbc;
